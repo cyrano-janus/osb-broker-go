@@ -175,6 +175,94 @@ func TestIntegration_DefinitionLifecycleOverHTTP(t *testing.T) {
 	assert.Error(t, err, "CR should be gone after deprovision")
 }
 
+func TestIntegration_DefinitionUpdateOverHTTP(t *testing.T) {
+	router, oc := newDefinitionRouter(t)
+	ctx := context.Background()
+
+	// Provision small
+	w := putJSON(router, "/v2/service_instances/inst-upd-http", map[string]interface{}{
+		"service_id": "def-svc-0001",
+		"plan_id":    "def-plan-free",
+	})
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+	cr, err := oc.GetCR(ctx, "test.example.com/v1", "Database", "default", "inst-upd-http")
+	require.NoError(t, err)
+
+	// Operator fügt ein Feld hinzu, das der Broker nicht verwaltet
+	require.NoError(t, unstructured.SetNestedField(cr.Object, "operator-owned", "status", "phase"))
+	require.NoError(t, oc.Client.Update(ctx, cr))
+
+	// PATCH auf denselben Plan → No-op: CR darf nicht verändert werden
+	patchBody, _ := json.Marshal(map[string]interface{}{
+		"service_id":     "def-svc-0001",
+		"plan_id":        "def-plan-free",
+		"previous_values": map[string]interface{}{"plan_id": "def-plan-free"},
+	})
+	w = httptest.NewRecorder()
+	req, _ := http.NewRequest("PATCH", "/v2/service_instances/inst-upd-http", bytes.NewReader(patchBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	crAfter, err := oc.GetCR(ctx, "test.example.com/v1", "Database", "default", "inst-upd-http")
+	require.NoError(t, err)
+	assert.Equal(t, cr.GetResourceVersion(), crAfter.GetResourceVersion(),
+		"same plan must not touch CR")
+	phase, _, _ := unstructured.NestedString(crAfter.Object, "status", "phase")
+	assert.Equal(t, "operator-owned", phase)
+
+	// Unbekannter Parameter → 400
+	badBody, _ := json.Marshal(map[string]interface{}{
+		"service_id": "def-svc-0001",
+		"plan_id":    "def-plan-free",
+		"parameters": map[string]interface{}{"evil_key": "x"},
+	})
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("PATCH", "/v2/service_instances/inst-upd-http", bytes.NewReader(badBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+}
+
+func TestIntegration_RebindReadsFreshSecret(t *testing.T) {
+	router, oc := newDefinitionRouter(t)
+	ctx := context.Background()
+
+	// Secret v1 anlegen
+	require.NoError(t, oc.Client.Create(ctx, newSecret("default", "inst-rot-creds", map[string][]byte{
+		"password": []byte("old-password"),
+	})))
+
+	// Bind #1
+	w := putJSON(router, "/v2/service_instances/inst-rot/service_bindings/bind-r1", map[string]interface{}{
+		"service_id": "def-svc-0001",
+		"plan_id":    "def-plan-free",
+	})
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	var bindResp struct {
+		Credentials map[string]string `json:"credentials"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &bindResp))
+	assert.Equal(t, "old-password", bindResp.Credentials["password"])
+
+	// Operator rotiert das Secret (Update)
+	s, err := oc.GetSecretObj(ctx, "default", "inst-rot-creds")
+	require.NoError(t, err)
+	s.Data["password"] = []byte("new-password")
+	require.NoError(t, oc.Client.Update(ctx, s))
+
+	// Bind #2 nach Rotation → frische Credentials
+	w = putJSON(router, "/v2/service_instances/inst-rot/service_bindings/bind-r2", map[string]interface{}{
+		"service_id": "def-svc-0001",
+		"plan_id":    "def-plan-free",
+	})
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &bindResp))
+	assert.Equal(t, "new-password", bindResp.Credentials["password"],
+		"rebind must read the rotated secret, not cache")
+}
+
 func newSecret(namespace, name string, data map[string][]byte) *k8scorev1.Secret {
 	s := k8scorev1.Secret{}
 	s.Name = name

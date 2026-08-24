@@ -19,6 +19,7 @@ import (
 // ErrNotFound mirrors broker.ErrNotFound semantics without an import cycle.
 var ErrNotFound = errors.New("not found")
 
+
 // OperatorClient performs the generic CR lifecycle against arbitrary
 // operator APIs (Phase 2.3/2.4/2.5): apply, delete, readiness lookup and
 // secret reads.
@@ -104,6 +105,17 @@ func (o *OperatorClient) GetCR(ctx context.Context, apiVersion, kind, namespace,
 		return nil, fmt.Errorf("get %s %q: %w", kind, name, err)
 	}
 	return u, nil
+}
+
+// GetSecretObj exposes secret reading for tests and internal callers.
+func (o *OperatorClient) GetSecretObj(ctx context.Context, namespace, name string) (*corev1.Secret, error) {
+	s := &corev1.Secret{}
+	s.SetNamespace(namespace)
+	s.SetName(name)
+	if err := o.Client.Get(ctx, client.ObjectKeyFromObject(s), s); err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 // GetCRStatus fetches the current status subobject of the instance's CR.

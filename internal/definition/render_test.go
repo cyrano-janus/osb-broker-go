@@ -72,6 +72,7 @@ spec:
     plans:
       - id: plan-small-0000-0000-000000000001
         name: small
+        allowedParameters: [replicas]
         params:
           storageSize: 1Gi
           instances: 1
