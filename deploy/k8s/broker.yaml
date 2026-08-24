@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: osb
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: osb-broker-go
+  namespace: osb
+  labels:
+    app: osb-broker-go
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: osb-broker-go
+  template:
+    metadata:
+      labels:
+        app: osb-broker-go
+    spec:
+      containers:
+      - name: broker
+        image: osb-broker-go:v1
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: PORT
+          value: "8080"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          initialDelaySeconds: 3
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          initialDelaySeconds: 2
+          periodSeconds: 5
+        resources:
+          requests:
+            cpu: 50m
+            memory: 32Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: osb-broker-go
+  namespace: osb
+  labels:
+    app: osb-broker-go
+spec:
+  type: ClusterIP
+  selector:
+    app: osb-broker-go
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
