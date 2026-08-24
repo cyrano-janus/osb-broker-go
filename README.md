@@ -2,7 +2,7 @@
 
 [![Go Version](https://img.shields.io/badge/go-1.22-blue.svg)](https://golang.org)
 [![OSB API](https://img.shields.io/badge/OSB%20API-2.17-green.svg)](https://github.com/openservicebrokerapi/servicebroker/blob/v2.17/spec.md)
-[![Tests](https://img.shields.io/badge/tests-53%20total-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-58%20total-brightgreen.svg)]()
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)]()
 
 > **Open Service Broker API 2.17 Referenz-Implementierung in Go —
