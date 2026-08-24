@@ -28,6 +28,11 @@ type OperatorClient struct {
 	Scheme  *runtime.Scheme
 }
 
+// NewOperatorClient builds an OperatorClient around a controller-runtime client.
+func NewOperatorClient(k8sClient client.Client) *OperatorClient {
+	return &OperatorClient{Client: k8sClient}
+}
+
 // ApplyCR parses rendered YAML into an unstructured object and creates or
 // updates it (Create-or-Update with resourceVersion preservation).
 func (o *OperatorClient) ApplyCR(ctx context.Context, apiVersion, kind, namespace, manifest string) error {
