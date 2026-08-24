@@ -16,7 +16,7 @@ import (
 
 func setupTestRouter() (*gin.Engine, *broker.Broker) {
 	serviceStore := store.NewInMemoryStore()
-	b := broker.New(serviceStore)
+	b := broker.New(serviceStore, nil)
 	h := New(b)
 	router := h.SetupRouter()
 	return router, b

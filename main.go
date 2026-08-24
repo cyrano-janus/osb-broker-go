@@ -14,7 +14,7 @@ func main() {
 	serviceStore := store.NewInMemoryStore()
 
 	// Initialize broker with default catalog
-	b := broker.New(serviceStore)
+	b := broker.New(serviceStore, nil)
 
 	// Initialize handlers
 	h := handlers.New(b)

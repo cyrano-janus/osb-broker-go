@@ -10,7 +10,7 @@ import (
 
 func TestNewBroker(t *testing.T) {
 	store := store.NewInMemoryStore()
-	broker := New(store)
+	broker := New(store, nil)
 
 	require.NotNil(t, broker)
 	assert.NotNil(t, broker.store)
@@ -21,7 +21,7 @@ func TestNewBroker(t *testing.T) {
 
 func TestGetCatalog(t *testing.T) {
 	store := store.NewInMemoryStore()
-	broker := New(store)
+	broker := New(store, nil)
 
 	catalog, err := broker.GetCatalog()
 
@@ -32,7 +32,7 @@ func TestGetCatalog(t *testing.T) {
 
 func TestProvision(t *testing.T) {
 	store := store.NewInMemoryStore()
-	broker := New(store)
+	broker := New(store, nil)
 
 	req := &ProvisionRequest{
 		ServiceID: "service-1",
@@ -60,7 +60,7 @@ func TestProvision(t *testing.T) {
 
 func TestProvisionIdempotent(t *testing.T) {
 	store := store.NewInMemoryStore()
-	broker := New(store)
+	broker := New(store, nil)
 
 	req := &ProvisionRequest{
 		ServiceID: "service-1",
@@ -83,7 +83,7 @@ func TestProvisionIdempotent(t *testing.T) {
 
 func TestProvisionInvalidService(t *testing.T) {
 	store := store.NewInMemoryStore()
-	broker := New(store)
+	broker := New(store, nil)
 
 	req := &ProvisionRequest{
 		ServiceID: "invalid-service",
@@ -101,7 +101,7 @@ func TestProvisionInvalidService(t *testing.T) {
 
 func TestDeprovision(t *testing.T) {
 	store := store.NewInMemoryStore()
-	broker := New(store)
+	broker := New(store, nil)
 
 	// First provision an instance
 	provReq := &ProvisionRequest{
@@ -131,7 +131,7 @@ func TestDeprovision(t *testing.T) {
 
 func TestDeprovisionWithBinding(t *testing.T) {
 	store := store.NewInMemoryStore()
-	broker := New(store)
+	broker := New(store, nil)
 
 	// Provision instance
 	provReq := &ProvisionRequest{
@@ -169,7 +169,7 @@ func TestDeprovisionWithBinding(t *testing.T) {
 
 func TestBind(t *testing.T) {
 	store := store.NewInMemoryStore()
-	broker := New(store)
+	broker := New(store, nil)
 
 	// Provision instance first
 	provReq := &ProvisionRequest{
@@ -209,7 +209,7 @@ func TestBind(t *testing.T) {
 
 func TestBindIdempotent(t *testing.T) {
 	store := store.NewInMemoryStore()
-	broker := New(store)
+	broker := New(store, nil)
 
 	// Provision and bind
 	provReq := &ProvisionRequest{
@@ -245,7 +245,7 @@ func TestBindIdempotent(t *testing.T) {
 
 func TestUnbind(t *testing.T) {
 	store := store.NewInMemoryStore()
-	broker := New(store)
+	broker := New(store, nil)
 
 	// Provision and bind
 	provReq := &ProvisionRequest{
@@ -286,7 +286,7 @@ func TestUnbind(t *testing.T) {
 
 func TestGetInstance(t *testing.T) {
 	store := store.NewInMemoryStore()
-	broker := New(store)
+	broker := New(store, nil)
 
 	// Provision instance
 	provReq := &ProvisionRequest{
@@ -310,7 +310,7 @@ func TestGetInstance(t *testing.T) {
 
 func TestGetInstanceNotFound(t *testing.T) {
 	store := store.NewInMemoryStore()
-	broker := New(store)
+	broker := New(store, nil)
 
 	response, err := broker.GetInstance("nonexistent")
 
@@ -320,7 +320,7 @@ func TestGetInstanceNotFound(t *testing.T) {
 
 func TestGetBinding(t *testing.T) {
 	store := store.NewInMemoryStore()
-	broker := New(store)
+	broker := New(store, nil)
 
 	// Provision and bind
 	provReq := &ProvisionRequest{
@@ -354,7 +354,7 @@ func TestGetBinding(t *testing.T) {
 
 func TestUpdateInstance(t *testing.T) {
 	store := store.NewInMemoryStore()
-	broker := New(store)
+	broker := New(store, nil)
 
 	// Provision instance
 	provReq := &ProvisionRequest{
@@ -383,15 +383,15 @@ func TestUpdateInstance(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, response)
 
-	// Verify plan was updated
-	instance, exists := broker.instances["instance-1"]
-	assert.True(t, exists)
-	assert.Equal(t, "plan-premium", instance.PlanID)
+	// Verify plan was updated (read back through the persistent store)
+	updated, err := broker.GetInstance("instance-1")
+	require.NoError(t, err)
+	assert.Equal(t, "plan-premium", updated.PlanID)
 }
 
 func TestGetLastOperation(t *testing.T) {
 	store := store.NewInMemoryStore()
-	broker := New(store)
+	broker := New(store, nil)
 
 	// Provision instance
 	provReq := &ProvisionRequest{
@@ -414,7 +414,7 @@ func TestGetLastOperation(t *testing.T) {
 
 func TestGetLastBindingOperation(t *testing.T) {
 	store := store.NewInMemoryStore()
-	broker := New(store)
+	broker := New(store, nil)
 
 	// Provision and bind
 	provReq := &ProvisionRequest{
