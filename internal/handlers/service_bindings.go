@@ -40,10 +40,7 @@ func (h *Handlers) BindServiceInstance(c *gin.Context) {
 
 	response, err := h.broker.Bind(instanceID, bindingID, &req)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error":       "NotFound",
-			"description": err.Error(),
-		})
+		respondOSBError(c, err)
 		return
 	}
 
@@ -65,10 +62,7 @@ func (h *Handlers) UnbindServiceInstance(c *gin.Context) {
 
 	response, err := h.broker.Unbind(instanceID, bindingID, req)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error":       "NotFound",
-			"description": err.Error(),
-		})
+		respondOSBError(c, err)
 		return
 	}
 

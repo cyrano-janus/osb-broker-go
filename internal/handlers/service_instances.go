@@ -44,18 +44,7 @@ func (h *Handlers) ProvisionServiceInstance(c *gin.Context) {
 
 	response, err := h.broker.Provision(instanceID, &req)
 	if err != nil {
-		// Check error type for proper status code
-		if err.Error() == "service not found" || err.Error() == "plan not found" {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error":       "BadRequest",
-				"description": err.Error(),
-			})
-			return
-		}
-		c.JSON(http.StatusConflict, gin.H{
-			"error":       "Conflict",
-			"description": err.Error(),
-		})
+		respondOSBError(c, err)
 		return
 	}
 
