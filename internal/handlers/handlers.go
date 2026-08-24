@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"net/http"
+
 	"github.com/example/osb-broker/internal/broker"
 	"github.com/gin-gonic/gin"
 )
@@ -17,11 +19,19 @@ func New(b *broker.Broker) *Handlers {
 	}
 }
 
+// Healthz handles GET /healthz for Kubernetes liveness/readiness probes
+func (h *Handlers) Healthz(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
 // SetupRouter configures the Gin router with all OSB API routes
 func (h *Handlers) SetupRouter() *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
+
+	// Health check (outside API version middleware, no X-Broker-API-Version required)
+	router.GET("/healthz", h.Healthz)
 
 	// Middleware to check API version
 	router.Use(h.apiVersionMiddleware)
