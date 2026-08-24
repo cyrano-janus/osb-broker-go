@@ -94,7 +94,7 @@ spec:
         storage:
           size: {{ .plan.storageSize }}
   readiness:
-    statusJSONPath: '.status.conditions[?(@.type=="Ready")].status'
+    statusJSONPath: 'status.conditions.#(type=="Ready").status'
     expectedValue: "True"
     timeoutSeconds: 600
   bind:
