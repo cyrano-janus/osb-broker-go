@@ -5,6 +5,35 @@ import (
 	"testing"
 )
 
+func TestSanitizeInstanceName(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"my-db", "my-db"},
+		{"930fca69-63a2-45db-abee-46770af47008", "930fca69-63a2-45db-abee-46770af47008"},
+		{"UPPER_case.id", "upper-case-id"},
+		{"-leading-dash-", "leading-dash"},
+	}
+	for _, c := range cases {
+		got := SanitizeInstanceName(c.in)
+		if got != c.want {
+			t.Errorf("SanitizeInstanceName(%q) = %q, want %q", c.in, got, c.want)
+		}
+		if len(got) > 63 {
+			t.Errorf("SanitizeInstanceName(%q) too long: %d", c.in, len(got))
+		}
+	}
+
+	long := strings.Repeat("x", 100) + "-930fca69-63a2-45db-abee"
+	got := SanitizeInstanceName(long)
+	if len(got) > 63 {
+		t.Errorf("long name not truncated deterministically: %q (%d)", got, len(got))
+	}
+	if SanitizeInstanceName(long) != got {
+		t.Error("sanitize must be deterministic")
+	}
+}
+
 func TestRender_CRManifestWithPlanParams(t *testing.T) {
 	sd, err := Parse([]byte(validYAML))
 	if err != nil {
