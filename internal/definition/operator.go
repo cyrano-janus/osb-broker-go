@@ -80,6 +80,27 @@ func (o *OperatorClient) DeleteCR(ctx context.Context, apiVersion, kind, namespa
 	return nil
 }
 
+// GetCR fetches the full custom resource of an instance.
+func (o *OperatorClient) GetCR(ctx context.Context, apiVersion, kind, namespace, name string) (*unstructured.Unstructured, error) {
+	u := &unstructured.Unstructured{}
+	gv, err := schema.ParseGroupVersion(apiVersion)
+	if err != nil {
+		return nil, fmt.Errorf("parse apiVersion: %w", err)
+	}
+	u.SetGroupVersionKind(schema.GroupVersionKind{Group: gv.Group, Version: gv.Version, Kind: kind})
+	u.SetNamespace(namespace)
+	u.SetName(name)
+
+	err = o.Client.Get(ctx, client.ObjectKeyFromObject(u), u)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, fmt.Errorf("%w: %s %q", ErrNotFound, kind, name)
+		}
+		return nil, fmt.Errorf("get %s %q: %w", kind, name, err)
+	}
+	return u, nil
+}
+
 // GetCRStatus fetches the current status subobject of the instance's CR.
 func (o *OperatorClient) GetCRStatus(ctx context.Context, apiVersion, kind, namespace, name string) (map[string]interface{}, error) {
 	u := &unstructured.Unstructured{}
