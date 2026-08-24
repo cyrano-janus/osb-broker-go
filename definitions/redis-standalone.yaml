@@ -1,0 +1,56 @@
+apiVersion: broker.osb.io/v1alpha1
+kind: ServiceDefinition
+metadata:
+  name: redis-standalone
+spec:
+  offering:
+    id: b7c2d3e4-redis-0000-0000-000000000001
+    name: redis-standalone
+    description: "Redis via Redis Operator (ot-container-kit)"
+    tags: [redis, cache, in-memory]
+    plans:
+      - id: plan-redis-dev-0000-0000-000000000001
+        name: dev
+        description: "Single node, 128Mi"
+        params:
+          capacity: 128Mi
+          replicas: 1
+      - id: plan-redis-prod-0000-0000-000000000002
+        name: prod
+        description: "Leader + 2 followers, 1Gi"
+        params:
+          capacity: 1Gi
+          replicas: 3
+
+  provision:
+    apiVersion: redis.redis.opstreelabs.in/v1beta2
+    kind: Redis
+    template: |
+      apiVersion: redis.redis.opstreelabs.in/v1beta2
+      kind: Redis
+      metadata:
+        name: {{ .instanceID }}
+        labels:
+          app.kubernetes.io/managed-by: osb-broker-go
+      spec:
+        mode: standalone
+        kubernetesConfig:
+          image: quay.io/opstree/redis:v7.0.15
+          redisExporter:
+            enabled: false
+        storage:
+          volumeClaimTemplate:
+            spec:
+              resources:
+                requests:
+                  storage: {{ .plan.capacity }}
+  readiness:
+    statusJSONPath: 'status.conditions.#(type=="Ready").status'
+    expectedValue: "True"
+    timeoutSeconds: 300
+
+  bind:
+    # Der Opstree-Operator legt kein Credentials-Secret an; der Broker
+    # erwartet daher, dass ein Platform-Admin das Secret vor dem ersten
+    # Bind erzeugt (oder ein Sidecar dies tut). Konvention: <id>-redis.
+    credentialsFromSecret: "{{ .instanceID }}-redis"

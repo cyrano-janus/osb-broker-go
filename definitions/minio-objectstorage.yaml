@@ -1,0 +1,57 @@
+apiVersion: broker.osb.io/v1alpha1
+kind: ServiceDefinition
+metadata:
+  name: minio-objectstorage
+spec:
+  offering:
+    id: c9d8e7f6-minio-0000-0000-000000000001
+    name: minio-objectstorage
+    description: "MinIO S3-compatible object storage via minio-operator"
+    tags: [s3, objectstorage, minio]
+    plans:
+      - id: plan-minio-small-0000-0000-000000000001
+        name: small
+        description: "Single tenant, 10Gi"
+        params:
+          servers: 1
+          volumesPerServer: 1
+          size: 10Gi
+      - id: plan-minio-large-0000-0000-000000000002
+        name: large
+        description: "4 servers x 2 volumes, 50Gi each (erasure coded)"
+        params:
+          servers: 4
+          volumesPerServer: 2
+          size: 50Gi
+
+  provision:
+    apiVersion: minio.min.io/v2
+    kind: Tenant
+    template: |
+      apiVersion: minio.min.io/v2
+      kind: Tenant
+      metadata:
+        name: {{ .instanceID }}
+        labels:
+          app.kubernetes.io/managed-by: osb-broker-go
+      spec:
+        pools:
+          - servers: {{ .plan.servers }}
+            volumesPerServer: {{ .plan.volumesPerServer }}
+            volumeClaimTemplate:
+              spec:
+                accessModes: [ReadWriteOnce]
+                resources:
+                  requests:
+                    storage: {{ .plan.size }}
+        requestCert: false
+        prometheusOperator: false
+  readiness:
+    statusJSONPath: 'status.conditions.#(type=="Ready").status'
+    expectedValue: "True"
+    timeoutSeconds: 600
+
+  bind:
+    # Der MinIO-Operator legt pro Tenant ein Secret "<tenant>-secret" mit
+    # accessKey/secretKey an.
+    credentialsFromSecret: "{{ .instanceID }}-secret"
