@@ -1,6 +1,7 @@
 package broker
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -66,7 +67,7 @@ func (b *Broker) GetCatalog() (*Catalog, error) {
 }
 
 // Provision creates or updates a service instance
-func (b *Broker) Provision(instanceID string, req *ProvisionRequest) (*ProvisionResponse, error) {
+func (b *Broker) Provision(ctx context.Context, instanceID string, req *ProvisionRequest) (*ProvisionResponse, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -83,7 +84,7 @@ func (b *Broker) Provision(instanceID string, req *ProvisionRequest) (*Provision
 
 	// Check if instance already exists (persistent store: idempotency must
 	// survive restarts)
-	existing, err := b.state.GetInstance(instanceID)
+	existing, err := b.state.GetInstance(ctx, instanceID)
 	if err == nil {
 		// Check for conflicts
 		if existing.ServiceID != req.ServiceID || existing.PlanID != req.PlanID {
@@ -109,7 +110,7 @@ func (b *Broker) Provision(instanceID string, req *ProvisionRequest) (*Provision
 	}
 
 	b.instances[instanceID] = instance
-	if err := b.state.PutInstance(instance); err != nil {
+	if err := b.state.PutInstance(ctx, instance); err != nil {
 		return nil, fmt.Errorf("persist instance: %w", err)
 	}
 
@@ -122,18 +123,18 @@ func (b *Broker) Provision(instanceID string, req *ProvisionRequest) (*Provision
 }
 
 // Deprovision removes a service instance
-func (b *Broker) Deprovision(instanceID string, req *DeprovisionRequest) (*DeprovisionResponse, error) {
+func (b *Broker) Deprovision(ctx context.Context, instanceID string, req *DeprovisionRequest) (*DeprovisionResponse, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	_, err := b.state.GetInstance(instanceID)
+	_, err := b.state.GetInstance(ctx, instanceID)
 	if err != nil {
 		return nil, fmt.Errorf("instance not found")
 	}
 
 	// Check for existing bindings (from the persistent store, so restarts
 	// don't orphan bindings)
-	bindings, listErr := b.state.ListBindingsByInstance(instanceID)
+	bindings, listErr := b.state.ListBindingsByInstance(ctx, instanceID)
 	if listErr != nil {
 		return nil, fmt.Errorf("list bindings: %w", listErr)
 	}
@@ -144,7 +145,7 @@ func (b *Broker) Deprovision(instanceID string, req *DeprovisionRequest) (*Depro
 	}
 
 	delete(b.instances, instanceID)
-	if err := b.state.DeleteInstance(instanceID); err != nil {
+	if err := b.state.DeleteInstance(ctx, instanceID); err != nil {
 		return nil, fmt.Errorf("delete persisted instance: %w", err)
 	}
 
@@ -152,17 +153,17 @@ func (b *Broker) Deprovision(instanceID string, req *DeprovisionRequest) (*Depro
 }
 
 // Bind creates a binding between an app and a service instance
-func (b *Broker) Bind(instanceID, bindingID string, req *BindRequest) (*BindResponse, error) {
+func (b *Broker) Bind(ctx context.Context, instanceID, bindingID string, req *BindRequest) (*BindResponse, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	_, err := b.state.GetInstance(instanceID)
+	_, err := b.state.GetInstance(ctx, instanceID)
 	if err != nil {
 		return nil, fmt.Errorf("instance not found")
 	}
 
 	// Check if binding already exists (persistent: idempotent across restarts)
-	existing, bindErr := b.state.GetBinding(bindingID)
+	existing, bindErr := b.state.GetBinding(ctx, bindingID)
 	if bindErr == nil {
 		if existing.InstanceID == instanceID && existing.Ready {
 			// Return existing binding credentials (idempotent)
@@ -191,7 +192,7 @@ func (b *Broker) Bind(instanceID, bindingID string, req *BindRequest) (*BindResp
 	binding.Credentials = generateCredentials(instanceID, bindingID)
 
 	b.bindings[bindingID] = binding
-	if err := b.state.PutBinding(binding); err != nil {
+	if err := b.state.PutBinding(ctx, binding); err != nil {
 		return nil, fmt.Errorf("persist binding: %w", err)
 	}
 
@@ -201,11 +202,11 @@ func (b *Broker) Bind(instanceID, bindingID string, req *BindRequest) (*BindResp
 }
 
 // Unbind removes a binding
-func (b *Broker) Unbind(instanceID, bindingID string, req *UnbindRequest) (*UnbindResponse, error) {
+func (b *Broker) Unbind(ctx context.Context, instanceID, bindingID string, req *UnbindRequest) (*UnbindResponse, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	binding, err := b.state.GetBinding(bindingID)
+	binding, err := b.state.GetBinding(ctx, bindingID)
 	if err != nil {
 		return nil, fmt.Errorf("binding not found")
 	}
@@ -215,7 +216,7 @@ func (b *Broker) Unbind(instanceID, bindingID string, req *UnbindRequest) (*Unbi
 	}
 
 	delete(b.bindings, bindingID)
-	if err := b.state.DeleteBinding(bindingID); err != nil {
+	if err := b.state.DeleteBinding(ctx, bindingID); err != nil {
 		return nil, fmt.Errorf("delete persisted binding: %w", err)
 	}
 
@@ -223,11 +224,11 @@ func (b *Broker) Unbind(instanceID, bindingID string, req *UnbindRequest) (*Unbi
 }
 
 // GetInstance retrieves instance details
-func (b *Broker) GetInstance(instanceID string) (*GetInstanceResponse, error) {
+func (b *Broker) GetInstance(ctx context.Context, instanceID string) (*GetInstanceResponse, error) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
-	instance, err := b.state.GetInstance(instanceID)
+	instance, err := b.state.GetInstance(ctx, instanceID)
 	if err != nil {
 		return nil, fmt.Errorf("instance not found")
 	}
@@ -241,11 +242,11 @@ func (b *Broker) GetInstance(instanceID string) (*GetInstanceResponse, error) {
 }
 
 // GetBinding retrieves binding details
-func (b *Broker) GetBinding(instanceID, bindingID string) (*GetBindingResponse, error) {
+func (b *Broker) GetBinding(ctx context.Context, instanceID, bindingID string) (*GetBindingResponse, error) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
-	binding, err := b.state.GetBinding(bindingID)
+	binding, err := b.state.GetBinding(ctx, bindingID)
 	if err != nil {
 		return nil, fmt.Errorf("binding not found")
 	}
@@ -263,11 +264,11 @@ func (b *Broker) GetBinding(instanceID, bindingID string) (*GetBindingResponse, 
 }
 
 // UpdateInstance updates a service instance
-func (b *Broker) UpdateInstance(instanceID string, req *UpdateInstanceRequest) (*UpdateInstanceResponse, error) {
+func (b *Broker) UpdateInstance(ctx context.Context, instanceID string, req *UpdateInstanceRequest) (*UpdateInstanceResponse, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	instance, err := b.state.GetInstance(instanceID)
+	instance, err := b.state.GetInstance(ctx, instanceID)
 	if err != nil {
 		return nil, fmt.Errorf("instance not found")
 	}
@@ -282,7 +283,7 @@ func (b *Broker) UpdateInstance(instanceID string, req *UpdateInstanceRequest) (
 		instance.Parameters = req.Parameters
 	}
 
-	if err := b.state.PutInstance(instance); err != nil {
+	if err := b.state.PutInstance(ctx, instance); err != nil {
 		return nil, fmt.Errorf("persist instance update: %w", err)
 	}
 

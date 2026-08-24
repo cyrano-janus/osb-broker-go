@@ -1,6 +1,8 @@
 package broker
 
 import (
+	"context"
+
 	"testing"
 
 	"github.com/example/osb-broker/internal/store"
@@ -45,7 +47,7 @@ func TestProvision(t *testing.T) {
 		AcceptsIncomplete: false,
 	}
 
-	response, err := broker.Provision("instance-1", req)
+	response, err := broker.Provision(context.Background(), "instance-1", req)
 
 	require.NoError(t, err)
 	require.NotNil(t, response)
@@ -71,12 +73,12 @@ func TestProvisionIdempotent(t *testing.T) {
 	}
 
 	// First provision
-	response1, err := broker.Provision("instance-1", req)
+	response1, err := broker.Provision(context.Background(), "instance-1", req)
 	require.NoError(t, err)
 	require.NotNil(t, response1)
 
 	// Second provision (idempotent)
-	response2, err := broker.Provision("instance-1", req)
+	response2, err := broker.Provision(context.Background(), "instance-1", req)
 	require.NoError(t, err)
 	require.NotNil(t, response2)
 }
@@ -93,7 +95,7 @@ func TestProvisionInvalidService(t *testing.T) {
 		},
 	}
 
-	response, err := broker.Provision("instance-1", req)
+	response, err := broker.Provision(context.Background(), "instance-1", req)
 
 	assert.Error(t, err)
 	assert.Nil(t, response)
@@ -111,7 +113,7 @@ func TestDeprovision(t *testing.T) {
 			Platform: "cloudfoundry",
 		},
 	}
-	_, err := broker.Provision("instance-1", provReq)
+	_, err := broker.Provision(context.Background(), "instance-1", provReq)
 	require.NoError(t, err)
 
 	// Then deprovision
@@ -119,7 +121,7 @@ func TestDeprovision(t *testing.T) {
 		ServiceID: "service-1",
 		PlanID:    "plan-free",
 	}
-	response, err := broker.Deprovision("instance-1", deprovReq)
+	response, err := broker.Deprovision(context.Background(), "instance-1", deprovReq)
 
 	require.NoError(t, err)
 	require.NotNil(t, response)
@@ -141,7 +143,7 @@ func TestDeprovisionWithBinding(t *testing.T) {
 			Platform: "cloudfoundry",
 		},
 	}
-	_, err := broker.Provision("instance-1", provReq)
+	_, err := broker.Provision(context.Background(), "instance-1", provReq)
 	require.NoError(t, err)
 
 	// Create binding
@@ -153,7 +155,7 @@ func TestDeprovisionWithBinding(t *testing.T) {
 			Platform: "cloudfoundry",
 		},
 	}
-	_, err = broker.Bind("instance-1", "binding-1", bindReq)
+	_, err = broker.Bind(context.Background(), "instance-1", "binding-1", bindReq)
 	require.NoError(t, err)
 
 	// Try to deprovision (should fail)
@@ -161,7 +163,7 @@ func TestDeprovisionWithBinding(t *testing.T) {
 		ServiceID: "service-1",
 		PlanID:    "plan-free",
 	}
-	response, err := broker.Deprovision("instance-1", deprovReq)
+	response, err := broker.Deprovision(context.Background(), "instance-1", deprovReq)
 
 	assert.Error(t, err)
 	assert.Nil(t, response)
@@ -179,7 +181,7 @@ func TestBind(t *testing.T) {
 			Platform: "cloudfoundry",
 		},
 	}
-	_, err := broker.Provision("instance-1", provReq)
+	_, err := broker.Provision(context.Background(), "instance-1", provReq)
 	require.NoError(t, err)
 
 	// Bind
@@ -191,7 +193,7 @@ func TestBind(t *testing.T) {
 			Platform: "cloudfoundry",
 		},
 	}
-	response, err := broker.Bind("instance-1", "binding-1", bindReq)
+	response, err := broker.Bind(context.Background(), "instance-1", "binding-1", bindReq)
 
 	require.NoError(t, err)
 	require.NotNil(t, response)
@@ -219,7 +221,7 @@ func TestBindIdempotent(t *testing.T) {
 			Platform: "cloudfoundry",
 		},
 	}
-	_, err := broker.Provision("instance-1", provReq)
+	_, err := broker.Provision(context.Background(), "instance-1", provReq)
 	require.NoError(t, err)
 
 	bindReq := &BindRequest{
@@ -232,11 +234,11 @@ func TestBindIdempotent(t *testing.T) {
 	}
 
 	// First bind
-	response1, err := broker.Bind("instance-1", "binding-1", bindReq)
+	response1, err := broker.Bind(context.Background(), "instance-1", "binding-1", bindReq)
 	require.NoError(t, err)
 
 	// Second bind (idempotent)
-	response2, err := broker.Bind("instance-1", "binding-1", bindReq)
+	response2, err := broker.Bind(context.Background(), "instance-1", "binding-1", bindReq)
 	require.NoError(t, err)
 
 	// Credentials should be the same
@@ -255,7 +257,7 @@ func TestUnbind(t *testing.T) {
 			Platform: "cloudfoundry",
 		},
 	}
-	_, err := broker.Provision("instance-1", provReq)
+	_, err := broker.Provision(context.Background(), "instance-1", provReq)
 	require.NoError(t, err)
 
 	bindReq := &BindRequest{
@@ -266,7 +268,7 @@ func TestUnbind(t *testing.T) {
 			Platform: "cloudfoundry",
 		},
 	}
-	_, err = broker.Bind("instance-1", "binding-1", bindReq)
+	_, err = broker.Bind(context.Background(), "instance-1", "binding-1", bindReq)
 	require.NoError(t, err)
 
 	// Unbind
@@ -274,7 +276,7 @@ func TestUnbind(t *testing.T) {
 		ServiceID: "service-1",
 		PlanID:    "plan-free",
 	}
-	response, err := broker.Unbind("instance-1", "binding-1", unbindReq)
+	response, err := broker.Unbind(context.Background(), "instance-1", "binding-1", unbindReq)
 
 	require.NoError(t, err)
 	require.NotNil(t, response)
@@ -296,11 +298,11 @@ func TestGetInstance(t *testing.T) {
 			Platform: "cloudfoundry",
 		},
 	}
-	_, err := broker.Provision("instance-1", provReq)
+	_, err := broker.Provision(context.Background(), "instance-1", provReq)
 	require.NoError(t, err)
 
 	// Get instance
-	response, err := broker.GetInstance("instance-1")
+	response, err := broker.GetInstance(context.Background(), "instance-1")
 
 	require.NoError(t, err)
 	require.NotNil(t, response)
@@ -312,7 +314,7 @@ func TestGetInstanceNotFound(t *testing.T) {
 	store := store.NewInMemoryStore()
 	broker := New(store, nil)
 
-	response, err := broker.GetInstance("nonexistent")
+	response, err := broker.GetInstance(context.Background(), "nonexistent")
 
 	assert.Error(t, err)
 	assert.Nil(t, response)
@@ -330,7 +332,7 @@ func TestGetBinding(t *testing.T) {
 			Platform: "cloudfoundry",
 		},
 	}
-	_, err := broker.Provision("instance-1", provReq)
+	_, err := broker.Provision(context.Background(), "instance-1", provReq)
 	require.NoError(t, err)
 
 	bindReq := &BindRequest{
@@ -341,11 +343,11 @@ func TestGetBinding(t *testing.T) {
 			Platform: "cloudfoundry",
 		},
 	}
-	_, err = broker.Bind("instance-1", "binding-1", bindReq)
+	_, err = broker.Bind(context.Background(), "instance-1", "binding-1", bindReq)
 	require.NoError(t, err)
 
 	// Get binding
-	response, err := broker.GetBinding("instance-1", "binding-1")
+	response, err := broker.GetBinding(context.Background(), "instance-1", "binding-1")
 
 	require.NoError(t, err)
 	require.NotNil(t, response)
@@ -364,7 +366,7 @@ func TestUpdateInstance(t *testing.T) {
 			Platform: "cloudfoundry",
 		},
 	}
-	_, err := broker.Provision("instance-1", provReq)
+	_, err := broker.Provision(context.Background(), "instance-1", provReq)
 	require.NoError(t, err)
 
 	// Update instance
@@ -378,13 +380,13 @@ func TestUpdateInstance(t *testing.T) {
 			PlanID: "plan-free",
 		},
 	}
-	response, err := broker.UpdateInstance("instance-1", updateReq)
+	response, err := broker.UpdateInstance(context.Background(), "instance-1", updateReq)
 
 	require.NoError(t, err)
 	require.NotNil(t, response)
 
 	// Verify plan was updated (read back through the persistent store)
-	updated, err := broker.GetInstance("instance-1")
+	updated, err := broker.GetInstance(context.Background(), "instance-1")
 	require.NoError(t, err)
 	assert.Equal(t, "plan-premium", updated.PlanID)
 }
@@ -401,7 +403,7 @@ func TestGetLastOperation(t *testing.T) {
 			Platform: "cloudfoundry",
 		},
 	}
-	_, err := broker.Provision("instance-1", provReq)
+	_, err := broker.Provision(context.Background(), "instance-1", provReq)
 	require.NoError(t, err)
 
 	// Get last operation
@@ -424,7 +426,7 @@ func TestGetLastBindingOperation(t *testing.T) {
 			Platform: "cloudfoundry",
 		},
 	}
-	_, err := broker.Provision("instance-1", provReq)
+	_, err := broker.Provision(context.Background(), "instance-1", provReq)
 	require.NoError(t, err)
 
 	bindReq := &BindRequest{
@@ -435,7 +437,7 @@ func TestGetLastBindingOperation(t *testing.T) {
 			Platform: "cloudfoundry",
 		},
 	}
-	_, err = broker.Bind("instance-1", "binding-1", bindReq)
+	_, err = broker.Bind(context.Background(), "instance-1", "binding-1", bindReq)
 	require.NoError(t, err)
 
 	// Get last binding operation

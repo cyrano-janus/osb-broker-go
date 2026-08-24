@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"context"
+
 	"net/http"
 
 	"github.com/example/osb-broker/internal/broker"
@@ -38,7 +40,7 @@ func (h *Handlers) BindServiceInstance(c *gin.Context) {
 		return
 	}
 
-	response, err := h.broker.Bind(instanceID, bindingID, &req)
+	response, err := h.broker.Bind(context.Background(), instanceID, bindingID, &req)
 	if err != nil {
 		respondOSBError(c, err)
 		return
@@ -60,7 +62,7 @@ func (h *Handlers) UnbindServiceInstance(c *gin.Context) {
 		PlanID:    planID,
 	}
 
-	response, err := h.broker.Unbind(instanceID, bindingID, req)
+	response, err := h.broker.Unbind(context.Background(), instanceID, bindingID, req)
 	if err != nil {
 		respondOSBError(c, err)
 		return
@@ -74,7 +76,7 @@ func (h *Handlers) GetBinding(c *gin.Context) {
 	instanceID := c.Param("instance_id")
 	bindingID := c.Param("binding_id")
 
-	response, err := h.broker.GetBinding(instanceID, bindingID)
+	response, err := h.broker.GetBinding(c.Request.Context(), instanceID, bindingID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error":       "NotFound",

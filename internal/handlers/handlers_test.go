@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"context"
+
 	"bytes"
 	"encoding/json"
 	"net/http"
@@ -57,7 +59,7 @@ func TestProvisionServiceInstance(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, w.Code)
 
 	// Verify instance was created via the exported accessor
-	_, err := b.GetInstance("instance-1")
+	_, err := b.GetInstance(context.Background(), "instance-1")
 	assert.NoError(t, err)
 }
 
@@ -128,7 +130,7 @@ func TestDeprovisionServiceInstance(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	// Verify instance was deleted via the exported accessor
-	_, err := b.GetInstance("instance-1")
+	_, err := b.GetInstance(context.Background(), "instance-1")
 	assert.Error(t, err)
 }
 
@@ -173,7 +175,7 @@ func TestBindServiceInstance(t *testing.T) {
 	assert.NotNil(t, response.Credentials)
 
 	// Verify binding was created via the exported accessor
-	_, err = b.GetBinding("instance-1", "binding-1")
+	_, err = b.GetBinding(context.Background(), "instance-1", "binding-1")
 	assert.NoError(t, err)
 }
 
@@ -216,7 +218,7 @@ func TestUnbindServiceInstance(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	// Verify binding was deleted via the exported accessor
-	_, err := b.GetBinding("instance-1", "binding-1")
+	_, err := b.GetBinding(context.Background(), "instance-1", "binding-1")
 	assert.Error(t, err)
 }
 
@@ -341,7 +343,7 @@ func TestUpdateServiceInstance(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	// Verify plan was updated via the exported accessor
-	instance, err := b.GetInstance("instance-1")
+	instance, err := b.GetInstance(context.Background(), "instance-1")
 	require.NoError(t, err)
 	assert.Equal(t, "plan-premium", instance.PlanID)
 }
