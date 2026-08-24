@@ -118,7 +118,7 @@ spec:
       apiVersion: postgresql.cnpg.io/v1
       kind: Cluster
       metadata:
-        name: {{ .instanceID }}
+        name: {{ .safeName }}
       spec:
         instances: {{ .plan.instances }}
         storage:
@@ -128,5 +128,5 @@ spec:
     expectedValue: "True"
     timeoutSeconds: 600
   bind:
-    credentialsFromSecret: "{{ .instanceID }}-app"
+    credentialsFromSecret: "{{ .safeName }}-app"
 `
