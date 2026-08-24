@@ -2,10 +2,45 @@ package definition
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"text/template"
 )
+
+// SanitizeInstanceName makes an arbitrary OSB instance_id safe as a
+// Kubernetes object name (DNS label): keeps [a-z0-9-], lowercases the rest,
+// always prefixes "osb-" (some operators' webhooks reject bare GUID-style
+// names even when formally valid — e.g. CloudNativePG 1.24), and hashes
+// over-long names to stay <= 63 chars while remaining deterministic.
+func SanitizeInstanceName(instanceID string) string {
+	const maxLen = 63
+	const prefix = "osb-"
+	var b []byte
+	for _, r := range strings.ToLower(instanceID) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b = append(b, byte(r))
+		default:
+			b = append(b, '-')
+		}
+	}
+	name := prefix + strings.Trim(string(b), "-")
+	if name == prefix {
+		name = prefix + "instance"
+	}
+	if len(name) > maxLen {
+		sum := sha256.Sum256([]byte(instanceID))
+		suffix := hex.EncodeToString(sum[:4])
+		cut := name[:maxLen-len(suffix)-1]
+		name = strings.Trim(cut, "-") + "-" + suffix
+		if !strings.HasPrefix(name, prefix) {
+			name = prefix + strings.Trim(name[len(prefix):], "-")
+		}
+	}
+	return name
+}
 
 // TemplateData is the dot available inside ServiceDefinition templates.
 // Both spellings are supported: .InstanceID/.Plan/.Parameters (Go style)
@@ -13,13 +48,19 @@ import (
 type TemplateData struct {
 	// InstanceID is the OSB instance_id.
 	InstanceID string
-	// BindingID is the OSB binding_id (bind templates only).
+	// SafeName is the DNS-label-safe object name derived from InstanceID.
+	SafeName string
+	// BindingID is the OSB binding_id.
 	BindingID string
-	// Plan holds the selected plan's params map (address as .Plan.<key>).
+	// Plan holds the plan parameters.
 	Plan map[string]interface{}
-	// Parameters are the free-form parameters sent by the platform.
+	// Parameters holds user-supplied request parameters.
 	Parameters map[string]interface{}
 }
+
+// aliasLower provides the lowercase template aliases (.instanceID etc.).
+func (d TemplateData) instanceID() string { return d.InstanceID }
+func (d TemplateData) safeName() string   { return d.SafeName }
 
 // lowerCase returns an alias map exposing the same data with lowercase
 // keys (.instanceID, .bindingID, .plan, .parameters) for YAML-flavoured
@@ -27,6 +68,7 @@ type TemplateData struct {
 func (t TemplateData) lowerCase() map[string]interface{} {
 	return map[string]interface{}{
 		"instanceID":  t.InstanceID,
+		"safeName":    t.SafeName,
 		"bindingID":   t.BindingID,
 		"plan":        t.Plan,
 		"parameters":  t.Parameters,
@@ -37,7 +79,12 @@ func (t TemplateData) lowerCase() map[string]interface{} {
 func RenderProvision(sd *ServiceDefinition, instanceID string, planParams map[string]interface{}) (string, error) {
 	return renderTemplate(sd.Spec.Provision.Template, TemplateData{
 		InstanceID: instanceID,
-		Plan:       planParams,
+		// SafeName is the K8s-validated object name derived from the
+		// (possibly unsanitary) OSB instance_id. Templates that create
+		// objects should use {{ .safeName }}; {{ .instanceID }} stays
+		// available for labels/annotations where arbitrary values are OK.
+		SafeName: SanitizeInstanceName(instanceID),
+		Plan:     planParams,
 	})
 }
 
@@ -45,6 +92,7 @@ func RenderProvision(sd *ServiceDefinition, instanceID string, planParams map[st
 func RenderSecretName(sd *ServiceDefinition, instanceID string) (string, error) {
 	return renderTemplate(sd.Spec.Bind.CredentialsFromSecret, TemplateData{
 		InstanceID: instanceID,
+		SafeName:   SanitizeInstanceName(instanceID),
 	})
 }
 

@@ -64,6 +64,16 @@ func (h *Handlers) deprovisionWithEngine(c *gin.Context, instanceID, serviceID s
 	c.JSON(http.StatusOK, broker.DeprovisionResponse{})
 }
 
+// ValidatePlanParamsForService resolves the plan and validates user-supplied
+// parameters against the plan's allowedParameters whitelist.
+func ValidatePlanParamsForService(h *Handlers, serviceID, planID string, parameters map[string]interface{}) error {
+	sd, err := h.engine.Engine.DefinitionByServiceID(serviceID)
+	if err != nil {
+		return err
+	}
+	return sd.ValidatePlanParameters(planID, parameters)
+}
+
 func targetNamespace(ctx broker.Context) string {
 	if ctx.SpaceGUID != "" {
 		return ctx.SpaceGUID

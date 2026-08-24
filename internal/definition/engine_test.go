@@ -57,7 +57,7 @@ func TestEngine_ProvisionInstance_RendersAndAppliesCR(t *testing.T) {
 	require.NoError(t, err)
 
 	// CR existiert mit gerenderten Werten
-	cr, err := oc.GetCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, "default", "inst-e2e")
+	cr, err := oc.GetCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, "default", "osb-inst-e2e")
 	require.NoError(t, err)
 	spec, found, err := unstructured.NestedMap(cr.Object, "spec")
 	require.NoError(t, err)
@@ -74,7 +74,7 @@ func TestEngine_DeprovisionInstance(t *testing.T) {
 	require.NoError(t, e.ProvisionInstance(ctx, "f48a9e21-cnpg-0000-0000-000000000001", "inst-gone", "default", "plan-small-0000-0000-000000000001", nil))
 	require.NoError(t, e.DeprovisionInstance(ctx, sd, "default", "inst-gone"))
 
-	cr, err := oc.GetCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, "default", "inst-gone")
+	cr, err := oc.GetCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, "default", "osb-inst-gone")
 	assert.Error(t, err)
 	assert.Nil(t, cr)
 }
@@ -93,7 +93,7 @@ func TestEngine_LastOperation_MapsReadiness(t *testing.T) {
 	assert.Equal(t, "in progress", state)
 
 	// Ready-Condition setzen
-	cr, err := oc.GetCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, "default", "inst-ro")
+	cr, err := oc.GetCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, "default", "osb-inst-ro")
 	require.NoError(t, err)
 	require.NoError(t, unstructured.SetNestedSlice(cr.Object,
 		[]interface{}{map[string]interface{}{"type": "Ready", "status": "True"}},
@@ -112,14 +112,14 @@ func TestEngine_BindInstance_ReadsSecret(t *testing.T) {
 	ctx := contextBackground()
 
 	// Secret anlegen, wie es der Operator tun würde
-	require.NoError(t, oc.Client.Create(ctx, k8sSecret("default", "inst-bind-app", map[string][]byte{
+	require.NoError(t, oc.Client.Create(ctx, k8sSecret("default", "osb-inst-bind-app", map[string][]byte{
 		"user":     []byte("alice"),
 		"password": []byte("s3cret"),
 	})))
 
 	creds, secretName, err := e.BindCredentials(ctx, sd, "default", "inst-bind")
 	require.NoError(t, err)
-	assert.Equal(t, "inst-bind-app", secretName)
+	assert.Equal(t, "osb-inst-bind-app", secretName)
 	assert.Equal(t, "alice", creds["user"])
 	assert.Equal(t, "s3cret", creds["password"])
 }

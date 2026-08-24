@@ -98,15 +98,16 @@ func (e *Engine) provisionDefinition(ctx context.Context, sd *ServiceDefinition,
 	return e.op.ApplyCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, namespace, rendered)
 }
 
-// DeprovisionInstance deletes the instance's CR.
+// DeprovisionInstance deletes the instance's CR (name = sanitized safe name,
+// consistent with ProvisionInstance).
 func (e *Engine) DeprovisionInstance(ctx context.Context, sd *ServiceDefinition, namespace, instanceID string) error {
-	return e.op.DeleteCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, namespace, instanceID)
+	return e.op.DeleteCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, namespace, SanitizeInstanceName(instanceID))
 }
 
 // LastOperation maps CR readiness to OSB operation state:
 // succeeded / in progress.
 func (e *Engine) LastOperation(ctx context.Context, sd *ServiceDefinition, namespace, instanceID string) (string, error) {
-	cr, err := e.op.GetCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, namespace, instanceID)
+	cr, err := e.op.GetCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, namespace, SanitizeInstanceName(instanceID))
 	if err != nil {
 		return "", err
 	}

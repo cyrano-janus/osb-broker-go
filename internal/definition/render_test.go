@@ -5,6 +5,35 @@ import (
 	"testing"
 )
 
+func TestSanitizeInstanceName(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"my-db", "osb-my-db"},
+		{"930fca69-63a2-45db-abee-46770af47008", "osb-930fca69-63a2-45db-abee-46770af47008"},
+		{"UPPER_case.id", "osb-upper-case-id"},
+		{"-leading-dash-", "osb-leading-dash"},
+	}
+	for _, c := range cases {
+		got := SanitizeInstanceName(c.in)
+		if got != c.want {
+			t.Errorf("SanitizeInstanceName(%q) = %q, want %q", c.in, got, c.want)
+		}
+		if len(got) > 63 {
+			t.Errorf("SanitizeInstanceName(%q) too long: %d", c.in, len(got))
+		}
+	}
+
+	long := strings.Repeat("x", 100) + "-930fca69-63a2-45db-abee"
+	got := SanitizeInstanceName(long)
+	if len(got) > 63 {
+		t.Errorf("long name not truncated deterministically: %q (%d)", got, len(got))
+	}
+	if SanitizeInstanceName(long) != got {
+		t.Error("sanitize must be deterministic")
+	}
+}
+
 func TestRender_CRManifestWithPlanParams(t *testing.T) {
 	sd, err := Parse([]byte(validYAML))
 	if err != nil {
@@ -22,7 +51,7 @@ func TestRender_CRManifestWithPlanParams(t *testing.T) {
 	for _, want := range []string{
 		"apiVersion: postgresql.cnpg.io/v1",
 		"kind: Cluster",
-		"name: my-instance-1",
+		"name: osb-my-instance-1",
 		"instances: 3",
 		"size: 10Gi",
 	} {
@@ -72,6 +101,7 @@ spec:
     plans:
       - id: plan-small-0000-0000-000000000001
         name: small
+        allowedParameters: [replicas]
         params:
           storageSize: 1Gi
           instances: 1
@@ -88,7 +118,7 @@ spec:
       apiVersion: postgresql.cnpg.io/v1
       kind: Cluster
       metadata:
-        name: {{ .instanceID }}
+        name: {{ .safeName }}
       spec:
         instances: {{ .plan.instances }}
         storage:
@@ -98,5 +128,5 @@ spec:
     expectedValue: "True"
     timeoutSeconds: 600
   bind:
-    credentialsFromSecret: "{{ .instanceID }}-app"
+    credentialsFromSecret: "{{ .safeName }}-app"
 `

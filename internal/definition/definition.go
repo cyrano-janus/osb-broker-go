@@ -51,7 +51,24 @@ type Plan struct {
 	Name        string                 `json:"name"`
 	Description string                 `json:"description,omitempty"`
 	Params      map[string]interface{} `json:"params,omitempty"`
-	Free        *bool                  `json:"free,omitempty"`
+	// AllowedParameters lists the parameter keys a consumer may supply in
+	// the provision/update request body. Empty = no user parameters.
+	AllowedParameters []string `json:"allowedParameters,omitempty"`
+	Free              *bool    `json:"free,omitempty"`
+}
+
+// ValidatePlanParameters validates user-supplied parameters against the
+// target plan's allowedParameters whitelist. planID may be empty to check
+// against all plans (provision without explicit plan is rejected anyway).
+func (sd *ServiceDefinition) ValidatePlanParameters(planID string, parameters map[string]interface{}) error {
+	if len(parameters) == 0 {
+		return nil
+	}
+	plan, err := sd.PlanByID(planID)
+	if err != nil {
+		return err
+	}
+	return ValidatePlanParams(plan, parameters)
 }
 
 // Provision describes the custom resource to create per instance.
@@ -145,5 +162,5 @@ func (sd *ServiceDefinition) PlanByID(planID string) (*Plan, error) {
 			return &sd.Spec.Offering.Plans[i], nil
 		}
 	}
-	return nil, fmt.Errorf("plan %q not found in service %q", planID, sd.Spec.Offering.Name)
+	return nil, fmt.Errorf("%w: plan %q not found in service %q", ErrNotFound, planID, sd.Spec.Offering.Name)
 }

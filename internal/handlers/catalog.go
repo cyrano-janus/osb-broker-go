@@ -28,10 +28,11 @@ func (h *Handlers) definitionServices() []map[string]interface{} {
 			plans = append(plans, plan)
 		}
 		svc := map[string]interface{}{
-			"id":        e.ID,
-			"name":      e.Name,
-			"bindable":  e.Bindable,
-			"plans":     plans,
+			"id":              e.ID,
+			"name":            e.Name,
+			"bindable":        e.Bindable,
+			"plan_updateable": true,
+			"plans":           plans,
 		}
 		if e.Description != "" {
 			svc["description"] = e.Description

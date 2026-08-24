@@ -101,6 +101,21 @@ func (h *Handlers) UpdateServiceInstance(c *gin.Context) {
 		return
 	}
 
+	// Phase 3: definition-based services update via engine (CR re-render).
+	if sd, _ := h.resolveDefinition(req.ServiceID); sd != nil {
+		namespace := "default"
+		if err := ValidatePlanParamsForService(h, req.ServiceID, req.PlanID, req.Parameters); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "BadRequest", "description": err.Error()})
+			return
+		}
+		if _, err := h.engine.Engine.UpdateInstance(c.Request.Context(), req.ServiceID, instanceID, namespace, req.PlanID); err != nil {
+			respondOSBError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, broker.UpdateInstanceResponse{Operation: "update"})
+		return
+	}
+
 	response, err := h.broker.UpdateInstance(c.Request.Context(), instanceID, &req)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{

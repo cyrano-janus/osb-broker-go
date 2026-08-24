@@ -65,7 +65,7 @@ func TestOperatorClient_ApplyCreatesCR(t *testing.T) {
 		t.Fatalf("list CRs: %v", err)
 	}
 	assert.Len(t, u.Items, 1)
-	assert.Equal(t, "inst-abc", u.Items[0].GetName())
+	assert.Equal(t, "osb-inst-abc", u.Items[0].GetName())
 }
 
 func TestOperatorClient_DeleteCRRemovesIt(t *testing.T) {
@@ -77,7 +77,7 @@ func TestOperatorClient_DeleteCRRemovesIt(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, oc.ApplyCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, "default", rendered))
 
-	err = oc.DeleteCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, "default", "inst-del")
+	err = oc.DeleteCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, "default", "osb-inst-del")
 	require.NoError(t, err)
 
 	u := &unstructured.Unstructured{}
@@ -99,11 +99,11 @@ func TestOperatorClient_ReadSecret(t *testing.T) {
 			"host":     []byte("pg-host"),
 		},
 	}
-	secret.Name = "inst-abc-app"
+	secret.Name = "osb-inst-abc-app"
 	secret.Namespace = "default"
 	require.NoError(t, oc.Client.Create(ctx, secret))
 
-	data, err := oc.ReadSecret(ctx, "default", "inst-abc-app")
+	data, err := oc.ReadSecret(ctx, "default", "osb-inst-abc-app")
 	require.NoError(t, err)
 	assert.Equal(t, "pg-user", string(data["username"]))
 	assert.Equal(t, "pg-pass", string(data["password"]))
