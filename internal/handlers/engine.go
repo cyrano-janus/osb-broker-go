@@ -19,7 +19,6 @@ type EngineHolder struct {
 	Engine *definition.Engine
 	Op     *definition.OperatorClient
 }
-
 // NewEngineHolder lädt Definitionen aus dir und baut den Operator-Client.
 // dir == "" ergibt eine Engine ohne Definitionen.
 func NewEngineHolder(dir, brokerNamespace string) (*EngineHolder, error) {

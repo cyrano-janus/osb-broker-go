@@ -1,0 +1,50 @@
+apiVersion: broker.osb.io/v1alpha1
+kind: ServiceDefinition
+metadata:
+  name: cnpg-postgresql
+spec:
+  offering:
+    id: f48a9e21-cnpg-0000-0000-000000000001
+    name: cnpg-postgresql
+    description: "CloudNativePG PostgreSQL clusters"
+    bindable: true
+    tags:
+      - postgresql
+      - database
+      - cnpg
+    plans:
+      - id: plan-small-0000-0000-000000000001
+        name: small
+        description: "Single instance, 1Gi storage"
+        params:
+          storageSize: 1Gi
+          instances: 1
+      - id: plan-large-0000-0000-000000000002
+        name: large
+        description: "HA, 3 instances, 10Gi storage"
+        params:
+          storageSize: 10Gi
+          instances: 3
+
+  provision:
+    apiVersion: postgresql.cnpg.io/v1
+    kind: Cluster
+    template: |
+      apiVersion: postgresql.cnpg.io/v1
+      kind: Cluster
+      metadata:
+        name: {{ .instanceID }}
+        labels:
+          app.kubernetes.io/managed-by: osb-broker-go
+      spec:
+        instances: {{ .plan.instances }}
+        storage:
+          size: {{ .plan.storageSize }}
+
+  readiness:
+    statusJSONPath: 'status.conditions.#(type=="Ready").status'
+    expectedValue: "True"
+    timeoutSeconds: 600
+
+  bind:
+    credentialsFromSecret: "{{ .instanceID }}-app"

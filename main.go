@@ -42,8 +42,17 @@ func main() {
 	// Initialize broker
 	b := broker.New(serviceStore, stateStore)
 
+	// Generic Engine (Phase 2): load ServiceDefinitions and wire them into
+	// the handler layer. DEFINITIONS_DIR empty = definition-based services
+	// disabled.
+	engineHolder, err := handlers.NewEngineHolder(os.Getenv("DEFINITIONS_DIR"), os.Getenv("POD_NAMESPACE"))
+	if err != nil {
+		log.Fatalf("load service definitions: %v", err)
+	}
+
 	// Initialize handlers
 	h := handlers.New(b)
+	h.SetEngine(engineHolder)
 
 	// Basic Auth credentials (Phase 1.2). In Kubernetes these come from a
 	// Secret mounted as env vars. Both empty = auth disabled.
