@@ -1,0 +1,27 @@
+# Phase 2.6: Der Broker darf in ALLEN Namespaces cnpg-Cluster verwalten
+# (Korifi legt pro Space einen Namespace an). Bewusst nur auf die
+# operator-spezifischen Ressourcen beschränkt.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: osb-broker-operator-crds
+rules:
+- apiGroups: ["postgresql.cnpg.io"]
+  resources: ["clusters"]
+  verbs: ["create", "get", "list", "update", "delete"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: osb-broker-operator-crds
+subjects:
+- kind: ServiceAccount
+  name: osb-broker-go
+  namespace: osb
+roleRef:
+  kind: ClusterRole
+  name: osb-broker-operator-crds
+  apiGroup: rbac.authorization.k8s.io

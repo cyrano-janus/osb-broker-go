@@ -12,11 +12,19 @@ import (
 // Handlers contains HTTP handlers for the OSB API
 type Handlers struct {
 	broker *broker.Broker
+	// engine provides definition-based services (Phase 2); nil = disabled.
+	engine *EngineHolder
 	// Basic Auth credentials (Basic Auth user / password). When both are
 	// empty, authentication is disabled (backwards compatibility). In
 	// Kubernetes these values are injected from a Secret via main().
 	authUser string
 	authPass string
+}
+
+// SetEngine wires the Generic Engine (Phase 2). nil disables
+// definition-based services.
+func (h *Handlers) SetEngine(e *EngineHolder) {
+	h.engine = e
 }
 
 // SetBasicAuthCredentials configures the Basic Auth credentials required on
