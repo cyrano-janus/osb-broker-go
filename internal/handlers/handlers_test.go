@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"context"
+
 	"bytes"
 	"encoding/json"
 	"net/http"
@@ -16,7 +18,7 @@ import (
 
 func setupTestRouter() (*gin.Engine, *broker.Broker) {
 	serviceStore := store.NewInMemoryStore()
-	b := broker.New(serviceStore)
+	b := broker.New(serviceStore, nil)
 	h := New(b)
 	router := h.SetupRouter()
 	return router, b
@@ -56,9 +58,9 @@ func TestProvisionServiceInstance(t *testing.T) {
 
 	assert.Equal(t, http.StatusCreated, w.Code)
 
-	// Verify instance was created
-	_, exists := b.instances["instance-1"]
-	assert.True(t, exists)
+	// Verify instance was created via the exported accessor
+	_, err := b.GetInstance(context.Background(), "instance-1")
+	assert.NoError(t, err)
 }
 
 func TestProvisionServiceInstanceMissingServiceID(t *testing.T) {
@@ -97,7 +99,9 @@ func TestProvisionServiceInstanceInvalidService(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusConflict, w.Code)
+	// OSB spec: invalid service_id/plan_id -> 400 Bad Request
+	// (see openservicebrokerapi/servicebroker#678)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
 func TestDeprovisionServiceInstance(t *testing.T) {
@@ -125,9 +129,9 @@ func TestDeprovisionServiceInstance(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	// Verify instance was deleted
-	_, exists := b.instances["instance-1"]
-	assert.False(t, exists)
+	// Verify instance was deleted via the exported accessor
+	_, err := b.GetInstance(context.Background(), "instance-1")
+	assert.Error(t, err)
 }
 
 func TestBindServiceInstance(t *testing.T) {
@@ -170,9 +174,9 @@ func TestBindServiceInstance(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, response.Credentials)
 
-	// Verify binding was created
-	_, exists := b.bindings["binding-1"]
-	assert.True(t, exists)
+	// Verify binding was created via the exported accessor
+	_, err = b.GetBinding(context.Background(), "instance-1", "binding-1")
+	assert.NoError(t, err)
 }
 
 func TestUnbindServiceInstance(t *testing.T) {
@@ -213,9 +217,9 @@ func TestUnbindServiceInstance(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	// Verify binding was deleted
-	_, exists := b.bindings["binding-1"]
-	assert.False(t, exists)
+	// Verify binding was deleted via the exported accessor
+	_, err := b.GetBinding(context.Background(), "instance-1", "binding-1")
+	assert.Error(t, err)
 }
 
 func TestGetServiceInstance(t *testing.T) {
@@ -338,9 +342,9 @@ func TestUpdateServiceInstance(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	// Verify plan was updated
-	instance, exists := b.instances["instance-1"]
-	require.True(t, exists)
+	// Verify plan was updated via the exported accessor
+	instance, err := b.GetInstance(context.Background(), "instance-1")
+	require.NoError(t, err)
 	assert.Equal(t, "plan-premium", instance.PlanID)
 }
 

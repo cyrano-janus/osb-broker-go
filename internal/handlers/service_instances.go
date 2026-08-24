@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"context"
+
 	"net/http"
 
 	"github.com/example/osb-broker/internal/broker"
@@ -42,20 +44,9 @@ func (h *Handlers) ProvisionServiceInstance(c *gin.Context) {
 		// For this reference implementation, we support async but execute synchronously
 	}
 
-	response, err := h.broker.Provision(instanceID, &req)
+	response, err := h.broker.Provision(context.Background(), instanceID, &req)
 	if err != nil {
-		// Check error type for proper status code
-		if err.Error() == "service not found" || err.Error() == "plan not found" {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error":       "BadRequest",
-				"description": err.Error(),
-			})
-			return
-		}
-		c.JSON(http.StatusConflict, gin.H{
-			"error":       "Conflict",
-			"description": err.Error(),
-		})
+		respondOSBError(c, err)
 		return
 	}
 
@@ -74,7 +65,7 @@ func (h *Handlers) DeprovisionServiceInstance(c *gin.Context) {
 		PlanID:    planID,
 	}
 
-	response, err := h.broker.Deprovision(instanceID, req)
+	response, err := h.broker.Deprovision(context.Background(), instanceID, req)
 	if err != nil {
 		c.JSON(http.StatusGone, gin.H{
 			"error":       "Gone",
@@ -99,7 +90,7 @@ func (h *Handlers) UpdateServiceInstance(c *gin.Context) {
 		return
 	}
 
-	response, err := h.broker.UpdateInstance(instanceID, &req)
+	response, err := h.broker.UpdateInstance(c.Request.Context(), instanceID, &req)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error":       "NotFound",
@@ -115,7 +106,7 @@ func (h *Handlers) UpdateServiceInstance(c *gin.Context) {
 func (h *Handlers) GetServiceInstance(c *gin.Context) {
 	instanceID := c.Param("instance_id")
 
-	response, err := h.broker.GetInstance(instanceID)
+	response, err := h.broker.GetInstance(c.Request.Context(), instanceID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error":       "NotFound",

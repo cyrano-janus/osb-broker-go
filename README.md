@@ -1,427 +1,257 @@
 # 🚀 OSB Broker & Checker - Complete Suite
 
-[![Go Version](https://img.shields.io/badge/go-1.21-blue.svg)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/go-1.22-blue.svg)](https://golang.org)
 [![OSB API](https://img.shields.io/badge/OSB%20API-2.17-green.svg)](https://github.com/openservicebrokerapi/servicebroker/blob/v2.17/spec.md)
-[![Tests](https://img.shields.io/badge/tests-56%20total-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-58%20total-brightgreen.svg)]()
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)]()
 
-> **Complete Open Service Broker API 2.17 implementation in Go - Built by Cloud Foundry enthusiasts for Cloud Foundry enthusiasts**
+> **Open Service Broker API 2.17 Referenz-Implementierung in Go —
+> production-hardened (Phase 1) und live gegen Cloud Foundry Korifi verifiziert**
 
 ---
 
-## 💌 A Message from the Author
+## 🎯 Was dieser Broker heute kann
 
-> **Hi, I'm Cyrano Janus** ([cyrano.janus@gmail.com](mailto:cyrano.janus@gmail.com)), and I'm an **absolute Cloud Foundry fanatic**. 🎉
->
-> Cloud Foundry changed my life. It showed me what true developer experience looks like. It made deploying applications **simple**, **scalable**, and **beautiful**.
->
-> But here's the truth: **Cloud Foundry is only as good as its ecosystem.**
->
-> Without brokers, without services, without databases - it's just an empty platform. And that's why I built this.
->
-> **This is my contribution to keep Cloud Foundry alive and thriving.**
+### OSB 2.17 — vollständiger Lebenszyklus
 
----
+| Endpunkt | Verhalten |
+|----------|-----------|
+| `GET /v2/catalog` | Katalog mit Services + Plans |
+| `PUT /v2/service_instances/{id}` | Provision (idempotent; Konflikt bei abweichendem service/plan → 409) |
+| `PATCH /v2/service_instances/{id}` | Update (Plan-Wechsel, Parameter) |
+| `GET /v2/service_instances/{id}` | Instanz abrufen |
+| `DELETE /v2/service_instances/{id}` | Deprovision — **410 Gone** wenn nicht vorhanden, **409** solange Bindings offen sind |
+| `PUT .../service_bindings/{id}` | Bind (idempotent, liefert bestehende Credentials zurück) |
+| `DELETE .../service_bindings/{id}` | Unbind |
+| `GET .../last_operation` | Operations-Status (`succeeded`) |
+| `GET /healthz` | Liveness/Readiness — **ohne Auth** (K8s-Probe-tauglich) |
 
-## 🎯 Why OSB in Go?
+### Phase 1 „Production Basics" (abgeschlossen, 24.08.2026)
 
-### The Reality Check
+#### 1.1 Persistenz ohne externe Datenbank
 
-Cloud Foundry is **incredible**, but it needs **services** to be useful. And here's where most projects fail:
+Instances und Bindings werden über ein `StateStore`-Interface verwaltet.
+Zwei Implementierungen:
 
-❌ **Java/Spring brokers** - Heavy, slow to start, complex
-❌ **Node.js brokers** - Runtime dependencies, version hell
-❌ **Python brokers** - GIL limitations, packaging nightmares
-❌ **Custom implementations** - Months of work, spec violations
+- **`memoryStateStore`** — Default für lokale Runs und Tests
+- **`K8sStateStore`** — persistiert als JSON in der ConfigMap
+  `osb-broker-state`; Kubernetes repliziert und hält sie auf Disk, dadurch
+  überleben Instances/Bindings Pod-Restarts und Rescheduling **ohne SQL,
+  Redis oder einen anderen externen Store**
 
-### The Go Advantage
+Aktivierung: `STORE_BACKEND=k8s` + `POD_NAMESPACE=<namespace>`.
 
-**Go is the perfect language for OSB brokers:**
+Verifiziert im Cluster: Service-Instanz per `cf create-service` angelegt,
+Broker-Pod gelöscht, neuer Pod gestartet — Instanz und Binding danach
+vollständig abrufbar, Service-Key lieferte die Credentials.
 
-✅ **Single Binary** - No dependencies, no runtime, just deploy
-✅ **Lightning Fast** - Sub-millisecond response times
-✅ **Low Memory** - 10-50MB vs 200-500MB for Java
-✅ **Built-in Concurrency** - Handle thousands of requests
-✅ **Easy Testing** - Comprehensive test suites
-✅ **Production-Ready** - Used by Kubernetes, Docker, Prometheus
+Alle Broker-Pfade laufen über den Store: Provision-Idempotenz,
+Binding-Schutz bei Deprovision und Get-/Unbind-Lookups verhalten sich nach
+einem Restart identisch wie vorher (abgedeckt durch
+`restart_consistency_test.go`).
 
-### Real-World Impact
+#### 1.2 Basic Auth
 
-| Metric | Java/Spring | Go |
-|--------|-------------|-----|
-| **Startup Time** | 10-30 seconds | **< 1 second** |
-| **Memory Usage** | 200-500 MB | **10-50 MB** |
-| **Binary Size** | 50-100 MB | **10-20 MB** |
-| **Deployment** | Complex (JVM, deps) | **Simple (single file)** |
-| **Development** | Weeks | **Days** |
+- Alle OSB-Endpoints verlangen HTTP Basic Auth, sobald
+  `BROKER_AUTH_USER` / `BROKER_AUTH_PASSWORD` gesetzt sind (in Kubernetes
+  aus einem Secret injiziert)
+- Fehlende/falsche Credentials → `401` mit `WWW-Authenticate:
+  Basic realm="osb-broker"` (RFC 7617)
+- Vergleich in konstanter Zeit (`crypto/subtle`) gegen Timing-Angriffe
+- `/healthz` ist bewusst ausgenommen — Proben tragen keine Credentials
+- Beide Variablen leer → Auth deaktiviert (Rückwärtskompatibilität), mit
+  lauter Warnung im Log
 
----
+#### 1.3 Structured Logging mit Correlation IDs
 
-## 🌟 Why You Should Care
+- Eine JSON-Zeile pro Request statt gin-Textlog:
 
-### Cloud Foundry Deserves Better
+```json
+{"timestamp":"2026-08-24T14:46:36.893143256Z","level":"info","message":"request","correlation_id":"9c3872b8-601d-1dc1-43bd-152a7f85ec2c","method":"PUT","path":"/v2/service_instances/9ace35ba-...","status":200,"duration_ms":12,"client_ip":"172.18.0.3"}
+```
 
-Cloud Foundry gave us:
-- 🎁 **Developer Experience** - `cf push` changed everything
-- 🎁 **Service Abstraction** - Bind services, not servers
-- 🎁 **Community** - Amazing people, amazing projects
+- `X-Correlation-ID`: eingehender Header wird übernommen, sonst wird eine
+  UUID generiert; immer im Response-Header echo-t
+- `X-OSB-Originating-Identity` wird je Request erfasst und geloggt — Audit-
+  fähig (wer hat was angelegt)
+- Panic-Schutz via `gin.Recovery`
 
-**It's time to give back.**
+#### 1.4 Zentrales OSB-Fehler-Mapping
 
-### The Problem
+Alle Fehler laufen durch eine Schicht (`respondOSBError`), die spec-korrekte
+Statuscodes garantiert:
 
-Most Cloud Foundry installations are **empty shells**:
-- ❌ No databases
-- ❌ No message queues
-- ❌ No caching services
-- ❌ No monitoring
+| Fall | Code |
+|------|------|
+| Unbekannte service_id / plan_id | 400 Bad Request |
+| Instanz existiert mit anderem service/plan | 409 Conflict |
+| Deprovision trotz offener Bindings | 409 Conflict |
+| DELETE auf nicht vorhandener Instanz / Binding | **410 Gone** (OSB-Spec) |
+| Bindings auf unbekannter Instanz | 400 Bad Request |
+| Alles andere | 500 Internal Server Error |
 
-**Why?** Because writing brokers is hard.
+Jede Fehler-Response trägt die Correlation-ID des Requests.
 
-### The Solution
+### Deployment-Artefakte
 
-This project makes it **easy**:
-- ✅ **Reference Implementation** - Copy, customize, deploy
-- ✅ **Automated Testing** - OSB Checker validates compliance
-- ✅ **Documentation** - Everything explained
-- ✅ **Community** - We're in this together
+- **Dockerfile**: Multi-Stage (golang → distroless, nonroot)
+- **Manifeste** (`deploy/k8s/broker.yaml`): Namespace, ServiceAccount, RBAC
+  (least-privilege Role nur auf die State-ConfigMap via `resourceNames`),
+  Deployment mit Liveness/Readiness-Probes auf `/healthz`, ClusterIP-Service
+- **RBAC**: Der Broker darf ausschließlich seine eigene State-ConfigMap
+  lesen/erstellen/updaten — nichts anderes
 
----
+### Verifikationsstand
 
-## 📖 What You Get
-
-### Two Projects, One Goal
-
-#### 1. **OSB Broker** - Reference Implementation
-
-A complete, production-ready OSB API 2.17 broker:
-
-- ✅ **All Endpoints** - 9 endpoints, 100% spec compliant
-- ✅ **Production-Ready** - Built for real-world use
-- ✅ **Fully Tested** - 35 unit tests + 21 integration tests
-- ✅ **Easy to Extend** - Add your services in hours
-
-**Perfect for:**
-- Database services (PostgreSQL, MySQL, MongoDB)
-- Message queues (RabbitMQ, Kafka, Redis)
-- Caching services (Redis, Memcached)
-- Monitoring services (Prometheus, Grafana)
-- Storage services (S3, MinIO)
-- **Your idea here!**
-
-#### 2. **OSB Checker** - Conformance Testing
-
-Automated compliance testing:
-
-- ✅ **21 Tests** - Full OSB API 2.17 coverage
-- ✅ **Instant Feedback** - Know in seconds if you're compliant
-- ✅ **CI/CD Ready** - Perfect for automated pipelines
-- ✅ **Detailed Reports** - Clear pass/fail with error messages
-
-**Perfect for:**
-- Testing your broker implementation
-- Validating third-party brokers
-- CI/CD integration
-- Documentation generation
+- `go vet ./...` sauber, komplette Test-Suite grün (53 Tests, `-count=1`)
+- Live gegen **Cloud Foundry Korifi** auf kind geprüft: Registrierung als
+  Service-Broker, Marketplace-Sichtbarkeit, `cf create-service`,
+  Service-Keys, Pod-Restart-Persistenz
 
 ---
 
-## 💼 Business Value
+## 🚀 Quickstart
 
-### For Platform Teams
-
-**Reduce Development Time by 90%**
-
-Before:
-- 2-3 months to build a broker
-- 1 month testing
-- Ongoing maintenance
-
-After:
-- **1 week** to customize
-- **1 day** testing with OSB Checker
-- **Minimal** maintenance
-
-### For Service Providers
-
-**Get on Cloud Foundry Faster**
-
-- **Pre-built** OSB compliance
-- **Battle-tested** code
-- **Community support**
-- **Regular updates**
-
-### For DevOps
-
-**Easy Deployment**
-
-- **Single binary** - No dependencies
-- **Docker-ready** - Container-friendly
-- **Health checks** - Built-in monitoring
-- **Low resource** - 10-50MB RAM
-
----
-
-## 🏃 Quick Start
-
-### 1. Clone Both Projects
+### Lokal starten (in-memory State)
 
 ```bash
-git clone https://github.com/your-org/osb-broker.git
-git clone https://github.com/your-org/osb-checker.git
+go build -o broker .
+PORT=8080 ./broker
 ```
 
-### 2. Start the Broker
+### In Kubernetes (persistenter State)
 
 ```bash
-cd osb-broker
-go mod tidy
-go run main.go
+# Image bauen und in den Cluster laden
+docker build -t osb-broker-go:v3 -f Dockerfile .
+kind load docker-image osb-broker-go:v3 --name <cluster>
+
+# Auth-Secret anlegen
+kubectl create secret generic osb-broker-auth -n osb \
+  --from-literal=username=broker-user \
+  --from-literal=password=broker-secret
+
+# Deployen (Namespace, SA, RBAC, Deployment, Service)
+kubectl apply -f deploy/k8s/broker.yaml
+kubectl rollout status deployment/osb-broker-go -n osb
 ```
 
-### 3. Run the Checker
+### Bei Cloud Foundry registrieren
 
 ```bash
-cd osb-checker
-go mod tidy
-./osb-checker -f configs/config.yaml -v
+cf create-service-broker go-reference-broker broker-user broker-secret \
+  "http://osb-broker-go.osb.svc.cluster.local"
+
+# Wichtig: http:// explizit angeben — ohne Schema ruft Korifi HTTPS auf
+# Port 443 an und der Catalog-Fetch timet out.
+
+cf enable-service-access example-service -b go-reference-broker
+cf marketplace
 ```
 
-### 4. Profit
+### Lifecycle-Test
 
-```
-========================================
-OSB Checker Test Results (Spec 2.17)
-========================================
-Total Tests: 21
-Passed: 21 ✅
-Failed: 0
-Skipped: 0
-========================================
-
-🎉 All tests passed!
-========================================
+```bash
+cf create-service example-service free my-db
+cf services                                  # create succeeded
+cf create-service-key my-db test-key
+cf service-key my-db test-key                # Credentials im VCAP-Format
+cf delete-service-key -f my-db test-key
+cf delete-service -f my-db
 ```
 
 ---
 
-## 🎮 What You Can Build
+## ⚙️ Konfiguration (Umgebungsvariablen)
 
-### Database Services
+| Variable | Default | Bedeutung |
+|----------|---------|-----------|
+| `PORT` | `8080` | HTTP-Listenport |
+| `STORE_BACKEND` | *(leer = memory)* | `k8s` aktiviert den ConfigMap-StateStore |
+| `POD_NAMESPACE` | — | Pflicht bei `STORE_BACKEND=k8s`; Namespace der State-ConfigMap |
+| `BROKER_AUTH_USER` | — | Basic-Auth-User (mit `BROKER_AUTH_PASSWORD` setzen) |
+| `BROKER_AUTH_PASSWORD` | — | Basic-Auth-Passwort |
+
+---
+
+## 🗺️ Nächste Schritte (Roadmap v2.1)
+
+Die Gesamt-Roadmap lebt im
+[`development-open-service-broker`](https://github.com/cyrano-janus/development-open-service-broker)
+Workspace. Für diesen Broker folgt als nächstes:
+
+### Phase 2 — Generic Engine (Q1 2027, nächster Schritt)
+
+Der Kern der Generik: Statt fest verdrahtetem `example-service` liest der
+Broker deklarative **ServiceDefinitions** (YAML), die beliebige
+Kubernetes-Operatoren beschreiben:
+
+1. **ServiceDefinition-API (2.1)** — CRD/ConfigMap-Format, Validierung beim
+   Laden, Hot-Reload. Definiert Offering, Plans mit Parametern und das
+   Mapping auf eine Custom Resource (apiVersion/kind/template).
+2. **Template-Renderer (2.2)** — Go-Templates mit `.instanceID`,
+   `.plan.*`, `.parameters` rendern das CR-Manifest; striktes Escaping.
+3. **CR-Lifecycle (2.3)** — Provision = CR apply, Deprovision = CR delete,
+   Update = CR patch (echte Plan-Wechsel).
+4. **Readiness-Polling (2.4)** — JSONPath auf den CR-Status speist
+   `last_operation` (`in progress` / `succeeded` / `failed`, inkl. Timeout).
+5. **Binding-Extraktion (2.5)** — Credentials kommen aus dem vom Operator
+   erzeugten Secret (z.B. `<instance>-app` bei CloudNativePG); Re-Bind liest
+   frisch (Rotation-fähig).
+6. **RBAC-Erweiterung (2.6)** — least-privilege Role auf Space-Namespaces
+   ausweiten (CR create/update/delete nur für die gemappten Kinds).
+
+Erster End-to-End: eine CNPG-Definition, sodass
+`cf create-service cnpg-postgresql large mydb` einen echten
+PostgreSQL-Cluster provisioniert und Apps die echten Zugangsdaten via
+`VCAP_SERVICES` erhalten.
+
+### Danach (Ausblick)
+
+- **Phase 3**: Definition-Catalog (CNPG, Redis, MinIO als YAML), JSON-Schema-
+  Validierung pro Plan, Credential-Rotation, optional Instance Sharing
+- **Phase 4**: Helm Chart, CI mit osb-checker als Conformance-Gate,
+  Prometheus-Metriken, OpenAPI-Doku, optional mTLS/OAuth2
+
+Details und Status aller Phasen: [Roadmap v2.1 im Workspace-Repo](https://github.com/cyrano-janus/development-open-service-broker/blob/main/roadmap.md).
+
+---
+
+## 🧪 Entwicklung & Tests
 
 ```bash
-# PostgreSQL Broker
-osb-broker-postgresql
+go vet ./...          # statische Analyse
+go test ./... -count=1  # komplette Suite ohne Cache
 
-# MySQL Broker
-osb-broker-mysql
-
-# MongoDB Broker
-osb-broker-mongodb
-
-# Redis Broker
-osb-broker-redis
+# Einzelbereiche
+go test ./internal/broker/ -run TestK8sStateStore -v     # Persistenz (Fake-APIserver)
+go test ./internal/broker/ -run TestRestart -v           # Restart-Konsistenz
+go test ./internal/handlers/ -run TestBasicAuth -v       # Auth-Middleware
+go test ./internal/handlers/ -run TestErrorMapping -v    # OSB-Fehlercodes
 ```
 
-### Message Queues
-
-```bash
-# RabbitMQ Broker
-osb-broker-rabbitmq
-
-# Kafka Broker
-osb-broker-kafka
-
-# NATS Broker
-osb-broker-nats
-```
-
-### Monitoring
-
-```bash
-# Prometheus Broker
-osb-broker-prometheus
-
-# Grafana Broker
-osb-broker-grafana
-
-# ELK Broker
-osb-broker-elk
-```
-
-### Storage
-
-```bash
-# S3-Compatible Broker
-osb-broker-s3
-
-# MinIO Broker
-osb-broker-minio
-
-# NFS Broker
-osb-broker-nfs
-```
-
-### **Your Idea Here!**
-
-```bash
-# Your custom service
-osb-broker-your-service
-```
+Test-Philosophie: TDD — jeder neue Behavior-Path bekommt zuerst einen
+scheiternden Test. Die Restart-Konsistenz-Tests sind der Vertrag für jeden
+künftigen StateStore (die K8s-Implementierung muss dieselben Tests bestehen).
 
 ---
 
-## 🤝 Call to Action
+## 🤝 Contributing
 
-### Cloud Foundry Needs YOU!
-
-**This is not just a project. This is a movement.**
-
-Cloud Foundry changed the game. It showed us what developer experience should be. But platforms don't survive on good ideas alone - they need **services**.
-
-### What You Can Do
-
-#### 1. **Build a Broker**
-
-Pick a service you love:
-- Database? Build a PostgreSQL broker
-- Message queue? Build a Kafka broker
-- Monitoring? Build a Prometheus broker
-- **Your favorite service? Build a broker for it!**
-
-#### 2. **Contribute**
-
-- Report bugs
-- Suggest improvements
-- Add features
-- Write documentation
-- Help others
-
-#### 3. **Spread the Word**
-
-- Talk about Cloud Foundry
-- Write blog posts
-- Give talks
-- Mentor newcomers
-
-### Why It Matters
-
-**Every broker you build:**
-- ✅ Makes Cloud Foundry more valuable
-- ✅ Attracts more users
-- ✅ Creates more opportunities
-- ✅ Keeps the platform alive
-
-**Every broker you don't build:**
-- ❌ Cloud Foundry becomes less useful
-- ❌ Users look elsewhere
-- ❌ The community shrinks
-- ❌ The platform dies
+Feature aussuchen → Issue eröffnen → implementieren → PR. Jeder PR sollte:
+einen fokussierten Zweck haben, Tests enthalten und `go vet`/`go test`
+grün halten.
 
 ---
 
-## 📚 Resources
+## 📄 Lizenz
 
-### Documentation
-
-- 📖 [OSB Broker README](osb-broker/README.md) - Complete broker documentation
-- 📖 [OSB Checker README](osb-checker/README.md) - Complete checker documentation
-- 📖 [OSB API 2.17 Spec](https://github.com/openservicebrokerapi/servicebroker/blob/v2.17/spec.md) - Official specification
-
-### Tutorials
-
-- 🎓 [Building Your First Broker](TUTORIAL_BROKER.md) - Step-by-step guide
-- 🎓 [Testing with OSB Checker](TUTORIAL_CHECKER.md) - Testing guide
-- 🎓 [Deploying to Cloud Foundry](TUTORIAL_DEPLOY.md) - Deployment guide
-
-### Examples
-
-- 💡 [PostgreSQL Broker Example](examples/postgresql/)
-- 💡 [Redis Broker Example](examples/redis/)
-- 💡 [RabbitMQ Broker Example](examples/rabbitmq/)
-
----
-
-## 🌟 Success Stories
-
-### "We built a PostgreSQL broker in 3 days"
-
-> **Platform Team @ TechCorp**
->
-> "Using the OSB Broker reference, we had a production-ready PostgreSQL broker in 3 days. The OSB Checker caught 2 spec violations before we went live. **Incredible time-saver!**"
-
-### "Our Redis broker serves 10,000+ instances"
-
-> **Service Provider @ CloudServices Inc**
->
-> "The Go implementation is blazing fast. We're serving 10,000+ Redis instances with minimal resources. **Go was the right choice.**"
-
-### "We contribute back every month"
-
-> **Open Source Enthusiast**
->
-> "I built a MongoDB broker, and now I contribute improvements monthly. **It's my way of giving back to Cloud Foundry.**"
-
----
-
-## 🙏 Acknowledgments
-
-### Cloud Foundry Foundation
-
-Thank you for creating the platform that changed everything.
-
-### OSB API Authors
-
-Thank you for the specification that makes interoperability possible.
-
-### The Community
-
-Thank you for keeping Cloud Foundry alive.
-
----
-
-## 📞 Get in Touch
-
-### Contact
-
-- **Email:** [cyrano.janus@gmail.com](mailto:cyrano.janus@gmail.com)
-- **GitHub:** [your-org](https://github.com/your-org)
-- **Slack:** Cloud Foundry Slack (#osbapi channel)
-
-### Let's Build Together
-
-**Have an idea for a broker?**
-**Want to contribute?**
-**Need help getting started?**
-
-**Reach out! Let's make Cloud Foundry great together!**
-
----
-
-## 🎯 Final Words
-
-> **Cloud Foundry is not just a platform. It's a community.**
->
-> **And communities thrive when everyone contributes.**
->
-> **So build that broker. Write that code. Share that knowledge.**
->
-> **Because Cloud Foundry deserves it.**
->
-> **— Cyrano Janus** 💌
+MIT — siehe [LICENSE](LICENSE).
 
 ---
 
 <div align="center">
 
-**Built with ❤️ by Cloud Foundry enthusiasts for Cloud Foundry enthusiasts**
-
-[![Cloud Foundry](https://img.shields.io/badge/Cloud%20Foundry-love-blue.svg)](https://www.cloudfoundry.org/)
-[![OSB API 2.17](https://img.shields.io/badge/OSB%20API-2.17-green.svg)](https://github.com/openservicebrokerapi/servicebroker/blob/v2.17/spec.md)
-[![Go](https://img.shields.io/badge/go-1.21-blue.svg)](https://golang.org)
-
-**Join the movement. Build a broker. Keep Cloud Foundry alive.**
-
-[Get Started](#-quick-start) · [Build a Broker](#-what-you-can-build) · [Contact](#-get-in-touch)
+**Built by a Cloud Foundry enthusiast, for the CF community.** 💙
 
 </div>
