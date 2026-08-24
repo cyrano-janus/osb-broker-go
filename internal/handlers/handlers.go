@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"crypto/subtle"
+	"encoding/base64"
 	"net/http"
 
 	"github.com/example/osb-broker/internal/broker"
@@ -10,6 +12,18 @@ import (
 // Handlers contains HTTP handlers for the OSB API
 type Handlers struct {
 	broker *broker.Broker
+	// Basic Auth credentials (Basic Auth user / password). When both are
+	// empty, authentication is disabled (backwards compatibility). In
+	// Kubernetes these values are injected from a Secret via main().
+	authUser string
+	authPass string
+}
+
+// SetBasicAuthCredentials configures the Basic Auth credentials required on
+// all OSB endpoints. Empty user AND password disable authentication.
+func (h *Handlers) SetBasicAuthCredentials(user, pass string) {
+	h.authUser = user
+	h.authPass = pass
 }
 
 // New creates a new Handlers instance
@@ -18,7 +32,6 @@ func New(b *broker.Broker) *Handlers {
 		broker: b,
 	}
 }
-
 // Healthz handles GET /healthz for Kubernetes liveness/readiness probes
 func (h *Handlers) Healthz(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -32,6 +45,10 @@ func (h *Handlers) SetupRouter() *gin.Engine {
 
 	// Health check (outside API version middleware, no X-Broker-API-Version required)
 	router.GET("/healthz", h.Healthz)
+
+	// Basic Auth for all OSB endpoints (healthz exempt). No-op when no
+	// credentials are configured.
+	router.Use(h.basicAuthMiddleware)
 
 	// Middleware to check API version
 	router.Use(h.apiVersionMiddleware)
@@ -53,6 +70,46 @@ func (h *Handlers) SetupRouter() *gin.Engine {
 	router.GET("/v2/service_instances/:instance_id/service_bindings/:binding_id/last_operation", h.GetLastBindingOperation)
 
 	return router
+}
+
+// basicAuthMiddleware enforces HTTP Basic Auth on all OSB endpoints when
+// credentials are configured. Returns 401 with WWW-Authenticate per RFC 7617.
+func (h *Handlers) basicAuthMiddleware(c *gin.Context) {
+	// Auth disabled when no credentials configured.
+	if h.authUser == "" && h.authPass == "" {
+		c.Next()
+		return
+	}
+
+	header := c.GetHeader("Authorization")
+	const prefix = "Basic "
+	valid := false
+	if len(header) > len(prefix) && header[:len(prefix)] == prefix {
+		payload, err := base64.StdEncoding.DecodeString(header[len(prefix):])
+		if err == nil {
+			userPass := string(payload)
+			for i := 0; i < len(userPass); i++ {
+				if userPass[i] == ':' {
+					user, pass := userPass[:i], userPass[i+1:]
+					// constant-time compare to avoid timing oracles
+					userOK := subtle.ConstantTimeCompare([]byte(user), []byte(h.authUser)) == 1
+					passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(h.authPass)) == 1
+					valid = userOK && passOK
+					break
+				}
+			}
+		}
+	}
+
+	if !valid {
+		c.Header("WWW-Authenticate", `Basic realm="osb-broker"`)
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+			"error":       "Unauthorized",
+			"description": "Invalid or missing Basic Auth credentials",
+		})
+		return
+	}
+	c.Next()
 }
 
 // apiVersionMiddleware checks for required API version header

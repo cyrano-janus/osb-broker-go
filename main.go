@@ -19,6 +19,17 @@ func main() {
 	// Initialize handlers
 	h := handlers.New(b)
 
+	// Basic Auth credentials (Phase 1.2). In Kubernetes these come from a
+	// Secret mounted as env vars. Both empty = auth disabled.
+	authUser := os.Getenv("BROKER_AUTH_USER")
+	authPass := os.Getenv("BROKER_AUTH_PASSWORD")
+	if authUser != "" || authPass != "" {
+		h.SetBasicAuthCredentials(authUser, authPass)
+		log.Printf("Basic Auth enabled for user %q", authUser)
+	} else {
+		log.Printf("WARNING: Basic Auth disabled - set BROKER_AUTH_USER/BROKER_AUTH_PASSWORD for production use")
+	}
+
 	// Setup router
 	router := h.SetupRouter()
 
