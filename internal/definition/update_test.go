@@ -20,14 +20,14 @@ func TestEngine_UpdateInstance_ChangesCRSpec(t *testing.T) {
 		"f48a9e21-cnpg-0000-0000-000000000001", "inst-upd", "default",
 		"plan-small-0000-0000-000000000001", nil))
 
-	cr, err := oc.GetCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, "default", "inst-upd")
+	cr, err := oc.GetCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, "default", "osb-inst-upd")
 	require.NoError(t, err)
 	inst, _, err := unstructured.NestedInt64(cr.Object, "spec", "instances")
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), inst)
 
 	// Operator setzt Ready (realistisch vor dem Update)
-	cr, err = oc.GetCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, "default", "inst-upd")
+	cr, err = oc.GetCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, "default", "osb-inst-upd")
 	require.NoError(t, err)
 	require.NoError(t, unstructured.SetNestedSlice(cr.Object,
 		[]interface{}{map[string]interface{}{"type": "Ready", "status": "True"}},
@@ -40,7 +40,7 @@ func TestEngine_UpdateInstance_ChangesCRSpec(t *testing.T) {
 		"plan-large-0000-0000-000000000002")
 	require.NoError(t, err)
 
-	cr, err = oc.GetCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, "default", "inst-upd")
+	cr, err = oc.GetCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, "default", "osb-inst-upd")
 	require.NoError(t, err)
 	inst, _, err = unstructured.NestedInt64(cr.Object, "spec", "instances")
 	require.NoError(t, err)
@@ -59,7 +59,7 @@ func TestEngine_UpdateInstance_SamePlanIsNoOp(t *testing.T) {
 		"plan-large-0000-0000-000000000002", nil))
 
 	rvOf := func() string {
-		cr, err := oc.GetCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, "default", "inst-same")
+		cr, err := oc.GetCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, "default", "osb-inst-same")
 		require.NoError(t, err)
 		return cr.GetResourceVersion()
 	}

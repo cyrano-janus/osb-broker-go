@@ -11,31 +11,33 @@ import (
 
 // SanitizeInstanceName makes an arbitrary OSB instance_id safe as a
 // Kubernetes object name (DNS label): keeps [a-z0-9-], lowercases the rest,
-// prefixes "osb-" when the name does not start alphanumeric, and hashes
+// always prefixes "osb-" (some operators' webhooks reject bare GUID-style
+// names even when formally valid — e.g. CloudNativePG 1.24), and hashes
 // over-long names to stay <= 63 chars while remaining deterministic.
 func SanitizeInstanceName(instanceID string) string {
 	const maxLen = 63
+	const prefix = "osb-"
 	var b []byte
 	for _, r := range strings.ToLower(instanceID) {
 		switch {
 		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
 			b = append(b, byte(r))
-		case r == '-':
-			b = append(b, '-')
 		default:
 			b = append(b, '-')
 		}
 	}
-	name := string(b)
-	name = strings.Trim(name, "-")
-	if name == "" {
-		name = "instance"
+	name := prefix + strings.Trim(string(b), "-")
+	if name == prefix {
+		name = prefix + "instance"
 	}
 	if len(name) > maxLen {
 		sum := sha256.Sum256([]byte(instanceID))
 		suffix := hex.EncodeToString(sum[:4])
 		cut := name[:maxLen-len(suffix)-1]
 		name = strings.Trim(cut, "-") + "-" + suffix
+		if !strings.HasPrefix(name, prefix) {
+			name = prefix + strings.Trim(name[len(prefix):], "-")
+		}
 	}
 	return name
 }

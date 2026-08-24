@@ -33,7 +33,7 @@ func (e *Engine) updateDefinition(ctx context.Context, sd *ServiceDefinition, in
 	// No-op detection: if the live CR already matches the rendered desired
 	// state (spec + labels), do not touch it — a no-op PATCH still bumps
 	// resourceVersion and wakes up operator reconciles.
-	existing, err := e.op.GetCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, namespace, instanceID)
+	existing, err := e.op.GetCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, namespace, SanitizeInstanceName(instanceID))
 	if err == nil && crMatchesRendered(existing, rendered) {
 		return true, nil
 	}

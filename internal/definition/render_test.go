@@ -9,10 +9,10 @@ func TestSanitizeInstanceName(t *testing.T) {
 	cases := []struct {
 		in, want string
 	}{
-		{"my-db", "my-db"},
-		{"930fca69-63a2-45db-abee-46770af47008", "930fca69-63a2-45db-abee-46770af47008"},
-		{"UPPER_case.id", "upper-case-id"},
-		{"-leading-dash-", "leading-dash"},
+		{"my-db", "osb-my-db"},
+		{"930fca69-63a2-45db-abee-46770af47008", "osb-930fca69-63a2-45db-abee-46770af47008"},
+		{"UPPER_case.id", "osb-upper-case-id"},
+		{"-leading-dash-", "osb-leading-dash"},
 	}
 	for _, c := range cases {
 		got := SanitizeInstanceName(c.in)
@@ -51,7 +51,7 @@ func TestRender_CRManifestWithPlanParams(t *testing.T) {
 	for _, want := range []string{
 		"apiVersion: postgresql.cnpg.io/v1",
 		"kind: Cluster",
-		"name: my-instance-1",
+		"name: osb-my-instance-1",
 		"instances: 3",
 		"size: 10Gi",
 	} {
