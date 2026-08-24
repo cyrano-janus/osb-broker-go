@@ -190,12 +190,66 @@ Persistenz: Instances/Bindings liegen als JSON in ConfigMap
 
 ---
 
-## 🗺️ Nächste Schritte (Roadmap v2.1)
+## 🔌 Unterstützte Kubernetes-Operatoren
 
-- **Phase 3**: Definition-Catalog (Redis, MinIO als YAML), JSON-Schema-
-  Validierung pro Plan, Credential-Rotation, optional Instance Sharing
+Der Broker ist **operator-agnostisch**: Jeder Operator, der die beiden
+Anforderungen unten erfüllt, lässt per reiner YAML-Definition in den
+Marktplace bringen — ohne Broker-Code, ohne neues Deployment.
+
+### Anforderungen an einen Operator
+
+| # | Anforderung | Warum |
+|---|-------------|-------|
+| 1 | **CRD für Service-Instanzen** | Der Broker rendert aus dem Template ein Custom Resource Manifest und applied es (`ApplyCR`). GVK (apiVersion/kind) steht in der Definition. |
+| 2 | **Credentials als Kubernetes-Secret** | Beim Bind liest der Broker ein Secret und liefert dessen Keys als OSB-Credentials. Der Secret-Name wird per Template gerendert, z. B. `{{ .safeName }}-app`. |
+| 3 | **Status-Condition oder Statusfeld** | Für `last_operation` wertet der Broker einen gjson-Pfad ins CR-Statusobjekt aus (z. B. `status.conditions.#(type=="Ready").status` gegen `expectedValue`). Fehlt das Feld → `in progress`. |
+
+Empfehlungen (kein Muss, aber Enterprise-relevant):
+
+| Empfehlung | Grund |
+|-----------|-------|
+| Status-Conditions nach K8s-Konvention (`type=Ready`) | Einheitliche Readiness-Pfade über alle Services |
+| Credentials rotierbar (Operator aktualisiert das Secret) | Rebind liest immer frisch — Rotation ohne Broker-Beteiligung |
+| Namespace-scoped CRs | Korifi mappt Spaces auf Namespaces; Cluster-scoped CRs passen nicht zum Mandantenmodell |
+| Webhook validiert Namensschema | CNPG lehnt z. B. bare GUIDs ab — deshalb setzt der Broker `safeName` mit `osb-`-Präfix (≤ 63 Zeichen, DNS-1123-Label) |
+
+### Mitgelieferte Beispiel-Definitionen (`definitions/`)
+
+| Service | Operator | API-Version / Kind | Plans | Credentials-Secret |
+|---------|----------|--------------------|-------|--------------------|
+| **cnpg-postgresql** ✅ E2E-verifiziert | [CloudNativePG](https://cloudnative-pg.io/) | `postgresql.cnpg.io/v1` / `Cluster` | small (1×, 1Gi), large (3×, 10Gi HA) | `<name>-app` (basic-auth: user/pass/host/…) |
+| **redis-standalone** | [Opstree Redis Operator](https://ot-container-kit.github.io/redis-operator/) | `redis.redis.opstreelabs.in/v1beta2` / `Redis` | dev (128Mi), prod (1Gi + 2 Replicas) | `<name>-redis` (Konvention — siehe Hinweis in der Definition) |
+| **minio-objectstorage** | [MinIO Operator](https://min.io/docs/minio/kubernetes/upstream/) | `minio.min.io/v2` / `Tenant` | small (1 Server, 10Gi), large (4×2 Volumes, 50Gi EC) | `<name>-secret` (accessKey/secretKey) |
+
+### Weitere Operatoren, die nachweislich passen
+
+Diese Operatoren erfüllen alle drei Anforderungen und sind bekannte
+Kandidaten für weitere Definitionen (Beitrag = eine YAML):
+
+| Operator | Service | Kind | Typisches Credentials-Secret |
+|----------|---------|------|------------------------------|
+| Percona (PXC / PostgreSQL / MongoDB) | MySQL, PostgreSQL, MongoDB | `PerconaXtraDBCluster`, `PostgresCluster`, `PerconaServerMongoDB` | `<name>-secrets` etc. |
+| CrunchyData PGO | PostgreSQL | `PostgresCluster` | `<name>-pguser-<user>` |
+| Strimzi | Apache Kafka | `Kafka`, `KafkaTopic` | `<name>-<user>` (KafkaUser) |
+| RabbitMQ Cluster Operator | RabbitMQ | `RabbitmqCluster` | `<name>-default-user` |
+| Redis Operator (Spotahome) | Redis Sentinel | `RedisFailover` | via `<name>`-Secrets |
+| MongoDB Community Operator | MongoDB ReplicaSet | `MongoDBCommunity` | `<name>-admin-<user>`, SCRAM-Keys |
+| InfluxDB Operator | InfluxDB | `InfluxDB` | `<name>-auth` |
+| ClickHouse Operator (Altinity) | ClickHouse | `ClickHouseInstallation` | `<name>-password` etc. |
+| Solr / Kafka (Strimzi-Erweiterung) u. a. | Suchindex, Event Streaming | je nach Operator | je nach Operator |
+
+> **Wichtig:** Die Liste ist nicht abschließend — sie zeigt das Muster.
+> Ob ein konkreter Operator passt, entscheidet allein die Dreier-Prüfung
+> oben (CRD ✓, Secret ✓, Statusfeld ✓). Neue Definition = YAML in
+> `definitions/` ablegen; der Catalog-Guard-Test prüft automatisch.
+
+---
+
+## 🗺️ Nächste Schritte (Roadmap v2.3)
+
 - **Phase 4**: Helm Chart, CI mit osb-checker als Conformance-Gate,
   Prometheus-Metriken, OpenAPI-Doku, optional mTLS/OAuth2
+- **Java-Nachzug**: Phase 1+2 Portierung (Go-Design stabil)
 
 Gesamt-Roadmap inkl. Java-Status:
 [development-open-service-broker/roadmap.md](https://github.com/cyrano-janus/development-open-service-broker/blob/main/roadmap.md)
