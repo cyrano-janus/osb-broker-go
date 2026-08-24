@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 
 	"net/http"
 
@@ -44,7 +43,13 @@ func (h *Handlers) ProvisionServiceInstance(c *gin.Context) {
 		// For this reference implementation, we support async but execute synchronously
 	}
 
-	response, err := h.broker.Provision(context.Background(), instanceID, &req)
+	// Phase 2: definition-based services take precedence.
+	if sd, _ := h.resolveDefinition(req.ServiceID); sd != nil {
+		h.provisionDefinitionWithRequest(c, instanceID, req)
+		return
+	}
+
+	response, err := h.broker.Provision(c.Request.Context(), instanceID, &req)
 	if err != nil {
 		respondOSBError(c, err)
 		return
@@ -60,12 +65,18 @@ func (h *Handlers) DeprovisionServiceInstance(c *gin.Context) {
 	serviceID := c.Query("service_id")
 	planID := c.Query("plan_id")
 
+	// Phase 2: definition-based deprovision removes the CR.
+	if sd, _ := h.resolveDefinition(serviceID); sd != nil {
+		h.deprovisionWithEngine(c, instanceID, serviceID)
+		return
+	}
+
 	req := &broker.DeprovisionRequest{
 		ServiceID: serviceID,
 		PlanID:    planID,
 	}
 
-	response, err := h.broker.Deprovision(context.Background(), instanceID, req)
+	response, err := h.broker.Deprovision(c.Request.Context(), instanceID, req)
 	if err != nil {
 		c.JSON(http.StatusGone, gin.H{
 			"error":       "Gone",
@@ -122,6 +133,27 @@ func (h *Handlers) GetServiceInstance(c *gin.Context) {
 func (h *Handlers) GetLastOperation(c *gin.Context) {
 	instanceID := c.Param("instance_id")
 	operation := c.Query("operation")
+
+	// Phase 2: definition-based services derive state from CR readiness.
+	if serviceID := c.Query("service_id"); serviceID != "" {
+		if sd, _ := h.resolveDefinition(serviceID); sd != nil {
+			namespace := "default"
+			state, err := h.engine.Engine.LastOperation(c.Request.Context(), sd, namespace, instanceID)
+			if err != nil {
+				c.JSON(http.StatusNotFound, gin.H{
+					"error":       "NotFound",
+					"description": err.Error(),
+				})
+				return
+			}
+			c.JSON(http.StatusOK, broker.LastOperationResponse{
+				State:       state,
+				Description: "Readiness evaluated from operator CR status",
+				Operation:   operation,
+			})
+			return
+		}
+	}
 
 	response, err := h.broker.GetLastOperation(instanceID, operation)
 	if err != nil {

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 
 	"net/http"
 
@@ -40,7 +39,13 @@ func (h *Handlers) BindServiceInstance(c *gin.Context) {
 		return
 	}
 
-	response, err := h.broker.Bind(context.Background(), instanceID, bindingID, &req)
+	// Phase 2: definition-based services bind via operator secret.
+	if sd, _ := h.resolveDefinition(req.ServiceID); sd != nil {
+		h.bindDefinition(c, instanceID, bindingID, req)
+		return
+	}
+
+	response, err := h.broker.Bind(c.Request.Context(), instanceID, bindingID, &req)
 	if err != nil {
 		respondOSBError(c, err)
 		return
@@ -62,7 +67,14 @@ func (h *Handlers) UnbindServiceInstance(c *gin.Context) {
 		PlanID:    planID,
 	}
 
-	response, err := h.broker.Unbind(context.Background(), instanceID, bindingID, req)
+	// Phase 2: definition-based services unbind via engine (secret is not
+	// deleted — it belongs to the operator).
+	if sd, _ := h.resolveDefinition(req.ServiceID); sd != nil {
+		c.JSON(http.StatusOK, broker.UnbindResponse{})
+		return
+	}
+
+	response, err := h.broker.Unbind(c.Request.Context(), instanceID, bindingID, req)
 	if err != nil {
 		respondOSBError(c, err)
 		return
