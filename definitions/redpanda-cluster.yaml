@@ -1,0 +1,80 @@
+apiVersion: broker.osb.io/v1alpha1
+kind: ServiceDefinition
+metadata:
+  name: redpanda-cluster
+spec:
+  offering:
+    id: e7f5a8b9-redp-0000-0000-000000000001
+    name: redpanda-cluster
+    description: "Redpanda Kafka-compatible streaming via redpanda-operator"
+    bindable: true
+    tags:
+      - kafka
+      - streaming
+      - redpanda
+    plans:
+      - id: plan-redpanda-dev-0000-0000-000000000001
+        name: dev
+        description: "Single broker, developer mode, 1Gi storage"
+        params:
+          replicas: 1
+          storageSize: 1Gi
+          memory: 1.2Gi
+      - id: plan-redpanda-prod-0000-0000-000000000002
+        name: prod
+        description: "3 brokers, 10Gi storage each"
+        params:
+          replicas: 3
+          storageSize: 10Gi
+          memory: 2Gi
+
+  provision:
+    # Legacy-CRD des Operators (einzelnes CR mit voller Spec). Der neue
+    # cluster.redpanda.com/v1alpha1 "Redpanda"-CR ist ein Helm-Chart-Wrapper
+    # ohne direkte Spec-Felder und passt nicht ins Ein-Manifest-Muster.
+    apiVersion: redpanda.vectorized.io/v1alpha1
+    kind: Cluster
+    template: |
+      apiVersion: redpanda.vectorized.io/v1alpha1
+      kind: Cluster
+      metadata:
+        name: {{ .safeName }}
+        labels:
+          app.kubernetes.io/managed-by: osb-broker-go
+          osb.io/instance-id: {{ .instanceID }}
+      spec:
+        image: "redpandadata/redpanda"
+        version: "v24.2.7"
+        replicas: {{ .plan.replicas }}
+        resources:
+          requests:
+            cpu: 500m
+            memory: {{ .plan.memory }}
+          limits:
+            cpu: "1"
+            memory: {{ .plan.memory }}
+        configuration:
+          rpcServer:
+            port: 33145
+          kafkaApi:
+            - port: 9092
+          adminApi:
+            - port: 9644
+          schemaRegistry:
+            port: 8081
+          pandaproxyApi:
+            - port: 8082
+          developerMode: {{ if eq .plan.replicas 1 }}true{{ else }}false{{ end }}
+        storage:
+          capacity: {{ .plan.storageSize }}
+
+  readiness:
+    statusJSONPath: 'status.conditions.#(type=="Ready").status'
+    expectedValue: "True"
+    timeoutSeconds: 600
+
+  bind:
+    # Der Operator legt kein automatisches Credentials-Secret an (SASL ist
+    # optional); Konvention wie bei Redis/Valkey: Platform-Admin erzeugt das
+    # Secret vor dem ersten Bind. Konvention: <name>-redpanda.
+    credentialsFromSecret: "{{ .safeName }}-redpanda"

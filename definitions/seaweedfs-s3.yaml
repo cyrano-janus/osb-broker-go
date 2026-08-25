@@ -1,0 +1,70 @@
+apiVersion: broker.osb.io/v1alpha1
+kind: ServiceDefinition
+metadata:
+  name: seaweedfs-s3
+spec:
+  offering:
+    id: f6a9b0c1-seaw-0000-0000-000000000001
+    name: seaweedfs-s3
+    description: "SeaweedFS S3-compatible object storage via seaweedfs-operator"
+    bindable: true
+    tags:
+      - s3
+      - objectstorage
+      - seaweedfs
+    plans:
+      - id: plan-seaweed-dev-0000-0000-000000000001
+        name: dev
+        description: "Single master/volume/filer/s3, 2Gi"
+        params:
+          masterReplicas: 1
+          volumeReplicas: 1
+          volumeStorage: 2Gi
+      - id: plan-seaweed-prod-0000-0000-000000000002
+        name: prod
+        description: "3 masters, replicated volumes, 10Gi"
+        params:
+          masterReplicas: 3
+          volumeReplicas: 2
+          volumeStorage: 10Gi
+
+  provision:
+    apiVersion: seaweed.seaweedfs.com/v1
+    kind: Seaweed
+    template: |
+      apiVersion: seaweed.seaweedfs.com/v1
+      kind: Seaweed
+      metadata:
+        name: {{ .safeName }}
+        labels:
+          app.kubernetes.io/managed-by: osb-broker-go
+          osb.io/instance-id: {{ .instanceID }}
+      spec:
+        image: chrislusf/seaweedfs:latest
+        volumeServerDiskCount: 1
+        master:
+          replicas: {{ .plan.masterReplicas }}
+        volume:
+          replicas: {{ .plan.volumeReplicas }}
+          requests:
+            storage: {{ .plan.volumeStorage }}
+        filer:
+          replicas: {{ if eq .plan.masterReplicas 1.0 }}1{{ else }}2{{ end }}
+          config: |
+            [leveldb2]
+            enabled = true
+            dir = "/data/filerldb2"
+        s3:
+          replicas: 1
+
+  readiness:
+    statusJSONPath: 'status.conditions.#(type=="Ready").status'
+    expectedValue: "True"
+    timeoutSeconds: 600
+
+  bind:
+    # Der Operator stellt S3Credentials/S3Identities-CRDs bereit; das
+    # S3-Gateway liest Identities aus einem configSecret (seaweedfs_s3_config.json).
+    # Konvention: Platform-Admin legt vor dem ersten Bind ein Secret mit den
+    # S3-Credentials an. Konvention: <name>-seaweed.
+    credentialsFromSecret: "{{ .safeName }}-seaweed"

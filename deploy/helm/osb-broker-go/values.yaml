@@ -46,6 +46,18 @@ rbac:
     - group: postgresql.cnpg.io
       resources: [clusters]
       verbs: [create, get, list, update, delete]
+    - group: valkey.io
+      resources: [valkeyclusters]
+      verbs: [create, get, list, update, delete]
+    - group: rabbitmq.com
+      resources: [rabbitmqclusters]
+      verbs: [create, get, list, update, delete]
+    - group: redpanda.vectorized.io
+      resources: [clusters]
+      verbs: [create, get, list, update, delete]
+    - group: seaweed.seaweedfs.com
+      resources: [seaweeds]
+      verbs: [create, get, list, update, delete]
   secretsAcrossNamespaces: true   # ClusterRole für Secret-Reads (Bind)
 
 resources:

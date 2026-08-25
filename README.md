@@ -248,13 +248,74 @@ Kandidaten für weitere Definitionen (Beitrag = eine YAML):
 ## 🗺️ Nächste Schritte (Roadmap v2.3)
 
 - **Phase 4**: Helm Chart, CI mit osb-checker als Conformance-Gate,
-  Prometheus-Metriken, OpenAPI-Doku, optional mTLS/OAuth2
+  Prometheus-Metriken, optional mTLS/OAuth2
+  - ✅ OpenAPI-Doku: `GET /openapi.yaml` (volle OSB-API-Spec) und
+    `GET /schemas/service-definition.schema.json` — unauthentifiziert,
+    zur Compile-Zeit ins Binary eingebettet
 - **Java-Nachzug**: Phase 1+2 Portierung (Go-Design stabil)
+- **Engine: Multi-Doc-Templates** (4.5): `provision.template` auf mehrere
+  durch `---` getrennte Manifeste erweitern. Hintergrund: die Engine legt
+  aktuell genau eine Ressource pro Instanz an (`yaml.Unmarshal` in
+  `internal/definition/operator.go`). Mehrere Dienste scheitern daran:
+    - Kafka via Strimzi braucht `KafkaNodePool` + `Kafka` (2 CRs)
+    - RocketMQ braucht `NameService` + `Broker` (mehrere CRDs)
+    - Dgraph braucht Zero + Alpha (2 StatefulSets)
+  Umbauumfang: Rendering am `\n---` splitten und in Reihenfolge anwenden,
+  Delete über alle Objekte (OwnerReferences/Labels), konfigurierbares
+  Readiness-/Bind-Ziel je Dokument, Update-PATCH-Ressource definieren,
+  Rollback-Semantik bei Teilfehler, Conformance-Gate (L2) erweitern.
+  Nutzen: schaltet Strimzi-Kafka, RocketMQ und Dgraph als Service-Angebote
+  frei; Alternative bis dahin für Kafka = ältere Strimzi-Version pinnen
+  (einzelnes `Kafka`-CR ohne NodePools).
+  Dienst-Bewertung vom 25.08.2026 (Prüfung gegen Dreier-Muster
+  CRD/Secret/Status): geeignet = Valkey (Definition liegt in
+  `definitions/valkey-cluster.yaml`, Deployment ausstehend), RabbitMQ
+  (cluster-operator, Default-User-Secret via `status.binding`), Redpanda
+  (offizieller Operator); bedingt = NATS (Operator archiviert — Variante
+  plain StatefulSet mit `status.readyReplicas` + Konventions-Secret);
+  verworfen = NiFi (ZooKeeper-Pflicht), Supabase, Yugabyte (legacy bzw.
+  kommerzieller YBA-Stack).
+- **S3-Nachfolger für MinIO**: MinIO Community ist EOL (minio-operator
+  deprecated). Neuer Standard: **SeaweedFS** via seaweedfs/seaweedfs-operator
+  (`seaweed.seaweedfs.com/v1 Seaweed` — ein CR mit master/volume/filer/s3,
+  Ready-Condition, S3Credentials-CRDs). Definition: `definitions/seaweedfs-s3.yaml`.
+  MinIO-Definition als DEPRECATED markiert (läuft weiter, kein Neuausbau).
+  Alternative geprüft und verworfen: Garage (deuxfleurs-org) — nur
+  Discovery-CRD ohne Status/Automatik, StatefulSet-Handarbeit nötig;
+  offen bleibt die Credentials-Automatisierung beim Bind bei SeaweedFS
+  (derzeit Konventions-Secret; mittelfristig Bind via S3Identities-CRD).
+- **Observability-Abhängigkeit für die Metriken**: Im kind-Cluster läuft
+  aktuell kein Prometheus (nur metrics-server für kubectl top) — der
+  Broker-/Operator-Metriken-Punkt aus Phase 4 braucht daher zuerst einen
+  Sammelstack. Wachstumspfad:
+    1. Jetzt (Entwicklung): kube-prometheus-stack via Helm in
+       Namespace `monitoring` (Prometheus + Grafana + Alertmanager,
+       optional Loki single-binary). Broker exponiert `/metrics`
+       im Prometheus-Format (promhttp) — Request-Latenzen, Provision-Dauer,
+       aktive Instanzen, Fehlerquoten; Scrape via ServiceMonitor.
+    2. Später (Produktion): zentraler LGTM-Stack (Loki, Grafana, Tempo,
+       Mimir als langlebiger Metrik-Speicher) für Multi-Cluster/Flotten.
+       Broker-seitig ändert sich nichts: `/metrics` bleibt Prometheus-
+       Format; strukturiertes Logging (JSON) und ggf. OpenTelemetry-Hooks
+       früh vorbereiten, damit Logs/Traces später ohne Code-Umbau anbandeln.
 
 Gesamt-Roadmap inkl. Java-Status:
 [development-open-service-broker/roadmap.md](https://github.com/cyrano-janus/development-open-service-broker/blob/main/roadmap.md)
 
 ---
+
+## 📖 API-Dokumentation
+
+Der Broker dient seine eigene API-Doku aus (unauthentifiziert):
+
+```bash
+curl http://localhost:8080/openapi.yaml                              # OpenAPI 3.0.3 Spec
+curl http://localhost:8080/schemas/service-definition.schema.json    # JSON-Schema
+```
+
+Die Spec in Swagger-UI/Redoc laden oder mit `oapi-codegen`-Clients
+konsumieren. Die ServiceDefinition-YAMLs lassen sich offline gegen das
+JSON-Schema validieren (`definitions/*` im Repo sind die Referenz).
 
 ## 🧪 Entwicklung & Tests
 

@@ -1,0 +1,655 @@
+openapi: 3.0.3
+info:
+  title: osb-broker-go API
+  description: 'Generic OSB 2.17 service broker for Kubernetes operators.
+
+
+    Services are described declaratively as **ServiceDefinition** YAML
+
+    documents (see `schemas/service-definition.schema.json`); the broker
+
+    renders operator custom resources from them and evaluates readiness
+
+    for `last_operation`.
+
+
+    **Authentication:** HTTP Basic Auth on all `/v2/*` endpoints.
+
+    `GET /healthz` is unauthenticated (Kubernetes probes).
+
+
+    **API Version:** every request must send `X-Broker-API-Version: 2.17`.
+
+    '
+  version: 1.0.0
+  contact:
+    name: cyrano-janus
+    url: https://github.com/cyrano-janus/osb-broker-go
+servers:
+- url: http://localhost:8080
+  description: Local broker
+- url: http://osb-broker-go.osb.svc.cluster.local
+  description: In-cluster service (Korifi/kind default)
+tags:
+- name: Catalog
+- name: Service Instances
+- name: Service Bindings
+- name: Ops
+security:
+- basicAuth: []
+paths:
+  /healthz:
+    get:
+      tags:
+      - Ops
+      summary: Liveness/readiness probe
+      description: Unauthenticated; used by Kubernetes probes. Always returns 200 while the process serves.
+      security: []
+      responses:
+        '200':
+          description: Broker alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+  /v2/catalog:
+    get:
+      tags:
+      - Catalog
+      summary: Get the service catalog
+      description: 'Merges the static in-memory catalog with all loaded
+
+        ServiceDefinition documents. Definition-based services advertise
+
+        `plan_updateable: true`.
+
+        '
+      responses:
+        '200':
+          description: Catalog
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Catalog'
+        '500':
+          $ref: '#/components/responses/BrokerError'
+  /v2/service_instances/{instance_id}:
+    put:
+      tags:
+      - Service Instances
+      summary: Provision a service instance
+      parameters:
+      - $ref: '#/components/parameters/InstanceID'
+      - $ref: '#/components/parameters/AcceptsIncomplete'
+      - $ref: '#/components/parameters/APIVersion'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProvisionRequest'
+      responses:
+        '201':
+          description: Instance created (synchronous)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProvisionResponse'
+        '200':
+          description: Accepted (asynchronous), `operation` set
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProvisionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          description: accepts_incomplete not honored by broker
+        '500':
+          $ref: '#/components/responses/BrokerError'
+    patch:
+      tags:
+      - Service Instances
+      summary: Update a service instance (plan change)
+      description: 'Definition-based services re-render the provision template with the
+
+        new plan''s params and apply the CR. If the rendered desired state
+
+        equals the live CR, the apply is skipped entirely (no-op, no
+
+        resourceVersion bump).
+
+        '
+      parameters:
+      - $ref: '#/components/parameters/InstanceID'
+      - $ref: '#/components/parameters/AcceptsIncomplete'
+      - $ref: '#/components/parameters/APIVersion'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateInstanceRequest'
+      responses:
+        '200':
+          description: Update applied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateInstanceResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/BrokerError'
+    delete:
+      tags:
+      - Service Instances
+      summary: Deprovision a service instance
+      description: 'Definition-based services: deletes the operator CR. Returns
+
+        **410 Gone** when the instance does not exist (OSB spec) and
+
+        **409 Conflict** when bindings still exist.
+
+        '
+      parameters:
+      - $ref: '#/components/parameters/InstanceID'
+      - name: service_id
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: plan_id
+        in: query
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/AcceptsIncomplete'
+      - $ref: '#/components/parameters/APIVersion'
+      responses:
+        '200':
+          description: Deprovisioned
+          content:
+            application/json:
+              schema:
+                type: object
+        '410':
+          description: Gone — instance does not exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    get:
+      tags:
+      - Service Instances
+      summary: Fetch a service instance
+      description: 'Returns the stored instance (legacy in-memory or definition-based).
+
+        Unknown instance → 404.'
+      parameters:
+      - $ref: '#/components/parameters/InstanceID'
+      responses:
+        '200':
+          description: Instance exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetInstanceResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v2/service_instances/{instance_id}/last_operation:
+    get:
+      tags:
+      - Service Instances
+      summary: Poll the last operation
+      description: 'Definition-based services evaluate the CR''s readiness condition
+
+        (`statusJSONPath` vs. `expectedValue`) → `in progress` or
+
+        `succeeded`. Unknown instance → 404.
+
+        '
+      parameters:
+      - $ref: '#/components/parameters/InstanceID'
+      - name: service_id
+        in: query
+        schema:
+          type: string
+      - name: operation
+        in: query
+        description: Operation id returned by an async provision/update
+        schema:
+          type: string
+      - $ref: '#/components/parameters/APIVersion'
+      responses:
+        '200':
+          description: Current state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LastOperationResponse'
+        '410':
+          description: Gone — instance does not exist
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v2/service_instances/{instance_id}/service_bindings/{binding_id}:
+    put:
+      tags:
+      - Service Bindings
+      summary: Create a binding
+      description: 'Definition-based services read the credentials secret named by the
+
+        definition''s `credentialsFromSecret` template (rendered with the
+
+        sanitized instance name). Every bind re-reads the secret — rebinding
+
+        after a rotation yields fresh credentials (no caching).
+
+        '
+      parameters:
+      - $ref: '#/components/parameters/InstanceID'
+      - $ref: '#/components/parameters/BindingID'
+      - $ref: '#/components/parameters/AcceptsIncomplete'
+      - $ref: '#/components/parameters/APIVersion'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BindRequest'
+      responses:
+        '201':
+          description: Binding created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BindResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags:
+      - Service Bindings
+      summary: Delete a binding
+      description: 'Definition-based services return 200 immediately — the credentials
+
+        secret belongs to the operator and is not deleted by the broker.
+
+        Unknown binding (legacy services) → 410 Gone.
+
+        '
+      parameters:
+      - $ref: '#/components/parameters/InstanceID'
+      - $ref: '#/components/parameters/BindingID'
+      - name: service_id
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: plan_id
+        in: query
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/APIVersion'
+      responses:
+        '200':
+          description: Unbound
+          content:
+            application/json:
+              schema:
+                type: object
+        '410':
+          description: Gone — binding does not exist
+    get:
+      tags:
+      - Service Bindings
+      summary: Fetch a service binding
+      description: Returns the binding if it exists. Unknown binding → 404.
+      parameters:
+      - $ref: '#/components/parameters/InstanceID'
+      - $ref: '#/components/parameters/BindingID'
+      responses:
+        '200':
+          description: Binding exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetBindingResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v2/service_instances/{instance_id}/service_bindings/{binding_id}/last_operation:
+    get:
+      tags:
+      - Service Bindings
+      summary: Poll the last binding operation
+      description: 'Mirrors the instance polling endpoint for bindings.
+
+        Currently returns the broker''s generic state.'
+      parameters:
+      - $ref: '#/components/parameters/InstanceID'
+      - $ref: '#/components/parameters/BindingID'
+      - name: service_id
+        in: query
+        schema:
+          type: string
+      - name: plan_id
+        in: query
+        schema:
+          type: string
+      - name: operation
+        in: query
+        description: Operation id returned by an async bind
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Operation state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LastOperationResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '410':
+          $ref: '#/components/responses/Gone'
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+  parameters:
+    InstanceID:
+      name: instance_id
+      in: path
+      required: true
+      schema:
+        type: string
+      example: 930fca69-63a2-45db-abee-46770af47008
+    BindingID:
+      name: binding_id
+      in: path
+      required: true
+      schema:
+        type: string
+      example: 0f8a1b2c-0000-0000-0000-000000000001
+    AcceptsIncomplete:
+      name: accepts_incomplete
+      in: query
+      schema:
+        type: boolean
+        default: false
+      description: Platform supports async operations (this broker executes synchronously but honors the
+        header semantics)
+    APIVersion:
+      name: X-Broker-API-Version
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: ^2\.\d+$
+      example: '2.17'
+  responses:
+    BadRequest:
+      description: Malformed request or unknown service/plan/parameter
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Instance exists with different attributes, or bindings still present
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource unknown to this broker
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    BrokerError:
+      description: Internal broker/operator error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Gone:
+      description: Resource is gone (already deprovisioned)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+      - error
+      - description
+      properties:
+        error:
+          type: string
+          example: BadRequest
+        description:
+          type: string
+          example: parameter "foo" is not allowed in plan "small"
+    Context:
+      type: object
+      description: Platform context (CF platform puts space/org GUIDs here). The broker maps space_guid
+        to the target Kubernetes namespace.
+      properties:
+        platform:
+          type: string
+          example: cloudfoundry
+        organization_guid:
+          type: string
+          format: uuid
+        space_guid:
+          type: string
+          description: Becomes the namespace where operator CRs are created
+        cluster_id:
+          type: string
+        namespace:
+          type: string
+    ProvisionRequest:
+      type: object
+      required:
+      - service_id
+      - plan_id
+      - context
+      properties:
+        service_id:
+          type: string
+        plan_id:
+          type: string
+        context:
+          $ref: '#/components/schemas/Context'
+        parameters:
+          type: object
+          additionalProperties: true
+          description: 'User-supplied parameters. Every key must be listed in the
+
+            plan''s `allowedParameters` whitelist, otherwise 400.
+
+            '
+        accepts_incomplete:
+          type: boolean
+    ProvisionResponse:
+      type: object
+      properties:
+        dashboard_url:
+          type: string
+          format: uri
+        operation:
+          type: string
+    UpdateInstanceRequest:
+      type: object
+      required:
+      - service_id
+      - plan_id
+      properties:
+        service_id:
+          type: string
+        plan_id:
+          type: string
+          description: New plan. Same as current plan → no-op (CR untouched).
+        context:
+          $ref: '#/components/schemas/Context'
+        parameters:
+          type: object
+          additionalProperties: true
+        previous_values:
+          type: object
+          properties:
+            service_id:
+              type: string
+            plan_id:
+              type: string
+        accepts_incomplete:
+          type: boolean
+    UpdateInstanceResponse:
+      type: object
+      properties:
+        operation:
+          type: string
+    LastOperationResponse:
+      type: object
+      required:
+      - state
+      properties:
+        state:
+          type: string
+          enum:
+          - in progress
+          - succeeded
+          - failed
+        description:
+          type: string
+        operation:
+          type: string
+    BindRequest:
+      type: object
+      required:
+      - service_id
+      - plan_id
+      properties:
+        service_id:
+          type: string
+        plan_id:
+          type: string
+        app_guid:
+          type: string
+        bind_resource:
+          type: object
+          properties:
+            app_guid:
+              type: string
+            route:
+              type: string
+        context:
+          $ref: '#/components/schemas/Context'
+        parameters:
+          type: object
+          additionalProperties: true
+    BindResponse:
+      type: object
+      required:
+      - credentials
+      properties:
+        credentials:
+          type: object
+          additionalProperties:
+            type: string
+          description: Keys depend on the operator's secret (e.g. username/password/host/port/database
+            for CNPG)
+        syslog_drain_url:
+          type: string
+          format: uri
+        route_service_url:
+          type: string
+          format: uri
+    Catalog:
+      type: object
+      required:
+      - services
+      properties:
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/Service'
+    Service:
+      type: object
+      required:
+      - id
+      - name
+      - description
+      - bindable
+      - plans
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        bindable:
+          type: boolean
+        tags:
+          type: array
+          items:
+            type: string
+        requires:
+          type: array
+          items:
+            type: string
+        plan_updateable:
+          type: boolean
+          description: Always true for definition-based services
+        plans:
+          type: array
+          items:
+            $ref: '#/components/schemas/Plan'
+    Plan:
+      type: object
+      required:
+      - id
+      - name
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        free:
+          type: boolean
+    GetInstanceResponse:
+      type: object
+      properties:
+        service_id:
+          type: string
+        plan_id:
+          type: string
+        dashboard_url:
+          type: string
+        parameters:
+          type: object
+          additionalProperties: true
+    GetBindingResponse:
+      type: object
+      properties:
+        credentials:
+          type: object
+          additionalProperties:
+            type: string
