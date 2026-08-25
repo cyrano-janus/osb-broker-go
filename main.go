@@ -45,7 +45,7 @@ func main() {
 	// Generic Engine (Phase 2): load ServiceDefinitions and wire them into
 	// the handler layer. DEFINITIONS_DIR empty = definition-based services
 	// disabled.
-	engineHolder, err := handlers.NewEngineHolder(os.Getenv("DEFINITIONS_DIR"), os.Getenv("POD_NAMESPACE"))
+	engineHolder, err := handlers.NewEngineHolder(os.Getenv("DEFINITIONS_DIR"), os.Getenv("POD_NAMESPACE"), stateStore)
 	if err != nil {
 		log.Fatalf("load service definitions: %v", err)
 	}

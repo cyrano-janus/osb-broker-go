@@ -21,7 +21,7 @@ type EngineHolder struct {
 }
 // NewEngineHolder lädt Definitionen aus dir und baut den Operator-Client.
 // dir == "" ergibt eine Engine ohne Definitionen.
-func NewEngineHolder(dir, brokerNamespace string) (*EngineHolder, error) {
+func NewEngineHolder(dir, brokerNamespace string, stateStore broker.StateStore) (*EngineHolder, error) {
 	defs, err := definition.LoadFromDir(dir)
 	if err != nil {
 		return nil, err
@@ -41,6 +41,9 @@ func NewEngineHolder(dir, brokerNamespace string) (*EngineHolder, error) {
 	}
 	op := broker.NewOperatorClient(k8sClient)
 	engine := definition.NewEngine(op, defs...)
+	if stateStore != nil {
+		engine.SetInstanceRegistry(&stateStoreRegistry{store: stateStore})
+	}
 	log.Printf("Loaded %d service definition(s) from %q", len(defs), dir)
 	return &EngineHolder{Engine: engine, Op: op}, nil
 }
