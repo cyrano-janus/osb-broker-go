@@ -114,11 +114,22 @@ jobs:
           PF_PID=$!
           sleep 3
           curl -s -o /dev/null -w "healthz: %{http_code}\n" http://localhost:18080/healthz
+          set +e
           /tmp/osb-checker --url http://localhost:18080 --user chk --pass chkpass \
-            --id-prefix pr-${{ github.event.number }}
-          RC=$?
+            --id-prefix pr-${{ github.event.number }} | tee /tmp/checker.log
+          RC=\${PIPESTATUS[0]}
+          set -e
           kill $PF_PID 2>/dev/null || true
+          echo "$checker_out" > /dev/null || true
+          cat /tmp/checker.log >> "$GITHUB_STEP_SUMMARY"
           exit $RC
+
+      - name: Upload checker log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checker-log
+          path: /tmp/checker.log
 
   release:
     name: L3 — Release (tags only)
