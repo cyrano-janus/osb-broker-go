@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"context"
+	"errors"
 	"net/http"
 
 	"github.com/example/osb-broker/internal/broker"
@@ -57,11 +59,33 @@ func (h *Handlers) deprovisionWithEngine(c *gin.Context, instanceID, serviceID s
 		return
 	}
 	namespace := targetNamespaceFromQuery(c)
+
+	// OSB 2.17: deleting a non-existent instance is 410 Gone. The CR delete
+	// alone would succeed idempotently — so check existence first: the
+	// instance must be known to the broker's state store.
+	if !h.instanceKnown(instanceID) {
+		c.JSON(http.StatusGone, gin.H{
+			"error":       "Gone",
+			"description": "instance not found",
+		})
+		return
+	}
+
 	if err := h.engine.Engine.DeprovisionInstance(c.Request.Context(), sd, namespace, instanceID); err != nil {
+		if errors.Is(err, definition.ErrNotFound) {
+			c.JSON(http.StatusGone, gin.H{"error": "Gone", "description": "instance not found"})
+			return
+		}
 		respondOSBError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, broker.DeprovisionResponse{})
+}
+
+// instanceKnown reports whether the broker's state store knows the instance.
+func (h *Handlers) instanceKnown(instanceID string) bool {
+	_, err := h.broker.GetInstance(context.Background(), instanceID)
+	return err == nil
 }
 
 // ValidatePlanParamsForService resolves the plan and validates user-supplied
