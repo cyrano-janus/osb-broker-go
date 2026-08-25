@@ -84,7 +84,7 @@ jobs:
           helm repo update
           helm upgrade --install cnpg cnpg/cloudnative-pg \
             --namespace cnpg-system --create-namespace \
-            --set crds.create=false
+            --skip-crds
           kubectl rollout status deployment/cnpg-controller-manager -n cnpg-system --timeout=240s
 
       - name: Deploy broker under test (PR image)
