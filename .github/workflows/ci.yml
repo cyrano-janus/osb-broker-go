@@ -23,16 +23,12 @@ jobs:
 
       - name: vet
         run: |
-          go version | tee /tmp/step.log
-          go env GOTOOLCHAIN GOPROXY | tee -a /tmp/step.log
-          go vet ./... 2>&1 | tee -a /tmp/step.log
-          exit \${PIPESTATUS[0]}
-      - name: upload vet output
+          set -o pipefail
+          go version
+          go vet ./... 2>&1 | tee /tmp/vet.log
+      - name: publish vet output to job summary
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: vet-output
-          path: /tmp/step.log
+        run: cat /tmp/vet.log >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
 
       - name: test
         run: go test ./... -count=1 -race
