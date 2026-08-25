@@ -225,6 +225,7 @@ func lifecycle(c *client, serviceID, planID string) {
 		},
 	})
 	if status != 201 {
+		fmt.Printf("::error::PROVISION FULL RESPONSE (status %d): %s\n", status, string(body))
 		fail("lifecycle-provision", "provision -> expected 201, got %d: %s", status, truncate(body))
 		return
 	}
