@@ -23,9 +23,16 @@ jobs:
 
       - name: vet
         run: |
-          go version
-          go env GOTOOLCHAIN GOPROXY
-          go vet ./...
+          go version | tee /tmp/step.log
+          go env GOTOOLCHAIN GOPROXY | tee -a /tmp/step.log
+          go vet ./... 2>&1 | tee -a /tmp/step.log
+          exit \${PIPESTATUS[0]}
+      - name: upload vet output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vet-output
+          path: /tmp/step.log
 
       - name: test
         run: go test ./... -count=1 -race
