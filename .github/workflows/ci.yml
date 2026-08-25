@@ -68,7 +68,14 @@ jobs:
 
       - name: Add CNPG CRDs (idempotent)
         run: |
-          kubectl apply --server-side --force-conflicts --field-manager=cnpg-crds             -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.24/releases/cnpg-1.24.1.yaml
+          kubectl apply --server-side --force-conflicts --field-manager=cnpg-crds \
+            -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.24/releases/cnpg-1.24.1.yaml
+          for i in $(seq 1 30); do
+            N=$(kubectl get crd 2>/dev/null | grep -c cnpg || true)
+            [ "$N" -ge 6 ] && break
+            sleep 2
+          done
+          echo "CNPG CRDs established: $N"
 
       - name: Install CloudNativePG operator (Helm)
         run: |
