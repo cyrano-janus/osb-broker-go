@@ -46,6 +46,9 @@ rbac:
     - group: postgresql.cnpg.io
       resources: [clusters]
       verbs: [create, get, list, update, delete]
+    - group: hyperspike.io
+      resources: [valkeys]
+      verbs: [create, get, list, update, delete]
     - group: valkey.io
       resources: [valkeyclusters]
       verbs: [create, get, list, update, delete]

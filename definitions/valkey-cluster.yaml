@@ -2,6 +2,8 @@ apiVersion: broker.osb.io/v1alpha1
 kind: ServiceDefinition
 metadata:
   name: valkey-cluster
+  annotations:
+    broker.osb.io/status: experimental-operator-incompatible
 spec:
   offering:
     id: c8d4e5f6-valk-0000-0000-000000000001
@@ -25,26 +27,24 @@ spec:
           memory: 512Mi
 
   provision:
-    apiVersion: valkey.io/v1alpha1
-    kind: ValkeyCluster
+    apiVersion: hyperspike.io/v1
+    kind: Valkey
     template: |
-      apiVersion: valkey.io/v1alpha1
-      kind: ValkeyCluster
+      apiVersion: hyperspike.io/v1
+      kind: Valkey
       metadata:
         name: {{ .safeName }}
         labels:
           app.kubernetes.io/managed-by: osb-broker-go
           osb.io/instance-id: {{ .instanceID }}
       spec:
-        shards: {{ .plan.shards }}
+        image: docker.io/valkey/valkey:8.1-alpine
+        nodes: {{ .plan.shards }}
         replicas: {{ .plan.replicas }}
-        resources:
-          requests:
-            memory: {{ .plan.memory }}
-            cpu: 100m
-          limits:
-            memory: {{ .plan.memory }}
-            cpu: 500m
+        storage:
+          resources:
+            requests:
+              storage: {{ .plan.memory }}
 
   readiness:
     statusJSONPath: 'status.conditions.#(type=="Ready").status'

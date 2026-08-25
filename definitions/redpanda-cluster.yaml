@@ -2,6 +2,8 @@ apiVersion: broker.osb.io/v1alpha1
 kind: ServiceDefinition
 metadata:
   name: redpanda-cluster
+  annotations:
+    broker.osb.io/status: blocked-on-multi-doc-templates
 spec:
   offering:
     id: e7f5a8b9-redp-0000-0000-000000000001
