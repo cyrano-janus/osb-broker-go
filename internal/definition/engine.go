@@ -15,6 +15,29 @@ type Engine struct {
 	op           *OperatorClient
 	definitions  []*ServiceDefinition
 	byServiceID  map[string]*ServiceDefinition
+	// InstanceRegistry lets the engine record provisioned/deprovisioned
+	// instances in the broker's persistent state (decoupled via interface).
+	reg InstanceRegistry
+}
+
+// InstanceRegistry is the subset of the broker's StateStore the engine needs
+// to keep its bookkeeping consistent with CR lifecycle.
+type InstanceRegistry interface {
+	PutInstance(ctx context.Context, inst *InstanceRecord) error
+	DeleteInstance(ctx context.Context, instanceID string) error
+}
+
+// InstanceRecord is a minimal instance record persisted by the registry.
+type InstanceRecord struct {
+	ID        string `json:"id"`
+	ServiceID string `json:"serviceId"`
+	PlanID    string `json:"planId"`
+}
+
+// SetInstanceRegistry attaches an instance registry (broker state store
+// adapter). Optional — without it the engine does no bookkeeping.
+func (e *Engine) SetInstanceRegistry(reg InstanceRegistry) {
+	e.reg = reg
 }
 
 // NewEngine wires definitions with the operator client (nil client is only
@@ -95,13 +118,34 @@ func (e *Engine) provisionDefinition(ctx context.Context, sd *ServiceDefinition,
 	if err != nil {
 		return err
 	}
-	return e.op.ApplyCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, namespace, rendered)
+	if err := e.op.ApplyCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, namespace, rendered); err != nil {
+		return err
+	}
+	// Record the instance so deprovision/bind existence checks work.
+	if e.reg != nil {
+		if err := e.reg.PutInstance(ctx, &InstanceRecord{
+			ID:        instanceID,
+			ServiceID: sd.Spec.Offering.ID,
+			PlanID:    planID,
+		}); err != nil {
+			return fmt.Errorf("record instance: %w", err)
+		}
+	}
+	return nil
 }
 
 // DeprovisionInstance deletes the instance's CR (name = sanitized safe name,
-// consistent with ProvisionInstance).
+// consistent with ProvisionInstance) and removes the instance record.
 func (e *Engine) DeprovisionInstance(ctx context.Context, sd *ServiceDefinition, namespace, instanceID string) error {
-	return e.op.DeleteCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, namespace, SanitizeInstanceName(instanceID))
+	if err := e.op.DeleteCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, namespace, SanitizeInstanceName(instanceID)); err != nil {
+		return err
+	}
+	if e.reg != nil {
+		if err := e.reg.DeleteInstance(ctx, instanceID); err != nil {
+			return fmt.Errorf("remove instance record: %w", err)
+		}
+	}
+	return nil
 }
 
 // LastOperation maps CR readiness to OSB operation state:

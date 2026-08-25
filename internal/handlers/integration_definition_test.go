@@ -66,7 +66,10 @@ func newDefinitionRouter(t *testing.T) (*gin.Engine, *definition.OperatorClient)
 	oc := definition.NewOperatorClient(ctrlClient)
 	engine := definition.NewEngine(oc, sd)
 
-	b := broker.New(store.NewInMemoryStore(), nil)
+	stateStore := broker.NewInMemoryStateStore()
+	engine.SetInstanceRegistry(&stateStoreRegistry{store: stateStore})
+
+	b := broker.New(store.NewInMemoryStore(), stateStore)
 	h := New(b)
 	h.SetEngine(&EngineHolder{Engine: engine, Op: oc})
 
