@@ -13,6 +13,7 @@ func TestSanitizeInstanceName(t *testing.T) {
 		{"930fca69-63a2-45db-abee-46770af47008", "osb-930fca69-63a2-45db-abee-46770af47008"},
 		{"UPPER_case.id", "osb-upper-case-id"},
 		{"-leading-dash-", "osb-leading-dash"},
+		{"osb-already-prefixed", "osb-already-prefixed"},
 	}
 	for _, c := range cases {
 		got := SanitizeInstanceName(c.in)

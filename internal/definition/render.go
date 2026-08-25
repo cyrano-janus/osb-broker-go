@@ -26,9 +26,16 @@ func SanitizeInstanceName(instanceID string) string {
 			b = append(b, '-')
 		}
 	}
-	name := prefix + strings.Trim(string(b), "-")
-	if name == prefix {
+	trimmed := strings.Trim(string(b), "-")
+	// Idempotenz: eine bereits präfixierte ID nicht doppelt präfixieren
+	// (relevant, wenn Aufrufer versehentlich safeName statt instance_id senden).
+	var name string
+	if strings.HasPrefix(trimmed, prefix) {
+		name = trimmed
+	} else if trimmed == "" {
 		name = prefix + "instance"
+	} else {
+		name = prefix + trimmed
 	}
 	if len(name) > maxLen {
 		sum := sha256.Sum256([]byte(instanceID))
