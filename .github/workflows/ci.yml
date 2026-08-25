@@ -50,6 +50,11 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
       - name: Build broker + checker binaries from PR code
         run: |
           go build -o /tmp/broker .
