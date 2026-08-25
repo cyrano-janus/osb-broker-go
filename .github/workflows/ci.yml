@@ -31,7 +31,9 @@ jobs:
         run: cat /tmp/vet.log >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
 
       - name: test
-        run: go test ./... -count=1 -race
+        run: |
+          set -o pipefail
+          go test ./... -count=1 -race 2>&1 | tee /tmp/vet.log
 
       - name: build (all binaries incl. osb-checker)
         run: go build ./...
