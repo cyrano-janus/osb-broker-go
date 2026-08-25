@@ -59,11 +59,12 @@ jobs:
           cluster_name: ci
           wait: 30s
 
-      - name: Install CloudNativePG operator
+      - name: Install CloudNativePG operator (Helm)
         run: |
-          kubectl apply --server-side --field-manager=cnpg \
-            -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.24/releases/cnpg-1.24.1.yaml
-          kubectl rollout status deployment/cnpg-controller-manager -n cnpg-system --timeout=180s
+          helm repo add cnpg https://cloudnative-pg.github.io/charts
+          helm repo update > /dev/null
+          helm upgrade --install cnpg cnpg/cloudnative-pg             --namespace cnpg-system --create-namespace             --set crds.create=true
+          kubectl rollout status deployment/cnpg-controller-manager -n cnpg-system --timeout=240s
 
       - name: Deploy broker under test (PR image)
         run: |
