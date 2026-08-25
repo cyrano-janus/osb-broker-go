@@ -111,8 +111,11 @@ jobs:
           kubectl rollout status deployment/osb-broker-go -n osb --timeout=120s
           sleep 3
           echo "--- RBAC self-check ---"
-          kubectl auth can-i --as=system:serviceaccount:osb:osb-broker-go create configmaps -n osb || true
-          kubectl get role,rolebinding -n osb -o wide || true
+          echo "Pod SA: $(kubectl get pod -n osb -l app=osb-broker-go -o jsonpath='{.items[0].spec.serviceAccountName}')"
+          echo "Role rules: $(kubectl get role osb-broker-state -n osb -o jsonpath='{.rules}')"
+          echo "can-i create cm: $(kubectl auth can-i --as=system:serviceaccount:osb:osb-broker-go create configmaps -n osb)"
+          echo "can-i create cm named osb-broker-state: $(kubectl auth can-i --as=system:serviceaccount:osb:osb-broker-go create configmap/osb-broker-state -n osb)"
+          kubectl get role,rolebinding -n osb || true
 
       - name: Run osb-checker against the PR broker
         run: |
