@@ -1,0 +1,57 @@
+apiVersion: broker.osb.io/v1alpha1
+kind: ServiceDefinition
+metadata:
+  name: valkey-cluster
+spec:
+  offering:
+    id: c8d4e5f6-valk-0000-0000-000000000001
+    name: valkey-cluster
+    description: "Valkey via valkey-io/valkey-operator"
+    tags: [valkey, cache, in-memory, redis-compatible]
+    plans:
+      - id: plan-valkey-dev-0000-0000-000000000001
+        name: dev
+        description: "Single shard, 256Mi"
+        params:
+          shards: 1
+          replicas: 0
+          memory: 256Mi
+      - id: plan-valkey-prod-0000-0000-000000000002
+        name: prod
+        description: "3 shards x 1 replica, 512Mi pro Pod"
+        params:
+          shards: 3
+          replicas: 1
+          memory: 512Mi
+
+  provision:
+    apiVersion: valkey.io/v1alpha1
+    kind: ValkeyCluster
+    template: |
+      apiVersion: valkey.io/v1alpha1
+      kind: ValkeyCluster
+      metadata:
+        name: {{ .safeName }}
+        labels:
+          app.kubernetes.io/managed-by: osb-broker-go
+          osb.io/instance-id: {{ .instanceID }}
+      spec:
+        shards: {{ .plan.shards }}
+        replicas: {{ .plan.replicas }}
+        resources:
+          requests:
+            memory: {{ .plan.memory }}
+            cpu: 100m
+          limits:
+            memory: {{ .plan.memory }}
+            cpu: 500m
+
+  readiness:
+    statusJSONPath: 'status.conditions.#(type=="Ready").status'
+    expectedValue: "True"
+    timeoutSeconds: 300
+
+  bind:
+    # Der valkey-operator legt kein Credentials-Secret an; Konvention wie bei
+    # Redis: Platform-Admin erzeugt das Secret vor dem ersten Bind.
+    credentialsFromSecret: "{{ .safeName }}-valkey"

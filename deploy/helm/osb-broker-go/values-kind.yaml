@@ -179,3 +179,229 @@ definitions:
           # erwartet daher, dass ein Platform-Admin das Secret vor dem ersten
           # Bind erzeugt (oder ein Sidecar dies tut). Konvention: <id>-redis.
           credentialsFromSecret: "{{ .instanceID }}-redis"
+    valkey-cluster.yaml: |
+      apiVersion: broker.osb.io/v1alpha1
+      kind: ServiceDefinition
+      metadata:
+        name: valkey-cluster
+      spec:
+        offering:
+          id: c8d4e5f6-valk-0000-0000-000000000001
+          name: valkey-cluster
+          description: "Valkey via valkey-io/valkey-operator"
+          tags: [valkey, cache, in-memory, redis-compatible]
+          plans:
+            - id: plan-valkey-dev-0000-0000-000000000001
+              name: dev
+              description: "Single shard, 256Mi"
+              params:
+                shards: 1
+                replicas: 0
+                memory: 256Mi
+            - id: plan-valkey-prod-0000-0000-000000000002
+              name: prod
+              description: "3 shards x 1 replica, 512Mi pro Pod"
+              params:
+                shards: 3
+                replicas: 1
+                memory: 512Mi
+
+        provision:
+          apiVersion: valkey.io/v1alpha1
+          kind: ValkeyCluster
+          template: |
+            apiVersion: valkey.io/v1alpha1
+            kind: ValkeyCluster
+            metadata:
+              name: {{ .safeName }}
+              labels:
+                app.kubernetes.io/managed-by: osb-broker-go
+                osb.io/instance-id: {{ .instanceID }}
+            spec:
+              shards: {{ .plan.shards }}
+              replicas: {{ .plan.replicas }}
+              resources:
+                requests:
+                  memory: {{ .plan.memory }}
+                  cpu: 100m
+                limits:
+                  memory: {{ .plan.memory }}
+                  cpu: 500m
+
+        readiness:
+          statusJSONPath: 'status.conditions.#(type=="Ready").status'
+          expectedValue: "True"
+          timeoutSeconds: 300
+
+        bind:
+          # Der valkey-operator legt kein Credentials-Secret an; Konvention wie bei
+          # Redis: Platform-Admin erzeugt das Secret vor dem ersten Bind.
+          credentialsFromSecret: "{{ .safeName }}-valkey"
+    cnpg-postgresql.yaml: |
+      apiVersion: broker.osb.io/v1alpha1
+      kind: ServiceDefinition
+      metadata:
+        name: cnpg-postgresql
+      spec:
+        offering:
+          id: f48a9e21-cnpg-0000-0000-000000000001
+          name: cnpg-postgresql
+          description: "CloudNativePG PostgreSQL clusters"
+          bindable: true
+          tags:
+            - postgresql
+            - database
+            - cnpg
+          plans:
+            - id: plan-small-0000-0000-000000000001
+              name: small
+              description: "Single instance, 1Gi storage"
+              params:
+                storageSize: 1Gi
+                instances: 1
+            - id: plan-large-0000-0000-000000000002
+              name: large
+              description: "HA, 3 instances, 10Gi storage"
+              params:
+                storageSize: 10Gi
+                instances: 3
+
+        provision:
+          apiVersion: postgresql.cnpg.io/v1
+          kind: Cluster
+          template: |
+            apiVersion: postgresql.cnpg.io/v1
+            kind: Cluster
+            metadata:
+              name: {{ .safeName }}
+              labels:
+                app.kubernetes.io/managed-by: osb-broker-go
+                osb.io/instance-id: {{ .instanceID }}
+            spec:
+              instances: {{ .plan.instances }}
+              storage:
+                size: {{ .plan.storageSize }}
+
+        readiness:
+          statusJSONPath: 'status.conditions.#(type=="Ready").status'
+          expectedValue: "True"
+          timeoutSeconds: 600
+
+        bind:
+          credentialsFromSecret: "{{ .safeName }}-app"
+    minio-objectstorage.yaml: |
+      apiVersion: broker.osb.io/v1alpha1
+      kind: ServiceDefinition
+      metadata:
+        name: minio-objectstorage
+      spec:
+        offering:
+          id: c9d8e7f6-minio-0000-0000-000000000001
+          name: minio-objectstorage
+          description: "MinIO S3-compatible object storage via minio-operator"
+          tags: [s3, objectstorage, minio]
+          plans:
+            - id: plan-minio-small-0000-0000-000000000001
+              name: small
+              description: "Single tenant, 10Gi"
+              params:
+                servers: 1
+                volumesPerServer: 1
+                size: 10Gi
+            - id: plan-minio-large-0000-0000-000000000002
+              name: large
+              description: "4 servers x 2 volumes, 50Gi each (erasure coded)"
+              params:
+                servers: 4
+                volumesPerServer: 2
+                size: 50Gi
+
+        provision:
+          apiVersion: minio.min.io/v2
+          kind: Tenant
+          template: |
+            apiVersion: minio.min.io/v2
+            kind: Tenant
+            metadata:
+              name: {{ .instanceID }}
+              labels:
+                app.kubernetes.io/managed-by: osb-broker-go
+            spec:
+              pools:
+                - servers: {{ .plan.servers }}
+                  volumesPerServer: {{ .plan.volumesPerServer }}
+                  volumeClaimTemplate:
+                    spec:
+                      accessModes: [ReadWriteOnce]
+                      resources:
+                        requests:
+                          storage: {{ .plan.size }}
+              requestCert: false
+              prometheusOperator: false
+        readiness:
+          statusJSONPath: 'status.conditions.#(type=="Ready").status'
+          expectedValue: "True"
+          timeoutSeconds: 600
+
+        bind:
+          # Der MinIO-Operator legt pro Tenant ein Secret "<tenant>-secret" mit
+          # accessKey/secretKey an.
+          credentialsFromSecret: "{{ .instanceID }}-secret"
+    redis-standalone.yaml: |
+      apiVersion: broker.osb.io/v1alpha1
+      kind: ServiceDefinition
+      metadata:
+        name: redis-standalone
+      spec:
+        offering:
+          id: b7c2d3e4-redis-0000-0000-000000000001
+          name: redis-standalone
+          description: "Redis via Redis Operator (ot-container-kit)"
+          tags: [redis, cache, in-memory]
+          plans:
+            - id: plan-redis-dev-0000-0000-000000000001
+              name: dev
+              description: "Single node, 128Mi"
+              params:
+                capacity: 128Mi
+                replicas: 1
+            - id: plan-redis-prod-0000-0000-000000000002
+              name: prod
+              description: "Leader + 2 followers, 1Gi"
+              params:
+                capacity: 1Gi
+                replicas: 3
+
+        provision:
+          apiVersion: redis.redis.opstreelabs.in/v1beta2
+          kind: Redis
+          template: |
+            apiVersion: redis.redis.opstreelabs.in/v1beta2
+            kind: Redis
+            metadata:
+              name: {{ .instanceID }}
+              labels:
+                app.kubernetes.io/managed-by: osb-broker-go
+            spec:
+              mode: standalone
+              kubernetesConfig:
+                image: quay.io/opstree/redis:v7.0.15
+                redisExporter:
+                  enabled: false
+              storage:
+                volumeClaimTemplate:
+                  spec:
+                    resources:
+                      requests:
+                        storage: {{ .plan.capacity }}
+        readiness:
+          statusJSONPath: 'status.conditions.#(type=="Ready").status'
+          expectedValue: "True"
+          timeoutSeconds: 300
+
+        bind:
+          # Der Opstree-Operator legt kein Credentials-Secret an; der Broker
+          # erwartet daher, dass ein Platform-Admin das Secret vor dem ersten
+          # Bind erzeugt (oder ein Sidecar dies tut). Konvention: <id>-redis.
+          credentialsFromSecret: "{{ .instanceID }}-redis"
+
