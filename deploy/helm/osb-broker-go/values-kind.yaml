@@ -1,0 +1,181 @@
+# Werte für das lokale Korifi/kind-Setup (entspricht deploy/k8s/*)
+image:
+  repository: osb-broker-go
+  tag: v9
+  pullPolicy: IfNotPresent
+
+auth:
+  username: broker-user
+  password: broker-secret
+
+definitions:
+  create: true
+  # Gebündelte Definitionen aus definitions/ des Repos
+  files:
+    cnpg-postgresql.yaml: |
+      apiVersion: broker.osb.io/v1alpha1
+      kind: ServiceDefinition
+      metadata:
+        name: cnpg-postgresql
+      spec:
+        offering:
+          id: f48a9e21-cnpg-0000-0000-000000000001
+          name: cnpg-postgresql
+          description: "CloudNativePG PostgreSQL clusters"
+          bindable: true
+          tags:
+            - postgresql
+            - database
+            - cnpg
+          plans:
+            - id: plan-small-0000-0000-000000000001
+              name: small
+              description: "Single instance, 1Gi storage"
+              params:
+                storageSize: 1Gi
+                instances: 1
+            - id: plan-large-0000-0000-000000000002
+              name: large
+              description: "HA, 3 instances, 10Gi storage"
+              params:
+                storageSize: 10Gi
+                instances: 3
+
+        provision:
+          apiVersion: postgresql.cnpg.io/v1
+          kind: Cluster
+          template: |
+            apiVersion: postgresql.cnpg.io/v1
+            kind: Cluster
+            metadata:
+              name: {{ .safeName }}
+              labels:
+                app.kubernetes.io/managed-by: osb-broker-go
+                osb.io/instance-id: {{ .instanceID }}
+            spec:
+              instances: {{ .plan.instances }}
+              storage:
+                size: {{ .plan.storageSize }}
+
+        readiness:
+          statusJSONPath: 'status.conditions.#(type=="Ready").status'
+          expectedValue: "True"
+          timeoutSeconds: 600
+
+        bind:
+          credentialsFromSecret: "{{ .safeName }}-app"
+    minio-objectstorage.yaml: |
+      apiVersion: broker.osb.io/v1alpha1
+      kind: ServiceDefinition
+      metadata:
+        name: minio-objectstorage
+      spec:
+        offering:
+          id: c9d8e7f6-minio-0000-0000-000000000001
+          name: minio-objectstorage
+          description: "MinIO S3-compatible object storage via minio-operator"
+          tags: [s3, objectstorage, minio]
+          plans:
+            - id: plan-minio-small-0000-0000-000000000001
+              name: small
+              description: "Single tenant, 10Gi"
+              params:
+                servers: 1
+                volumesPerServer: 1
+                size: 10Gi
+            - id: plan-minio-large-0000-0000-000000000002
+              name: large
+              description: "4 servers x 2 volumes, 50Gi each (erasure coded)"
+              params:
+                servers: 4
+                volumesPerServer: 2
+                size: 50Gi
+
+        provision:
+          apiVersion: minio.min.io/v2
+          kind: Tenant
+          template: |
+            apiVersion: minio.min.io/v2
+            kind: Tenant
+            metadata:
+              name: {{ .instanceID }}
+              labels:
+                app.kubernetes.io/managed-by: osb-broker-go
+            spec:
+              pools:
+                - servers: {{ .plan.servers }}
+                  volumesPerServer: {{ .plan.volumesPerServer }}
+                  volumeClaimTemplate:
+                    spec:
+                      accessModes: [ReadWriteOnce]
+                      resources:
+                        requests:
+                          storage: {{ .plan.size }}
+              requestCert: false
+              prometheusOperator: false
+        readiness:
+          statusJSONPath: 'status.conditions.#(type=="Ready").status'
+          expectedValue: "True"
+          timeoutSeconds: 600
+
+        bind:
+          # Der MinIO-Operator legt pro Tenant ein Secret "<tenant>-secret" mit
+          # accessKey/secretKey an.
+          credentialsFromSecret: "{{ .instanceID }}-secret"
+    redis-standalone.yaml: |
+      apiVersion: broker.osb.io/v1alpha1
+      kind: ServiceDefinition
+      metadata:
+        name: redis-standalone
+      spec:
+        offering:
+          id: b7c2d3e4-redis-0000-0000-000000000001
+          name: redis-standalone
+          description: "Redis via Redis Operator (ot-container-kit)"
+          tags: [redis, cache, in-memory]
+          plans:
+            - id: plan-redis-dev-0000-0000-000000000001
+              name: dev
+              description: "Single node, 128Mi"
+              params:
+                capacity: 128Mi
+                replicas: 1
+            - id: plan-redis-prod-0000-0000-000000000002
+              name: prod
+              description: "Leader + 2 followers, 1Gi"
+              params:
+                capacity: 1Gi
+                replicas: 3
+
+        provision:
+          apiVersion: redis.redis.opstreelabs.in/v1beta2
+          kind: Redis
+          template: |
+            apiVersion: redis.redis.opstreelabs.in/v1beta2
+            kind: Redis
+            metadata:
+              name: {{ .instanceID }}
+              labels:
+                app.kubernetes.io/managed-by: osb-broker-go
+            spec:
+              mode: standalone
+              kubernetesConfig:
+                image: quay.io/opstree/redis:v7.0.15
+                redisExporter:
+                  enabled: false
+              storage:
+                volumeClaimTemplate:
+                  spec:
+                    resources:
+                      requests:
+                        storage: {{ .plan.capacity }}
+        readiness:
+          statusJSONPath: 'status.conditions.#(type=="Ready").status'
+          expectedValue: "True"
+          timeoutSeconds: 300
+
+        bind:
+          # Der Opstree-Operator legt kein Credentials-Secret an; der Broker
+          # erwartet daher, dass ein Platform-Admin das Secret vor dem ersten
+          # Bind erzeugt (oder ein Sidecar dies tut). Konvention: <id>-redis.
+          credentialsFromSecret: "{{ .instanceID }}-redis"

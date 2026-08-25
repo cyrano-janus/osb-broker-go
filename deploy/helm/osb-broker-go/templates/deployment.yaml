@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "osb-broker-go.fullname" . }}
+  labels:
+    {{- include "osb-broker-go.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "osb-broker-go.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "osb-broker-go.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "osb-broker-go.fullname" . }}
+      containers:
+      - name: broker
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: PORT
+          value: "8080"
+        - name: STORE_BACKEND
+          value: {{ .Values.config.storeBackend | quote }}
+        {{- if eq .Values.config.storeBackend "k8s" }}
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        {{- end }}
+        {{- if and .Values.definitions.create .Values.definitions.files }}
+        - name: DEFINITIONS_DIR
+          value: "/definitions"
+        {{- end }}
+        - name: BROKER_AUTH_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "osb-broker-go.authSecretName" . }}
+              key: username
+        - name: BROKER_AUTH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "osb-broker-go.authSecretName" . }}
+              key: password
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          initialDelaySeconds: 3
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          initialDelaySeconds: 2
+          periodSeconds: 5
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        {{- if or .Values.definitions.files (eq .Values.config.storeBackend "k8s") }}
+        volumeMounts:
+        {{- if .Values.definitions.files }}
+        - name: definitions
+          mountPath: /definitions
+          readOnly: true
+        {{- end }}
+        {{- end }}
+      {{- if .Values.definitions.files }}
+      volumes:
+      - name: definitions
+        configMap:
+          name: {{ include "osb-broker-go.fullname" . }}-definitions
+      {{- end }}

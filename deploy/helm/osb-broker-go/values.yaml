@@ -1,0 +1,61 @@
+# Default values for osb-broker-go.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/cyrano-janus/osb-broker-go
+  tag: ""            # leer = .Chart.AppVersion
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 80
+
+# Basic Auth für den Broker. Wenn create=true, legt das Chart das Secret an;
+# sonst muss `existingSecret` existieren (keys: username, password).
+auth:
+  create: true
+  existingSecret: ""
+  username: broker-user
+  password: "change-me"
+
+# Broker-Konfiguration (Umgebungsvariablen)
+config:
+  storeBackend: k8s        # k8s | memory
+  logRequests: true
+
+# ServiceDefinitions als ConfigMap gerendert.
+# Jeder Eintrag unter `files` wird zu einer Datei in DEFINITIONS_DIR.
+definitions:
+  create: true
+  # files:
+  #   cnpg-postgresql.yaml: |
+  #     apiVersion: broker.osb.io/v1alpha1
+  #     ...
+
+# RBAC: StateStore-ConfigMap im Release-Namespace + optionaler
+# clusterweiter Zugriff auf Operator-CRs (z. B. postgresql.cnpg.io).
+rbac:
+  create: true
+  operatorCRDs:
+    - group: postgresql.cnpg.io
+      resources: [clusters]
+      verbs: [create, get, list, update, delete]
+  secretsAcrossNamespaces: true   # ClusterRole für Secret-Reads (Bind)
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

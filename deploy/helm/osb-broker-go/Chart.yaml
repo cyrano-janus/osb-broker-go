@@ -1,0 +1,8 @@
+apiVersion: v2
+name: osb-broker-go
+description: Generic OSB 2.17 service broker for Kubernetes operators
+type: application
+version: 0.1.0
+appVersion: "v9"
+maintainers:
+  - name: cyrano-janus

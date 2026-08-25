@@ -1,0 +1,27 @@
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "osb-broker-go.fullname" . }}-state
+  labels:
+    {{- include "osb-broker-go.labels" . | nindent 4 }}
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  resourceNames: [{{ include "osb-broker-go.fullname" . }}-state]
+  verbs: [get, create, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "osb-broker-go.fullname" . }}-state
+  labels:
+    {{- include "osb-broker-go.labels" . | nindent 4 }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "osb-broker-go.fullname" . }}
+roleRef:
+  kind: Role
+  name: {{ include "osb-broker-go.fullname" . }}-state
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

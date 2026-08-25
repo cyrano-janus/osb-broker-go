@@ -1,0 +1,37 @@
+{{- if and .Values.rbac.create .Values.rbac.operatorCRDs }}
+# Clusterweiter Zugriff auf die Operator-CRDs, die in den ServiceDefinitions
+# referenziert werden (der Broker provisioniert CRs im Space-Namespace des
+# Konsumenten und liest Bind-Secrets).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "osb-broker-go.fullname" . }}-operators
+  labels:
+    {{- include "osb-broker-go.labels" . | nindent 4 }}
+rules:
+{{- range .Values.rbac.operatorCRDs }}
+- apiGroups: [{{ .group | quote }}]
+  resources: {{ toJson .resources }}
+  verbs: {{ toJson (default (list "create" "get" "update" "delete") .verbs) }}
+{{- end }}
+{{- if .Values.rbac.secretsAcrossNamespaces }}
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: [get]
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "osb-broker-go.fullname" . }}-operators
+  labels:
+    {{- include "osb-broker-go.labels" . | nindent 4 }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "osb-broker-go.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ include "osb-broker-go.fullname" . }}-operators
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

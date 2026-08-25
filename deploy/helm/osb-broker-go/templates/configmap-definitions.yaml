@@ -1,0 +1,13 @@
+{{- if and .Values.definitions.create .Values.definitions.files }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "osb-broker-go.fullname" . }}-definitions
+  labels:
+    {{- include "osb-broker-go.labels" . | nindent 4 }}
+data:
+{{- range $name, $content := .Values.definitions.files }}
+  {{ $name }}: |
+{{ $content | indent 4 }}
+{{- end }}
+{{- end }}
