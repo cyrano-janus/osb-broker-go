@@ -22,7 +22,10 @@ jobs:
           cache: true
 
       - name: vet
-        run: go vet ./...
+        run: |
+          go version
+          go env GOTOOLCHAIN GOPROXY
+          go vet ./...
 
       - name: test
         run: go test ./... -count=1 -race
