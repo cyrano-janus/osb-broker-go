@@ -1,0 +1,129 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: L1 — vet / test / build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: vet
+        run: go vet ./...
+
+      - name: test
+        run: go test ./... -count=1 -race
+
+      - name: build (all binaries incl. osb-checker)
+        run: go build ./...
+
+  conformance:
+    name: L2 — Conformance-Gate (kind + CNPG + osb-checker)
+    runs-on: ubuntu-latest
+    needs: verify
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build broker + checker binaries from PR code
+        run: |
+          go build -o /tmp/broker .
+          go build -o /tmp/osb-checker ./cmd/osb-checker/
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: ci
+          wait: 30s
+
+      - name: Install CloudNativePG operator
+        run: |
+          kubectl apply --server-side --field-manager=cnpg \
+            -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.24/releases/cnpg-1.24.1.yaml
+          kubectl rollout status deployment/cnpg-controller-manager -n cnpg-system --timeout=180s
+
+      - name: Deploy broker under test (PR image)
+        run: |
+          docker build -q -t osb-broker-go:pr .
+          kind load docker-image osb-broker-go:pr --name ci
+          kubectl create namespace osb --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create secret generic osb-broker-auth -n osb \
+            --from-literal=username=chk \
+            --from-literal=password=chkpass \
+            --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create configmap osb-definitions -n osb \
+            --from-file=definitions/ \
+            --dry-run=client -o yaml | kubectl apply -f -
+          sed 's|image: osb-broker-go:v[0-9]*|image: osb-broker-go:pr|' deploy/k8s/broker.yaml | kubectl apply -f -
+          kubectl apply -f deploy/k8s/operator-rbac.yaml
+          kubectl rollout status deployment/osb-broker-go -n osb --timeout=120s
+
+      - name: Run osb-checker against the PR broker
+        run: |
+          kubectl run osb-checker-run --rm -i -q --restart=Never \
+            --image=curlimages/curl:latest -n default \
+            --overrides='{"spec":{"containers":[{"name":"probe","image":"curlimages/curl:latest","command":["sleep","300"],"securityContext":{"runAsUser":100}}]}}' &
+          sleep 8
+          POD=$(kubectl get pod -n default -l run=osb-checker-run -o jsonpath='{.items[0].metadata.name}')
+          # Port-forward vom Runner in den Cluster und Checker lokal fahren
+          kubectl port-forward -n osb svc/osb-broker-go 18080:80 &
+          PF_PID=$!
+          sleep 3
+          /tmp/osb-checker --url http://localhost:18080 --user chk --pass chkpass --id-prefix pr-${{ github.event.number }}
+          RC=$?
+          kill $PF_PID 2>/dev/null || true
+          exit $RC
+
+  release:
+    name: L3 — Release (tags only)
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    needs: [verify, conformance]
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push multi-arch image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            ghcr.io/${{ github.repository }}:latest
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
