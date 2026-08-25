@@ -6,7 +6,7 @@ spec:
   offering:
     id: c9d8e7f6-minio-0000-0000-000000000001
     name: minio-objectstorage
-    description: "MinIO S3-compatible object storage via minio-operator"
+    description: "[DEPRECATED — MinIO Community EOL, minio-operator deprecated. Nachfolger: seaweedfs-s3] MinIO S3-compatible object storage via minio-operator"
     tags: [s3, objectstorage, minio]
     plans:
       - id: plan-minio-small-0000-0000-000000000001

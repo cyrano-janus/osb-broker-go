@@ -54,6 +54,9 @@ func (h *Handlers) SetupRouter() *gin.Engine {
 	// Health check (outside API version middleware, no X-Broker-API-Version required)
 	router.GET("/healthz", h.Healthz)
 
+	// Documentation endpoints (unauthenticated, outside /v2 and Basic Auth)
+	h.DocsRoutes(router)
+
 	// Basic Auth for all OSB endpoints (healthz exempt). No-op when no
 	// credentials are configured.
 	router.Use(h.basicAuthMiddleware)

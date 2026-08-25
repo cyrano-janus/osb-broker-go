@@ -1,0 +1,61 @@
+apiVersion: broker.osb.io/v1alpha1
+kind: ServiceDefinition
+metadata:
+  name: rabbitmq-cluster
+spec:
+  offering:
+    id: d9e6f7a8-rabb-0000-0000-000000000001
+    name: rabbitmq-cluster
+    description: "RabbitMQ clusters via rabbitmq/cluster-operator"
+    bindable: true
+    tags:
+      - rabbitmq
+      - amqp
+      - messaging
+    plans:
+      - id: plan-rabbit-dev-0000-0000-000000000001
+        name: dev
+        description: "Single node, 1Gi storage"
+        params:
+          replicas: 1
+          storageSize: 1Gi
+      - id: plan-rabbit-prod-0000-0000-000000000002
+        name: prod
+        description: "3-node HA cluster, 10Gi storage"
+        params:
+          replicas: 3
+          storageSize: 10Gi
+
+  provision:
+    apiVersion: rabbitmq.com/v1beta1
+    kind: RabbitmqCluster
+    template: |
+      apiVersion: rabbitmq.com/v1beta1
+      kind: RabbitmqCluster
+      metadata:
+        name: {{ .safeName }}
+        labels:
+          app.kubernetes.io/managed-by: osb-broker-go
+          osb.io/instance-id: {{ .instanceID }}
+      spec:
+        replicas: {{ .plan.replicas }}
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi
+        persistence:
+          storage: {{ .plan.storageSize }}
+
+  readiness:
+    statusJSONPath: 'status.conditions.#(type=="Ready").status'
+    expectedValue: "True"
+    timeoutSeconds: 600
+
+  bind:
+    # Der cluster-operator legt pro RabbitmqCluster automatisch ein
+    # Default-User-Secret an (<name>-default-user mit username/password)
+    # und referenziert es in status.binding.
+    credentialsFromSecret: "{{ .safeName }}-default-user"

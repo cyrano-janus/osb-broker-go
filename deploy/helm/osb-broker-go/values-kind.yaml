@@ -237,6 +237,214 @@ definitions:
           # Der valkey-operator legt kein Credentials-Secret an; Konvention wie bei
           # Redis: Platform-Admin erzeugt das Secret vor dem ersten Bind.
           credentialsFromSecret: "{{ .safeName }}-valkey"
+    rabbitmq-cluster.yaml: |
+      apiVersion: broker.osb.io/v1alpha1
+      kind: ServiceDefinition
+      metadata:
+        name: rabbitmq-cluster
+      spec:
+        offering:
+          id: d9e6f7a8-rabb-0000-0000-000000000001
+          name: rabbitmq-cluster
+          description: "RabbitMQ clusters via rabbitmq/cluster-operator"
+          bindable: true
+          tags:
+            - rabbitmq
+            - amqp
+            - messaging
+          plans:
+            - id: plan-rabbit-dev-0000-0000-000000000001
+              name: dev
+              description: "Single node, 1Gi storage"
+              params:
+                replicas: 1
+                storageSize: 1Gi
+            - id: plan-rabbit-prod-0000-0000-000000000002
+              name: prod
+              description: "3-node HA cluster, 10Gi storage"
+              params:
+                replicas: 3
+                storageSize: 10Gi
+
+        provision:
+          apiVersion: rabbitmq.com/v1beta1
+          kind: RabbitmqCluster
+          template: |
+            apiVersion: rabbitmq.com/v1beta1
+            kind: RabbitmqCluster
+            metadata:
+              name: {{ .safeName }}
+              labels:
+                app.kubernetes.io/managed-by: osb-broker-go
+                osb.io/instance-id: {{ .instanceID }}
+            spec:
+              replicas: {{ .plan.replicas }}
+              resources:
+                requests:
+                  cpu: 250m
+                  memory: 512Mi
+                limits:
+                  cpu: "1"
+                  memory: 1Gi
+              persistence:
+                storage: {{ .plan.storageSize }}
+
+        readiness:
+          statusJSONPath: 'status.conditions.#(type=="Ready").status'
+          expectedValue: "True"
+          timeoutSeconds: 600
+
+        bind:
+          # Der cluster-operator legt pro RabbitmqCluster automatisch ein
+          # Default-User-Secret an (<name>-default-user mit username/password)
+          # und referenziert es in status.binding.
+          credentialsFromSecret: "{{ .safeName }}-default-user"
+    redpanda-cluster.yaml: |
+      apiVersion: broker.osb.io/v1alpha1
+      kind: ServiceDefinition
+      metadata:
+        name: redpanda-cluster
+      spec:
+        offering:
+          id: e7f5a8b9-redp-0000-0000-000000000001
+          name: redpanda-cluster
+          description: "Redpanda Kafka-compatible streaming via redpanda-operator"
+          bindable: true
+          tags:
+            - kafka
+            - streaming
+            - redpanda
+          plans:
+            - id: plan-redpanda-dev-0000-0000-000000000001
+              name: dev
+              description: "Single broker, developer mode, 1Gi storage"
+              params:
+                replicas: 1
+                storageSize: 1Gi
+                memory: 1.2Gi
+            - id: plan-redpanda-prod-0000-0000-000000000002
+              name: prod
+              description: "3 brokers, 10Gi storage each"
+              params:
+                replicas: 3
+                storageSize: 10Gi
+                memory: 2Gi
+
+        provision:
+          # Legacy-CRD des Operators (einzelnes CR mit voller Spec).
+          apiVersion: redpanda.vectorized.io/v1alpha1
+          kind: Cluster
+          template: |
+            apiVersion: redpanda.vectorized.io/v1alpha1
+            kind: Cluster
+            metadata:
+              name: {{ .safeName }}
+              labels:
+                app.kubernetes.io/managed-by: osb-broker-go
+                osb.io/instance-id: {{ .instanceID }}
+            spec:
+              image: "redpandadata/redpanda"
+              version: "v24.2.7"
+              replicas: {{ .plan.replicas }}
+              resources:
+                requests:
+                  cpu: 500m
+                  memory: {{ .plan.memory }}
+                limits:
+                  cpu: "1"
+                  memory: {{ .plan.memory }}
+              configuration:
+                rpcServer:
+                  port: 33145
+                kafkaApi:
+                  - port: 9092
+                adminApi:
+                  - port: 9644
+                schemaRegistry:
+                  port: 8081
+                pandaproxyApi:
+                  - port: 8082
+                developerMode: {{ if eq .plan.replicas 1 }}true{{ else }}false{{ end }}
+              storage:
+                capacity: {{ .plan.storageSize }}
+
+        readiness:
+          statusJSONPath: 'status.conditions.#(type=="Ready").status'
+          expectedValue: "True"
+          timeoutSeconds: 600
+
+        bind:
+          # Kein automatisches Credentials-Secret; Konvention wie bei Redis/Valkey.
+          credentialsFromSecret: "{{ .safeName }}-redpanda"
+    seaweedfs-s3.yaml: |
+      apiVersion: broker.osb.io/v1alpha1
+      kind: ServiceDefinition
+      metadata:
+        name: seaweedfs-s3
+      spec:
+        offering:
+          id: f6a9b0c1-seaw-0000-0000-000000000001
+          name: seaweedfs-s3
+          description: "SeaweedFS S3-compatible object storage via seaweedfs-operator"
+          bindable: true
+          tags:
+            - s3
+            - objectstorage
+            - seaweedfs
+          plans:
+            - id: plan-seaweed-dev-0000-0000-000000000001
+              name: dev
+              description: "Single master/volume/filer/s3, 2Gi"
+              params:
+                masterReplicas: 1
+                volumeReplicas: 1
+                volumeStorage: 2Gi
+            - id: plan-seaweed-prod-0000-0000-000000000002
+              name: prod
+              description: "3 masters, replicated volumes, 10Gi"
+              params:
+                masterReplicas: 3
+                volumeReplicas: 2
+                volumeStorage: 10Gi
+
+        provision:
+          apiVersion: seaweed.seaweedfs.com/v1
+          kind: Seaweed
+          template: |
+            apiVersion: seaweed.seaweedfs.com/v1
+            kind: Seaweed
+            metadata:
+              name: {{ .safeName }}
+              labels:
+                app.kubernetes.io/managed-by: osb-broker-go
+                osb.io/instance-id: {{ .instanceID }}
+            spec:
+              image: chrislusf/seaweedfs:latest
+              volumeServerDiskCount: 1
+              master:
+                replicas: {{ .plan.masterReplicas }}
+              volume:
+                replicas: {{ .plan.volumeReplicas }}
+                requests:
+                  storage: {{ .plan.volumeStorage }}
+              filer:
+                replicas: {{ if eq .plan.masterReplicas 1.0 }}1{{ else }}2{{ end }}
+                config: |
+                  [leveldb2]
+                  enabled = true
+                  dir = "/data/filerldb2"
+              s3:
+                replicas: 1
+
+        readiness:
+          statusJSONPath: 'status.conditions.#(type=="Ready").status'
+          expectedValue: "True"
+          timeoutSeconds: 600
+
+        bind:
+          # S3Credentials/S3Identities-CRDs vorhanden; Konvention: Platform-Admin
+          # legt vor dem ersten Bind ein Secret mit den S3-Credentials an.
+          credentialsFromSecret: "{{ .safeName }}-seaweed"
     cnpg-postgresql.yaml: |
       apiVersion: broker.osb.io/v1alpha1
       kind: ServiceDefinition
