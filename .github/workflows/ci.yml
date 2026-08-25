@@ -128,12 +128,11 @@ jobs:
           set +e
           /tmp/osb-checker --url http://localhost:18080 --user chk --pass chkpass \
             --id-prefix pr-${{ github.event.number }} | tee /tmp/checker.log
-          RC=\${PIPESTATUS[0]}
+          RC="${PIPESTATUS[0]}"
           set -e
-          kill $PF_PID 2>/dev/null || true
-          echo "$checker_out" > /dev/null || true
-          cat /tmp/checker.log >> "$GITHUB_STEP_SUMMARY"
-          exit $RC
+          kill "$PF_PID" 2>/dev/null || true
+          cat /tmp/checker.log >> "$GITHUB_STEP_SUMMARY" || true
+          exit "$RC"
 
       - name: Upload checker log
         if: always()
