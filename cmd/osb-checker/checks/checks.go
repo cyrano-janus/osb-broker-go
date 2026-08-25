@@ -29,7 +29,10 @@ var failures int
 
 func fail(check string, format string, args ...interface{}) {
 	failures++
-	fmt.Printf("FAIL [%s]: %s\n", check, fmt.Sprintf(format, args...))
+	msg := fmt.Sprintf("FAIL [%s]: %s", check, fmt.Sprintf(format, args...))
+	fmt.Println(msg)
+	// GitHub Actions annotation: appears in the run UI and annotations API.
+	fmt.Printf("::error::%s\n", msg)
 }
 
 func pass(check string, format string, args ...interface{}) {
