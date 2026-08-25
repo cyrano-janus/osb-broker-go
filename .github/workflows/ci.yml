@@ -77,14 +77,19 @@ jobs:
           done
           echo "CNPG CRDs established: $N"
 
-      - name: Install CloudNativePG operator (Helm)
+      - name: Install CloudNativePG operator (raw manifest + server-side apply)
         run: |
           set -e
-          helm repo add cnpg https://cloudnative-pg.github.io/charts
-          helm repo update
-          helm upgrade --install cnpg cnpg/cloudnative-pg \
-            --namespace cnpg-system --create-namespace \
-            --skip-crds
+          curl -sSfL -o /tmp/cnpg.yaml \
+            https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.24/releases/cnpg-1.24.1.yaml
+          kubectl apply --server-side --force-conflicts --field-manager=cnpg -f /tmp/cnpg.yaml || true
+          for i in $(seq 1 30); do
+            N=$(kubectl get crd 2>/dev/null | grep -c cnpg || true)
+            [ "$N" -ge 6 ] && break
+            sleep 2
+          done
+          echo "CNPG CRDs established: $N"
+          kubectl -n cnpg-system delete pod -l app.kubernetes.io/name=cloudnative-pg --ignore-not-found
           kubectl rollout status deployment/cnpg-controller-manager -n cnpg-system --timeout=240s
 
       - name: Deploy broker under test (PR image)
