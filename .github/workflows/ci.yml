@@ -110,6 +110,9 @@ jobs:
           sed 's|image: osb-broker-go:v[0-9]*|image: osb-broker-go:pr|' deploy/k8s/broker.yaml | kubectl apply -f -
           kubectl rollout status deployment/osb-broker-go -n osb --timeout=120s
           sleep 3
+          echo "--- RBAC self-check ---"
+          kubectl auth can-i --as=system:serviceaccount:osb:osb-broker-go create configmaps -n osb || true
+          kubectl get role,rolebinding -n osb -o wide || true
 
       - name: Run osb-checker against the PR broker
         run: |
