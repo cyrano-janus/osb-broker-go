@@ -24,6 +24,9 @@ func osbErrorStatus(err error) (status int, name string) {
 		return http.StatusConflict, "ConcurrencyErrorException"
 	case strings.Contains(msg, "already exists with different"):
 		return http.StatusConflict, "RequiresAppInstanceAlreadyExists" // conflict family
+	case strings.Contains(msg, "instance not found"):
+		// Bind/Update against a non-existent instance -> 404 per OSB spec.
+		return http.StatusNotFound, "NotFound"
 	case strings.Contains(msg, "not found"):
 		return http.StatusBadRequest, "BadRequest"
 	default:

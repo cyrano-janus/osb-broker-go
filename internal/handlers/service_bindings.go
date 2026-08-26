@@ -51,6 +51,12 @@ func (h *Handlers) BindServiceInstance(c *gin.Context) {
 		return
 	}
 
+	// OSB spec: re-bind of an existing binding with identical parameters
+	// returns 200 (fetch semantics), first creation returns 201.
+	if h.broker.LastBindWasIdempotent {
+		c.JSON(http.StatusOK, response)
+		return
+	}
 	c.JSON(http.StatusCreated, response)
 }
 

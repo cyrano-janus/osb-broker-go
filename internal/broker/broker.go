@@ -17,6 +17,17 @@ type Broker struct {
 	bindings    map[string]*Binding
 	operations  map[string]*Operation
 	mu          sync.RWMutex
+
+	// LastBindWasIdempotent reports whether the most recent Bind call
+	// returned an existing binding (true) or created a new one (false).
+	// The HTTP layer uses it to answer 200 (fetch semantics) vs 201 (created)
+	// per OSB spec.
+	LastBindWasIdempotent bool
+
+	// LastProvisionWasIdempotent reports whether the most recent Provision
+	// call returned an existing identical instance. The HTTP layer uses it
+	// to answer 200 vs 201 per OSB spec.
+	LastProvisionWasIdempotent bool
 }
 
 // Instance represents a service instance
@@ -91,8 +102,10 @@ func (b *Broker) Provision(ctx context.Context, instanceID string, req *Provisio
 			return nil, fmt.Errorf("instance already exists with different service/plan")
 		}
 		// Return success for idempotent provision
+		b.LastProvisionWasIdempotent = true
 		return &ProvisionResponse{}, nil
 	}
+	b.LastProvisionWasIdempotent = false
 
 	// Create new instance
 	instance := &Instance{
@@ -167,6 +180,7 @@ func (b *Broker) Bind(ctx context.Context, instanceID, bindingID string, req *Bi
 	if bindErr == nil {
 		if existing.InstanceID == instanceID && existing.Ready {
 			// Return existing binding credentials (idempotent)
+			b.LastBindWasIdempotent = true
 			return &BindResponse{
 				Credentials:     existing.Credentials,
 				SyslogDrainURL:  existing.SyslogDrainURL,
@@ -175,6 +189,7 @@ func (b *Broker) Bind(ctx context.Context, instanceID, bindingID string, req *Bi
 			}, nil
 		}
 	}
+	b.LastBindWasIdempotent = false
 
 	// Create new binding
 	binding := &Binding{

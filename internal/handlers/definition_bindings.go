@@ -9,8 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// bindDefinition handles binding for definition-based services: credentials
-// are read from the operator-generated secret named by the definition.
+// BindDefinition creates a binding by reading the operator's credentials
+// secret for the instance (name rendered from the definition).
 func (h *Handlers) bindDefinition(c *gin.Context, instanceID, bindingID string, req broker.BindRequest) {
 	sd, err := h.resolveDefinition(req.ServiceID)
 	if err != nil || sd == nil {
@@ -22,8 +22,9 @@ func (h *Handlers) bindDefinition(c *gin.Context, instanceID, bindingID string, 
 	creds, _, err := h.engine.Engine.BindCredentials(c.Request.Context(), sd, namespace, instanceID)
 	if err != nil {
 		if isNotFoundErr(err) {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error":       "BadRequest",
+			// OSB spec: bind to a non-existent instance -> 404.
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":       "NotFound",
 				"description": "instance not found (credentials secret missing): " + err.Error(),
 			})
 			return
