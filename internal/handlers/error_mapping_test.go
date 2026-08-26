@@ -59,9 +59,11 @@ func TestErrorMapping_BindOnMissingInstance404(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
-	// OSB: binding against unknown instance is a client error (400).
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	// OSB spec: binding against unknown instance is a client error (404
+	// NotFound — the resource the request refers to does not exist).
+	assert.Equal(t, http.StatusNotFound, w.Code)
 	r := parseErr(t, w)
+	assert.Equal(t, "NotFound", r.Error)
 	assert.NotEmpty(t, r.Description)
 }
 
