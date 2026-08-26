@@ -167,6 +167,7 @@ func (h *Handlers) GetLastOperation(c *gin.Context) {
 				})
 				return
 			}
+			h.observeLastOperation(state)
 			c.JSON(http.StatusOK, broker.LastOperationResponse{
 				State:       state,
 				Description: "Readiness evaluated from operator CR status",
@@ -184,6 +185,7 @@ func (h *Handlers) GetLastOperation(c *gin.Context) {
 		})
 		return
 	}
+	h.observeLastOperation(response.State)
 
 	c.JSON(http.StatusOK, response)
 }

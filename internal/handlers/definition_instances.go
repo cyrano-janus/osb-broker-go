@@ -42,6 +42,7 @@ func (h *Handlers) provisionDefinitionWithRequest(c *gin.Context, instanceID str
 		respondOSBError(c, err)
 		return
 	}
+	h.observeProvision(req.ServiceID, req.PlanID)
 
 	dashboard := "https://dashboard.example.com/instances/" + instanceID
 	c.JSON(http.StatusCreated, broker.ProvisionResponse{DashboardURL: dashboard})
@@ -73,12 +74,15 @@ func (h *Handlers) deprovisionWithEngine(c *gin.Context, instanceID, serviceID s
 
 	if err := h.engine.Engine.DeprovisionInstance(c.Request.Context(), sd, namespace, instanceID); err != nil {
 		if errors.Is(err, definition.ErrNotFound) {
+			h.observeDeprovision(serviceID, "gone")
 			c.JSON(http.StatusGone, gin.H{"error": "Gone", "description": "instance not found"})
 			return
 		}
+		h.observeDeprovision(serviceID, "error")
 		respondOSBError(c, err)
 		return
 	}
+	h.observeDeprovision(serviceID, "ok")
 	c.JSON(http.StatusOK, broker.DeprovisionResponse{})
 }
 
