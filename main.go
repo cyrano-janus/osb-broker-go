@@ -54,6 +54,12 @@ func main() {
 	h := handlers.New(b)
 	h.SetEngine(engineHolder)
 
+	// Prometheus metrics (Phase 4.3). Enabled by default; METRICS_ENABLED=0
+	// turns collection and the /metrics endpoint off.
+	if os.Getenv("METRICS_ENABLED") != "0" {
+		h.SetMetrics(handlers.NewMetrics())
+	}
+
 	// Basic Auth credentials (Phase 1.2). In Kubernetes these come from a
 	// Secret mounted as env vars. Both empty = auth disabled.
 	authUser := os.Getenv("BROKER_AUTH_USER")

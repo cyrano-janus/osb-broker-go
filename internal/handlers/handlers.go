@@ -19,12 +19,20 @@ type Handlers struct {
 	// Kubernetes these values are injected from a Secret via main().
 	authUser string
 	authPass string
+	// metrics is the Prometheus collector set; nil = metrics disabled.
+	metrics *Metrics
 }
 
 // SetEngine wires the Generic Engine (Phase 2). nil disables
 // definition-based services.
 func (h *Handlers) SetEngine(e *EngineHolder) {
 	h.engine = e
+}
+
+// SetMetrics enables Prometheus metrics collection and registers the
+// /metrics endpoint (unauthenticated).
+func (h *Handlers) SetMetrics(m *Metrics) {
+	h.metrics = m
 }
 
 // SetBasicAuthCredentials configures the Basic Auth credentials required on
@@ -56,6 +64,12 @@ func (h *Handlers) SetupRouter() *gin.Engine {
 
 	// Documentation endpoints (unauthenticated, outside /v2 and Basic Auth)
 	h.DocsRoutes(router)
+
+	// Prometheus metrics (unauthenticated, like healthz; scrape-internal).
+	if h.metrics != nil {
+		router.GET("/metrics", h.metrics.Handler())
+		router.Use(h.metrics.MetricsMiddleware())
+	}
 
 	// Basic Auth for all OSB endpoints (healthz exempt). No-op when no
 	// credentials are configured.

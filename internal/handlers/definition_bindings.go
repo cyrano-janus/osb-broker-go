@@ -32,6 +32,7 @@ func (h *Handlers) bindDefinition(c *gin.Context, instanceID, bindingID string, 
 		respondOSBError(c, err)
 		return
 	}
+	h.observeBind(req.ServiceID)
 
 	c.JSON(http.StatusCreated, broker.BindResponse{Credentials: creds})
 }

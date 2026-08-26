@@ -76,6 +76,7 @@ func (h *Handlers) UnbindServiceInstance(c *gin.Context) {
 	// Phase 2: definition-based services unbind via engine (secret is not
 	// deleted — it belongs to the operator).
 	if sd, _ := h.resolveDefinition(req.ServiceID); sd != nil {
+		h.observeUnbind(req.ServiceID)
 		c.JSON(http.StatusOK, broker.UnbindResponse{})
 		return
 	}
@@ -85,6 +86,7 @@ func (h *Handlers) UnbindServiceInstance(c *gin.Context) {
 		respondOSBError(c, err)
 		return
 	}
+	h.observeUnbind(serviceID)
 
 	c.JSON(http.StatusOK, response)
 }
