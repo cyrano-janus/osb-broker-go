@@ -39,6 +39,21 @@ type Instance struct {
 	Parameters   map[string]interface{}
 	DashboardURL string
 	Ready        bool
+	// AppliedObjects lists the K8s object names created for this instance
+	// (multi-doc, 4.6). Persisted via the StateStore so deprovision can
+	// remove every object even after a restart. Empty = single-doc legacy.
+	AppliedObjects []string
+	// AppliedRefs carries the same objects including their apiVersion/kind,
+	// which a multi-doc template may vary per document.
+	AppliedRefs []AppliedObjectRef
+}
+
+// AppliedObjectRef identifies one K8s object created for an instance.
+type AppliedObjectRef struct {
+	APIVersion string
+	Kind       string
+	Namespace  string
+	Name       string
 }
 
 // Binding represents a service binding

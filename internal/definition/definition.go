@@ -71,6 +71,24 @@ func (sd *ServiceDefinition) ValidatePlanParameters(planID string, parameters ma
 	return ValidatePlanParams(plan, parameters)
 }
 
+// ValidatePlanParams validates user-supplied parameters against the
+// plan's allowedParameters whitelist.
+func ValidatePlanParams(plan *Plan, parameters map[string]interface{}) error {
+	if len(parameters) == 0 {
+		return nil
+	}
+	allowed := make(map[string]bool, len(plan.AllowedParameters))
+	for _, k := range plan.AllowedParameters {
+		allowed[k] = true
+	}
+	for key := range parameters {
+		if !allowed[key] {
+			return fmt.Errorf("%w: parameter %q is not allowed in plan %q", ErrNotFound, key, plan.Name)
+		}
+	}
+	return nil
+}
+
 // Provision describes the custom resource to create per instance.
 type Provision struct {
 	APIVersion string `json:"apiVersion"`

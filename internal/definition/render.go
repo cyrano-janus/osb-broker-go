@@ -83,6 +83,9 @@ func (t TemplateData) lowerCase() map[string]interface{} {
 }
 
 // RenderProvision renders the provision CR manifest for an instance.
+// Templates may contain multiple YAML documents separated by `---`
+// (multi-doc, 4.6); the rendered output keeps the separator so
+// SplitManifests can slice it.
 func RenderProvision(sd *ServiceDefinition, instanceID string, planParams map[string]interface{}) (string, error) {
 	return renderTemplate(sd.Spec.Provision.Template, TemplateData{
 		InstanceID: instanceID,
@@ -93,6 +96,21 @@ func RenderProvision(sd *ServiceDefinition, instanceID string, planParams map[st
 		SafeName: SanitizeInstanceName(instanceID),
 		Plan:     planParams,
 	})
+}
+
+// SplitManifests slices a (possibly multi-document) YAML string into its
+// non-empty documents. Leading separators and blank documents are dropped;
+// each returned doc is trimmed and carries no leading `---`.
+func SplitManifests(in string) []string {
+	var docs []string
+	for _, part := range strings.Split(in, "\n---") {
+		d := strings.TrimSpace(part)
+		if d == "" {
+			continue
+		}
+		docs = append(docs, d)
+	}
+	return docs
 }
 
 // RenderSecretName renders the credentials secret name for an instance.

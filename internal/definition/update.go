@@ -2,16 +2,17 @@ package definition
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"reflect"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"sigs.k8s.io/yaml"
 )
 
 // UpdateInstance applies a plan change to an existing instance's CR:
-// re-render the provision template with the new plan's params and ApplyCR
-// (create-or-update). Returns done=true when the update was applied
-// synchronously; async flows are not used by this broker.
+// re-render the provision template with the new plan's params and apply
+// all documents (create-or-update). Returns done=true when the update was
+// applied synchronously; async flows are not used by this broker.
 func (e *Engine) UpdateInstance(ctx context.Context, serviceID, instanceID, namespace, planID string) (bool, error) {
 	sd, err := e.DefinitionByServiceID(serviceID)
 	if err != nil {
@@ -30,99 +31,95 @@ func (e *Engine) updateDefinition(ctx context.Context, sd *ServiceDefinition, in
 		return false, err
 	}
 
-	// No-op detection: if the live CR already matches the rendered desired
-	// state (spec + labels), do not touch it — a no-op PATCH still bumps
-	// resourceVersion and wakes up operator reconciles.
-	existing, err := e.op.GetCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, namespace, SanitizeInstanceName(instanceID))
-	if err == nil && crMatchesRendered(existing, rendered) {
+	// No-op detection: if every rendered document already matches its live
+	// object (content + labels), do not touch anything — a no-op write still
+	// bumps resourceVersion and wakes up operator reconciles.
+	upToDate, err := e.op.ManifestsUpToDate(ctx,
+		sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, namespace, rendered)
+	if err != nil {
+		return false, fmt.Errorf("update %s %q: %w", sd.Spec.Provision.Kind, instanceID, err)
+	}
+	if upToDate {
 		return true, nil
 	}
 
-	if err := e.op.ApplyCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, namespace, rendered); err != nil {
+	// Apply all documents (multi-doc aware). For single-doc this is identical
+	// to the previous ApplyCR path.
+	applied, err := e.op.ApplyManifestRefs(ctx,
+		sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, namespace, rendered)
+	if err != nil {
 		return false, fmt.Errorf("update %s %q: %w", sd.Spec.Provision.Kind, instanceID, err)
 	}
+
+	// Update the instance record with the new list of applied objects.
+	if e.reg != nil {
+		if rec, err := e.regGet(ctx, instanceID); err == nil {
+			rec.AppliedObjects = refNames(applied)
+			rec.AppliedRefs = applied
+			if err := e.reg.PutInstance(ctx, rec); err != nil {
+				return true, fmt.Errorf("record instance: %w", err)
+			}
+		}
+	}
+
 	return true, nil
 }
 
-// crMatchesRendered compares the live CR against the rendered manifest on
-// the fields the broker owns: metadata.labels and spec.
-func crMatchesRendered(live *unstructured.Unstructured, renderedYAML string) bool {
-	desired := &unstructured.Unstructured{}
-	if err := yaml.Unmarshal([]byte(renderedYAML), &desired.Object); err != nil {
-		return false // cannot prove equality → apply
-	}
-	liveSpec, okLive, _ := unstructured.NestedMap(live.Object, "spec")
-	wantSpec, okWant, _ := unstructured.NestedMap(desired.Object, "spec")
-	if okLive != okWant || !mapsEqual(liveSpec, wantSpec) {
+// crMatchesRendered compares a live object against the rendered desired state
+// on the fields the broker owns: metadata.labels plus every top-level content
+// field of the desired document. apiVersion/kind are already fixed by the
+// lookup, metadata is server-owned bookkeeping and status belongs to the
+// operator — all four are ignored.
+func crMatchesRendered(live, desired *unstructured.Unstructured) bool {
+	if !mapsEqual(live.GetLabels(), desired.GetLabels()) {
 		return false
 	}
-	liveLabels := live.GetLabels()
-	wantLabels := desired.GetLabels()
-	return mapsEqual(toIfaceMap(liveLabels), toIfaceMap(wantLabels))
-}
-
-func toIfaceMap(in map[string]string) map[string]interface{} {
-	out := make(map[string]interface{}, len(in))
-	for k, v := range in {
-		out[k] = v
-	}
-	return out
-}
-
-func mapsEqual(a, b map[string]interface{}) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for k, av := range a {
-		bv, ok := b[k]
-		if !ok {
-			return false
-		}
-		// Numeric normalization: JSON/YAML paths produce float64/int64/int.
-		an, aIsNum := toFloat(av)
-		bn, bIsNum := toFloat(bv)
-		if aIsNum && bIsNum {
-			if an != bn {
-				return false
-			}
+	for key, want := range desired.Object {
+		switch key {
+		case "apiVersion", "kind", "metadata", "status":
 			continue
 		}
-		if fmt.Sprint(av) != fmt.Sprint(bv) {
+		if !valuesEqual(live.Object[key], want) {
 			return false
 		}
 	}
 	return true
 }
 
-func toFloat(v interface{}) (float64, bool) {
-	switch n := v.(type) {
-	case int64:
-		return float64(n), true
-	case int:
-		return float64(n), true
-	case float64:
-		return n, true
-	default:
-		return 0, false
+// mapsEqual compares two string maps, treating nil and empty as equal.
+func mapsEqual(a, b map[string]string) bool {
+	if len(a) != len(b) {
+		return false
 	}
-}
-
-// ValidatePlanParams rejects user-supplied parameters that the plan does not
-// explicitly allow via allowedParameters. Plan params are operator-managed
-// sizing knobs — unknown keys are almost always typos or injection attempts.
-// `parameters` may be nil.
-func ValidatePlanParams(plan *Plan, parameters map[string]interface{}) error {
-	if len(parameters) == 0 {
-		return nil
-	}
-	allowed := make(map[string]bool, len(plan.AllowedParameters))
-	for _, k := range plan.AllowedParameters {
-		allowed[k] = true
-	}
-	for key := range parameters {
-		if !allowed[key] {
-			return fmt.Errorf("%w: parameter %q is not allowed in plan %q", ErrNotFound, key, plan.Name)
+	for k, av := range a {
+		if bv, ok := b[k]; !ok || av != bv {
+			return false
 		}
 	}
-	return nil
+	return true
+}
+
+// valuesEqual deep-compares two unstructured values. Both sides are pushed
+// through JSON first: YAML decoding and the API server hand back the same
+// number as int64 or float64 depending on the path, and only normalization
+// makes `instances: 3` compare equal to itself.
+func valuesEqual(a, b interface{}) bool {
+	na, errA := normalizeJSON(a)
+	nb, errB := normalizeJSON(b)
+	if errA != nil || errB != nil {
+		return false // cannot prove equality → treat as changed
+	}
+	return reflect.DeepEqual(na, nb)
+}
+
+func normalizeJSON(v interface{}) (interface{}, error) {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	var out interface{}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
