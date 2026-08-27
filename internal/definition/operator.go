@@ -162,3 +162,166 @@ func jsonField(u *unstructured.Unstructured, field string) string {
 	b, _ := json.Marshal(u.UnstructuredContent()[field])
 	return string(b)
 }
+
+// ObjectRef identifies a single applied object by its own GVK, namespace and
+// name. A multi-doc template may mix kinds, so the GVK of an applied object
+// cannot be inferred from the definition's provision header at delete time —
+// it has to be remembered per object.
+type ObjectRef struct {
+	APIVersion string `json:"apiVersion"`
+	Kind       string `json:"kind"`
+	Namespace  string `json:"namespace,omitempty"`
+	Name       string `json:"name"`
+}
+
+// decodeManifests splits a (possibly multi-document) rendered YAML string and
+// decodes every document into an unstructured object. Documents that omit
+// apiVersion/kind/namespace inherit the passed defaults; a document without
+// metadata.name is rejected.
+func decodeManifests(defaultAPIVersion, defaultKind, namespace, rendered string) ([]*unstructured.Unstructured, error) {
+	docs := SplitManifests(rendered)
+	objs := make([]*unstructured.Unstructured, 0, len(docs))
+	for _, doc := range docs {
+		obj := &unstructured.Unstructured{}
+		if err := yaml.Unmarshal([]byte(doc), &obj.Object); err != nil {
+			return nil, fmt.Errorf("decode rendered manifest: %w", err)
+		}
+		if obj.GetAPIVersion() == "" {
+			obj.SetAPIVersion(defaultAPIVersion)
+		}
+		if obj.GetKind() == "" {
+			obj.SetKind(defaultKind)
+		}
+		if obj.GetNamespace() == "" {
+			obj.SetNamespace(namespace)
+		}
+		if obj.GetName() == "" {
+			return nil, fmt.Errorf("manifest without metadata.name (kind %s)", obj.GetKind())
+		}
+		objs = append(objs, obj)
+	}
+	return objs, nil
+}
+
+// ApplyManifests applies a (possibly multi-document) rendered YAML string and
+// returns the applied object names in document order. Convenience wrapper
+// around ApplyManifestRefs for callers that only track names.
+func (o *OperatorClient) ApplyManifests(ctx context.Context, defaultAPIVersion, defaultKind, namespace, rendered string) ([]string, error) {
+	refs, err := o.ApplyManifestRefs(ctx, defaultAPIVersion, defaultKind, namespace, rendered)
+	return refNames(refs), err
+}
+
+// ApplyManifestRefs applies every document of a rendered manifest in order
+// (create-or-update, same semantics as ApplyCR) and returns one reference per
+// applied object. The per-doc apiVersion/kind from the manifest win over the
+// defaults, so the refs describe what was really created.
+func (o *OperatorClient) ApplyManifestRefs(ctx context.Context, defaultAPIVersion, defaultKind, namespace, rendered string) ([]ObjectRef, error) {
+	objs, err := decodeManifests(defaultAPIVersion, defaultKind, namespace, rendered)
+	if err != nil {
+		return nil, err
+	}
+	var applied []ObjectRef
+	for _, obj := range objs {
+		existing := &unstructured.Unstructured{}
+		existing.SetGroupVersionKind(obj.GroupVersionKind())
+		err := o.Client.Get(ctx, client.ObjectKeyFromObject(obj), existing)
+		switch {
+		case apierrors.IsNotFound(err):
+			if err := o.Client.Create(ctx, obj); err != nil && !apierrors.IsAlreadyExists(err) {
+				return applied, fmt.Errorf("create %s %q: %w", obj.GetKind(), obj.GetName(), err)
+			}
+		case err != nil:
+			return applied, fmt.Errorf("get %s %q: %w", obj.GetKind(), obj.GetName(), err)
+		default:
+			obj.SetResourceVersion(existing.GetResourceVersion())
+			if err := o.Client.Update(ctx, obj); err != nil {
+				return applied, fmt.Errorf("update %s %q: %w", obj.GetKind(), obj.GetName(), err)
+			}
+		}
+		applied = append(applied, ObjectRef{
+			APIVersion: obj.GetAPIVersion(),
+			Kind:       obj.GetKind(),
+			Namespace:  obj.GetNamespace(),
+			Name:       obj.GetName(),
+		})
+	}
+	return applied, nil
+}
+
+// ManifestsUpToDate reports whether every document of the rendered manifest
+// already exists in the cluster carrying the desired state. Callers use it to
+// skip no-op updates: even a write that changes nothing bumps resourceVersion
+// and wakes up the operator's reconcile loop. Anything that cannot be proven
+// equal (missing object, unreadable, differing content) yields false — the
+// safe answer is to apply.
+func (o *OperatorClient) ManifestsUpToDate(ctx context.Context, defaultAPIVersion, defaultKind, namespace, rendered string) (bool, error) {
+	objs, err := decodeManifests(defaultAPIVersion, defaultKind, namespace, rendered)
+	if err != nil {
+		return false, err
+	}
+	if len(objs) == 0 {
+		return false, nil
+	}
+	for _, want := range objs {
+		live := &unstructured.Unstructured{}
+		live.SetGroupVersionKind(want.GroupVersionKind())
+		if err := o.Client.Get(ctx, client.ObjectKeyFromObject(want), live); err != nil {
+			return false, nil
+		}
+		if !crMatchesRendered(live, want) {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// DeleteManifestsByNames removes previously applied objects that all share the
+// given GVK. Used for records written before applied refs were tracked; new
+// records go through DeleteManifestRefs.
+func (o *OperatorClient) DeleteManifestsByNames(ctx context.Context, defaultAPIVersion, defaultKind, namespace string, names []string) ([]string, error) {
+	refs := make([]ObjectRef, 0, len(names))
+	for _, name := range names {
+		refs = append(refs, ObjectRef{APIVersion: defaultAPIVersion, Kind: defaultKind, Name: name})
+	}
+	return o.DeleteManifestRefs(ctx, namespace, refs)
+}
+
+// DeleteManifestRefs removes previously applied objects, each by its own GVK,
+// so multi-doc templates with MIXED kinds (e.g. a ConfigMap plus a custom
+// resource) are fully cleaned up. Missing objects are tolerated (idempotent
+// delete). Returns the names actually processed.
+func (o *OperatorClient) DeleteManifestRefs(ctx context.Context, namespace string, refs []ObjectRef) ([]string, error) {
+	var deleted []string
+	for _, ref := range refs {
+		gv, err := schema.ParseGroupVersion(ref.APIVersion)
+		if err != nil {
+			return deleted, fmt.Errorf("parse apiVersion %q: %w", ref.APIVersion, err)
+		}
+		obj := &unstructured.Unstructured{}
+		obj.SetGroupVersionKind(gv.WithKind(ref.Kind))
+		obj.SetName(ref.Name)
+		if ref.Namespace != "" {
+			obj.SetNamespace(ref.Namespace)
+		} else {
+			obj.SetNamespace(namespace)
+		}
+
+		if err := o.Client.Delete(ctx, obj); err != nil && !apierrors.IsNotFound(err) {
+			return deleted, fmt.Errorf("delete %s %q: %w", ref.Kind, ref.Name, err)
+		}
+		deleted = append(deleted, ref.Name)
+	}
+	return deleted, nil
+}
+
+// refNames projects the names out of a ref list (document order preserved).
+func refNames(refs []ObjectRef) []string {
+	if len(refs) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(refs))
+	for _, r := range refs {
+		names = append(names, r.Name)
+	}
+	return names
+}

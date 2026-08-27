@@ -25,6 +25,8 @@ type Engine struct {
 type InstanceRegistry interface {
 	PutInstance(ctx context.Context, inst *InstanceRecord) error
 	DeleteInstance(ctx context.Context, instanceID string) error
+	// GetInstance returns the record for the instance (registry lookup).
+	GetInstance(ctx context.Context, instanceID string) (*InstanceRecord, error)
 }
 
 // InstanceRecord is a minimal instance record persisted by the registry.
@@ -32,12 +34,30 @@ type InstanceRecord struct {
 	ID        string `json:"id"`
 	ServiceID string `json:"serviceId"`
 	PlanID    string `json:"planId"`
+	// AppliedObjects lists the K8s object names created for this instance
+	// (multi-doc, 4.6). Single-doc templates produce exactly one entry.
+	// Deprovision uses it to remove every object; empty = legacy behaviour
+	// (delete the single sanitized safeName CR).
+	AppliedObjects []string `json:"appliedObjects,omitempty"`
+	// AppliedRefs carries the same objects including their own GVK. A
+	// multi-doc template may mix kinds, so deprovision cannot fall back to
+	// the definition's provision apiVersion/kind for every name.
+	AppliedRefs []ObjectRef `json:"appliedRefs,omitempty"`
 }
 
 // SetInstanceRegistry attaches an instance registry (broker state store
 // adapter). Optional — without it the engine does no bookkeeping.
 func (e *Engine) SetInstanceRegistry(reg InstanceRegistry) {
 	e.reg = reg
+}
+
+// regGet looks up the instance record; error when no registry is wired or
+// the record does not exist.
+func (e *Engine) regGet(ctx context.Context, instanceID string) (*InstanceRecord, error) {
+	if e.reg == nil {
+		return nil, ErrNotFound
+	}
+	return e.reg.GetInstance(ctx, instanceID)
 }
 
 // NewEngine wires definitions with the operator client (nil client is only
@@ -118,15 +138,23 @@ func (e *Engine) provisionDefinition(ctx context.Context, sd *ServiceDefinition,
 	if err != nil {
 		return err
 	}
-	if err := e.op.ApplyCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, namespace, rendered); err != nil {
+	// Multi-doc aware apply: every document in the template is applied in
+	// order. Single-doc templates produce exactly one object — identical
+	// behaviour to the previous ApplyCR path.
+	applied, err := e.op.ApplyManifestRefs(ctx,
+		sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, namespace, rendered)
+	if err != nil {
 		return err
 	}
-	// Record the instance so deprovision/bind existence checks work.
+	// Record the instance so deprovision/bind existence checks work. The
+	// applied-object list enables multi-doc deprovision.
 	if e.reg != nil {
 		if err := e.reg.PutInstance(ctx, &InstanceRecord{
-			ID:        instanceID,
-			ServiceID: sd.Spec.Offering.ID,
-			PlanID:    planID,
+			ID:             instanceID,
+			ServiceID:      sd.Spec.Offering.ID,
+			PlanID:         planID,
+			AppliedObjects: refNames(applied),
+			AppliedRefs:    applied,
 		}); err != nil {
 			return fmt.Errorf("record instance: %w", err)
 		}
@@ -134,12 +162,37 @@ func (e *Engine) provisionDefinition(ctx context.Context, sd *ServiceDefinition,
 	return nil
 }
 
-// DeprovisionInstance deletes the instance's CR (name = sanitized safe name,
-// consistent with ProvisionInstance) and removes the instance record.
+// DeprovisionInstance removes all objects created for the instance and
+// clears the instance record. For single-doc templates this degrades to
+// deleting the one sanitized safeName CR (legacy behaviour).
 func (e *Engine) DeprovisionInstance(ctx context.Context, sd *ServiceDefinition, namespace, instanceID string) error {
-	if err := e.op.DeleteCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, namespace, SanitizeInstanceName(instanceID)); err != nil {
-		return err
+	safeName := SanitizeInstanceName(instanceID)
+
+	var rec *InstanceRecord
+	if r, err := e.regGet(ctx, instanceID); err == nil {
+		rec = r
 	}
+
+	switch {
+	case rec != nil && len(rec.AppliedRefs) > 0:
+		// Multi-doc: delete every object by its own GVK.
+		if _, err := e.op.DeleteManifestRefs(ctx, namespace, rec.AppliedRefs); err != nil {
+			return err
+		}
+	case rec != nil && len(rec.AppliedObjects) > 0:
+		// Record written before refs were tracked: all objects are assumed to
+		// carry the definition's provision GVK.
+		if _, err := e.op.DeleteManifestsByNames(ctx,
+			sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, namespace, rec.AppliedObjects); err != nil {
+			return err
+		}
+	default:
+		// Legacy single-doc: nothing recorded (old records or registry off).
+		if err := e.op.DeleteCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, namespace, safeName); err != nil {
+			return err
+		}
+	}
+
 	if e.reg != nil {
 		if err := e.reg.DeleteInstance(ctx, instanceID); err != nil {
 			return fmt.Errorf("remove instance record: %w", err)
