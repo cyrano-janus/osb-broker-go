@@ -20,7 +20,9 @@ func TestLoad_Defaults(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "8080", c.Port)
-	assert.Equal(t, "", c.StoreBackend)
+	// Leer bedeutet jetzt ausdruecklich "memory" statt eines Leerwerts, der
+	// sich erst im Auswahl-switch als In-Memory herausstellte.
+	assert.Equal(t, BackendMemory, c.StoreBackend)
 	assert.True(t, c.MetricsEnabled, "metrics are on unless explicitly disabled")
 
 	assert.Equal(t, 10*time.Second, c.Server.ReadHeaderTimeout)
@@ -60,14 +62,46 @@ func TestLoad_BasicAuthOnlyIsUnchanged(t *testing.T) {
 	assert.True(t, c.AuthEnabled())
 }
 
-func TestLoad_StoreBackendK8sRequiresNamespace(t *testing.T) {
-	_, err := LoadFrom(env(map[string]string{"STORE_BACKEND": "k8s"}))
+func TestLoad_StoreBackendCRDRequiresNamespace(t *testing.T) {
+	_, err := LoadFrom(env(map[string]string{"STORE_BACKEND": "crd"}))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "POD_NAMESPACE")
 
-	c, err := LoadFrom(env(map[string]string{"STORE_BACKEND": "k8s", "POD_NAMESPACE": "osb"}))
+	c, err := LoadFrom(env(map[string]string{"STORE_BACKEND": "crd", "POD_NAMESPACE": "osb"}))
 	require.NoError(t, err)
 	assert.Equal(t, "osb", c.PodNamespace)
+	assert.Equal(t, BackendCRD, c.StoreBackend)
+}
+
+func TestLoad_StoreBackendK8sIstAliasFuerCRD(t *testing.T) {
+	// Der ConfigMap-Store hiess "k8s". Deployments, die den Wert gesetzt
+	// haben, duerfen nicht still auf In-Memory zurueckfallen - das waere
+	// stiller Datenverlust beim Upgrade.
+	c, err := LoadFrom(env(map[string]string{"STORE_BACKEND": "k8s", "POD_NAMESPACE": "osb"}))
+	require.NoError(t, err)
+	assert.Equal(t, BackendCRD, c.StoreBackend)
+	assert.Contains(t, joined(c.Warnings), "STORE_BACKEND=k8s")
+}
+
+func TestLoad_UnbekanntesStoreBackendIstEinFehler(t *testing.T) {
+	// Vorher fiel jeder unbekannte Wert - auch ein Tippfehler - still auf
+	// In-Memory zurueck. Der Broker lief dann scheinbar normal und verlor
+	// beim naechsten Neustart alle Instanzen.
+	_, err := LoadFrom(env(map[string]string{"STORE_BACKEND": "configmap"}))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "STORE_BACKEND")
+}
+
+func TestLoad_StoreBackendMemoryBleibtErlaubt(t *testing.T) {
+	c, err := LoadFrom(env(map[string]string{"STORE_BACKEND": "memory"}))
+	require.NoError(t, err)
+	assert.Equal(t, BackendMemory, c.StoreBackend)
+
+	// Leer bleibt der Default fuer lokale Laeufe und Tests.
+	c, err = LoadFrom(env(nil))
+	require.NoError(t, err)
+	assert.Equal(t, BackendMemory, c.StoreBackend)
+	assert.Contains(t, joined(c.Warnings), "in-memory")
 }
 
 func TestLoad_TLSRequiresCertAndKey(t *testing.T) {
