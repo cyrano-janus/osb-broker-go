@@ -2,7 +2,7 @@
 
 [![Go Version](https://img.shields.io/badge/go-1.22-blue.svg)](https://golang.org)
 [![OSB API](https://img.shields.io/badge/OSB%20API-2.17-green.svg)](https://github.com/openservicebrokerapi/servicebroker/blob/v2.17/spec.md)
-[![Tests](https://img.shields.io/badge/tests-236%20total-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-248%20total-brightgreen.svg)]()
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)]()
 
 > **Open Service Broker 2.17 in Go — Phase 1 + 2 der Roadmap abgeschlossen,
@@ -228,6 +228,39 @@ cf delete-service -f my-db                         # löscht den Cluster
 | `SERVER_WRITE_TIMEOUT` | `60s` |
 | `SERVER_IDLE_TIMEOUT` | `120s` |
 | `SERVER_SHUTDOWN_TIMEOUT` | `15s` |
+
+---
+
+## 🗂️ Namespaces und Mandantentrennung
+
+Die Backing-Ressourcen einer Instanz liegen im **Namespace des Cloud-Foundry-Space**,
+nicht in einem gemeinsamen Sammelnamespace. Korifi legt seine Space-Namespaces
+unter der Space-GUID an; genau darauf bildet der Broker ab.
+
+```bash
+kubectl get cluster.postgresql.cnpg.io -n <space-guid>
+kubectl get osbi -n osb-broker -o custom-columns=NAME:.metadata.name,NS:.spec.namespace
+```
+
+Ohne Space-GUID — Plattformen ohne Space-Begriff — bleibt es bei `default`.
+
+**Woher die Space-GUID kommt.** Die OSB-Spezifikation kennt zwei Wege: das
+verschachtelte `context`-Objekt und die Top-Level-Felder `space_guid` /
+`organization_guid` aus OSB ≤ 2.12. Letztere gelten als veraltet, werden von
+Cloud Foundry aber weiter gesendet — Korifi sogar ausschließlich. Der Broker
+wertet beide aus, `context` hat Vorrang.
+
+**Warum der Namespace gespeichert wird.** Aus einem Deprovision-,
+`last_operation`-, Update- oder Bind-Request ist er grundsätzlich nicht
+herleitbar: keiner davon trägt `context` oder `space_guid`. Er steht deshalb im
+Instanz-Datensatz (`spec.namespace`). Für Datensätze, die vor dieser Änderung
+entstanden sind, greift als zweite Stufe der Namespace der angelegten Objekte,
+danach `default`.
+
+**RBAC.** Der Broker braucht damit Rechte auf die Operator-CRDs in allen
+Space-Namespaces — das deckt die ClusterRole des Charts (`rbac.operatorCRDs`)
+bereits ab. Feiner geschnitten ginge es erst, wenn die Menge der Spaces vorab
+bekannt wäre.
 
 ---
 
