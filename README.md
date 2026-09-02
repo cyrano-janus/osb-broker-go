@@ -2,7 +2,7 @@
 
 [![Go Version](https://img.shields.io/badge/go-1.22-blue.svg)](https://golang.org)
 [![OSB API](https://img.shields.io/badge/OSB%20API-2.17-green.svg)](https://github.com/openservicebrokerapi/servicebroker/blob/v2.17/spec.md)
-[![Tests](https://img.shields.io/badge/tests-97%20total-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-174%20total-brightgreen.svg)]()
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)]()
 
 > **Open Service Broker 2.17 in Go — Phase 1 + 2 der Roadmap abgeschlossen,
@@ -128,8 +128,14 @@ kubectl rollout status deployment/osb-broker-go -n osb
 ### Bei Cloud Foundry registrieren
 
 ```bash
+# Über TLS (Deployment-Default). Voraussetzung: Korifi vertraut der CA des
+# Broker-Zertifikats - siehe docs/tls-korifi.md.
 cf create-service-broker go-reference-broker broker-user broker-secret \
-  "http://osb-broker-go.osb.svc.cluster.local"   # http:// ist Pflicht!
+  "https://osb-broker-go.osb.svc.cluster.local"
+
+# Bestehende http://-Registrierung umziehen:
+# cf update-service-broker go-reference-broker broker-user broker-secret \
+#   "https://osb-broker-go.osb.svc.cluster.local"
 
 cf enable-service-access cnpg-postgresql -b go-reference-broker
 cf marketplace
@@ -158,6 +164,118 @@ cf delete-service -f my-db                         # löscht den Cluster
 | `DEFINITIONS_DIR` | — | Verzeichnis mit ServiceDefinition-YAMLs (`/definitions` im Deployment) |
 | `BROKER_AUTH_USER` | — | Basic-Auth-User (mit `BROKER_AUTH_PASSWORD` setzen) |
 | `BROKER_AUTH_PASSWORD` | — | Basic-Auth-Passwort |
+| `METRICS_ENABLED` | *(an)* | Nur der exakte Wert `0` schaltet `/metrics` ab |
+
+### TLS und Authentifizierung (Phase 4.5)
+
+| Variable | Default | Bedeutung |
+|----------|---------|-----------|
+| `TLS_ENABLED` | `false` | HTTPS-Listener; im Helm-Chart per Default **an** |
+| `TLS_CERT_FILE` / `TLS_KEY_FILE` | — | Pflicht bei `TLS_ENABLED=true` |
+| `TLS_MIN_VERSION` | `1.2` | `1.2` oder `1.3` |
+| `TLS_RELOAD_INTERVAL` | `30s` | Poll-Intervall für Zertifikatsrotation; `0` schaltet ab |
+| `AUTH_REALM` | `osb-broker` | Realm im `WWW-Authenticate`-Header |
+| `AUTH_METHODS` | *(abgeleitet)* | CSV `basic,mtls`; leer = alles aktiv, was konfiguriert ist |
+| `MTLS_ENABLED` | `false` | Client-Zertifikats-Authentifizierung (braucht `TLS_ENABLED`) |
+| `MTLS_CLIENT_CA_FILE` | — | PEM-Bundle, gegen das Client-Zertifikate geprüft werden |
+| `MTLS_REQUIRE` | `false` | `true` erzwingt Client-Zertifikate auf TLS-Ebene — siehe Warnung unten |
+| `MTLS_ALLOWED_CNS` | — | CSV-Allowlist auf den Common Name |
+| `MTLS_ALLOWED_DNS_NAMES` | — | CSV-Allowlist auf DNS-SANs |
+| `MTLS_ALLOWED_URIS` | — | CSV-Allowlist auf URI-SANs (z. B. `spiffe://osb/checker`) |
+
+### Server-Timeouts
+
+| Variable | Default |
+|----------|---------|
+| `SERVER_READ_HEADER_TIMEOUT` | `10s` |
+| `SERVER_READ_TIMEOUT` | `30s` |
+| `SERVER_WRITE_TIMEOUT` | `60s` |
+| `SERVER_IDLE_TIMEOUT` | `120s` |
+| `SERVER_SHUTDOWN_TIMEOUT` | `15s` |
+
+---
+
+## 🔐 TLS und mTLS
+
+Der Broker liefert produktive Datenbank-Credentials aus. Seit Phase 4.5
+terminiert er TLS selbst; das Helm-Chart deployt per Default über HTTPS.
+
+**Die Methoden sind gleichrangig — eine genügt.** Cloud Foundry schickt Basic
+Auth, zertifikatsbasierte Clients kommen über mTLS. Ein `401` nennt im
+`WWW-Authenticate`-Header die aktiven HTTP-Challenges; mTLS taucht dort nicht
+auf, weil es unterhalb von HTTP stattfindet.
+
+Immer unauthentifiziert, damit Probes und Scrapes funktionieren:
+`/healthz`, `/metrics`, `/openapi.yaml`, `/schemas/service-definition.schema.json`.
+
+### Lokal ausprobieren
+
+```bash
+mkdir -p /tmp/osbcerts && cd /tmp/osbcerts
+openssl req -x509 -newkey rsa:2048 -nodes -days 1 -sha256 \
+  -keyout ca.key -out ca.crt -subj "/CN=osb-ca"
+openssl req -newkey rsa:2048 -nodes -keyout tls.key -out server.csr \
+  -subj "/CN=osb-broker-go"
+openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
+  -days 1 -sha256 -out tls.crt \
+  -extfile <(printf "subjectAltName=DNS:localhost,IP:127.0.0.1\nextendedKeyUsage=serverAuth\n")
+openssl req -newkey rsa:2048 -nodes -keyout client.key -out client.csr \
+  -subj "/CN=osb-checker"
+openssl x509 -req -in client.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
+  -days 1 -sha256 -out client.crt \
+  -extfile <(printf "extendedKeyUsage=clientAuth\n")
+
+cd -
+TLS_ENABLED=true TLS_CERT_FILE=/tmp/osbcerts/tls.crt TLS_KEY_FILE=/tmp/osbcerts/tls.key \
+MTLS_ENABLED=true MTLS_CLIENT_CA_FILE=/tmp/osbcerts/ca.crt MTLS_ALLOWED_CNS=osb-checker \
+BROKER_AUTH_USER=u BROKER_AUTH_PASSWORD=p PORT=8443 ./broker
+```
+
+```bash
+curl --cacert /tmp/osbcerts/ca.crt https://localhost:8443/healthz            # 200, ohne alles
+curl --cacert /tmp/osbcerts/ca.crt https://localhost:8443/v2/catalog          # 401
+curl --cacert /tmp/osbcerts/ca.crt -u u:p \
+     -H 'X-Broker-API-Version: 2.17' https://localhost:8443/v2/catalog        # 200 per Basic
+curl --cacert /tmp/osbcerts/ca.crt --cert /tmp/osbcerts/client.crt \
+     --key /tmp/osbcerts/client.key \
+     -H 'X-Broker-API-Version: 2.17' https://localhost:8443/v2/catalog        # 200 per mTLS
+```
+
+### Zertifikatsrotation
+
+Zertifikat und Client-CA werden alle `TLS_RELOAD_INTERVAL` neu eingelesen —
+**ohne Pod-Neustart**. Deshalb trägt das TLS-Secret im Chart bewusst *keine*
+`checksum`-Annotation. Erkannt wird die Rotation über Inhalts-Digests, nicht
+über inotify: Kubernetes tauscht Secret-Volumes über einen `..data`-Symlink,
+und ein Watch auf dem Blattpfad feuert danach nicht mehr.
+
+Ein fehlgeschlagener Reload behält das letzte gute Material und loggt nur —
+eine halb geschriebene Datei darf den Listener nie abreißen.
+
+### Warnung zu `MTLS_REQUIRE=true`
+
+Der strikte Modus (`RequireAndVerifyClientCert`) bricht den **Handshake** ab,
+wenn kein Client-Zertifikat vorliegt — vor jeder Middleware. Das trifft das
+Kubelet auf `/healthz` und einen Prometheus-Scrape auf `/metrics`, die beide
+keins schicken. Das Chart stellt die Probes deshalb automatisch auf
+`tcpSocket` um, sobald `auth.mtls.required` gesetzt ist; Prometheus braucht
+dann ein eigenes Zertifikat. Default ist deshalb der optionale Modus
+(`VerifyClientCertIfGiven`): ein vorgelegtes Zertifikat wird voll verifiziert,
+sein Fehlen lässt Basic Auth greifen.
+
+### Allowlist ist Autorisierung, nicht Authentifizierung
+
+Ein Common Name ist vom Antragsteller gewählter Text, den **jede** CA im Pool
+signieren kann. `MTLS_CLIENT_CA_FILE` gehört deshalb eng gehalten (eine
+interne CA, nie der System-Pool), und SANs sind dem CN vorzuziehen. Sind alle
+drei Allowlists leer, wird jedes von dieser CA signierte Zertifikat
+akzeptiert — der Broker warnt dann beim Start.
+
+### Korifi
+
+Korifi validiert Broker-Zertifikate per Default und kennt keinen Wert für
+eine broker-spezifische CA. Die Einrichtung steht in
+[docs/tls-korifi.md](docs/tls-korifi.md).
 
 ---
 
@@ -247,8 +365,17 @@ Kandidaten für weitere Definitionen (Beitrag = eine YAML):
 
 ## 🗺️ Nächste Schritte (Roadmap v2.3)
 
+- ✅ **Phase 4.5 — TLS/mTLS**: Der Broker terminiert TLS selbst
+  (Hot-Reload bei Rotation, ohne Pod-Neustart), authentifiziert wahlweise
+  per Basic Auth oder Client-Zertifikat mit CN/SAN-Allowlist, und bringt
+  echten `http.Server` mit Timeouts und Graceful Shutdown mit. Eigenes
+  CI-Gate (L2b) fährt die 24 Conformance-Checks über HTTPS mit
+  Client-Zertifikat. **OAuth2 bewusst nicht gebaut**: der Broker soll ohne
+  IdP betreibbar bleiben, ein JWT-Validator ohne konkreten IdP wäre Code
+  auf Vorrat. Die `Authenticator`-Schnittstelle ist der Einstiegspunkt,
+  falls er später kommt.
 - **Phase 4**: Helm Chart, CI mit osb-checker als Conformance-Gate,
-  Prometheus-Metriken, optional mTLS/OAuth2
+  Prometheus-Metriken
   - ✅ OpenAPI-Doku: `GET /openapi.yaml` (volle OSB-API-Spec) und
     `GET /schemas/service-definition.schema.json` — unauthentifiziert,
     zur Compile-Zeit ins Binary eingebettet

@@ -13,9 +13,28 @@ info:
     for `last_operation`.
 
 
-    **Authentication:** HTTP Basic Auth on all `/v2/*` endpoints.
+    **Authentication:** all `/v2/*` endpoints require credentials. Two
 
-    `GET /healthz` is unauthenticated (Kubernetes probes).
+    methods can be active at the same time and any one of them succeeding
+
+    is enough: HTTP Basic Auth, and a TLS client certificate (mTLS) whose
+
+    identity is on the broker's allowlist. Which methods are enabled is
+
+    deployment configuration; a `401` advertises the enabled HTTP
+
+    challenges in `WWW-Authenticate`. mTLS is a transport-level scheme and
+
+    therefore not expressible as an OpenAPI 3.0 security scheme - it is
+
+    documented here in prose.
+
+
+    `GET /healthz`, `GET /metrics`, `GET /openapi.yaml` and
+
+    `GET /schemas/service-definition.schema.json` are always
+
+    unauthenticated (Kubernetes probes, Prometheus scrape, documentation).
 
 
     **API Version:** every request must send `X-Broker-API-Version: 2.17`.
@@ -26,10 +45,12 @@ info:
     name: cyrano-janus
     url: https://github.com/cyrano-janus/osb-broker-go
 servers:
+- url: https://osb-broker-go.osb.svc.cluster.local
+  description: In-cluster service (TLS, the deployed default)
+- url: https://localhost:8443
+  description: Local broker with TLS enabled
 - url: http://localhost:8080
-  description: Local broker
-- url: http://osb-broker-go.osb.svc.cluster.local
-  description: In-cluster service (Korifi/kind default)
+  description: Local broker without TLS (development)
 tags:
 - name: Catalog
 - name: Service Instances
