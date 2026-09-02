@@ -2,7 +2,7 @@
 
 [![Go Version](https://img.shields.io/badge/go-1.22-blue.svg)](https://golang.org)
 [![OSB API](https://img.shields.io/badge/OSB%20API-2.17-green.svg)](https://github.com/openservicebrokerapi/servicebroker/blob/v2.17/spec.md)
-[![Tests](https://img.shields.io/badge/tests-174%20total-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-199%20total-brightgreen.svg)]()
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)]()
 
 > **Open Service Broker 2.17 in Go — Phase 1 + 2 der Roadmap abgeschlossen,
@@ -27,6 +27,16 @@ Datenbank-Store, keine Abhängigkeit von einem fremden Deployment.
 | Live gegen Korifi auf kind | ✅ Registrierung, Marketplace, `cf create-service` |
 | **Generic Engine E2E** | ✅ `cf create-service cnpg-postgresql large my-real-pg` erzeugte einen echten CloudNativePG-Cluster (3 Instanzen, 10Gi), `psql` im Pod antwortet „E2E OK", echte Credentials aus Operator-Secret `<id>-app` |
 | Pod-Restart-Persistenz | ✅ Instances/Bindings in ConfigMap `osb-broker-state`, überleben Kill & Rescheduling |
+
+### State-Store-Nachweis (02.09.2026)
+
+| Nachweis | Ergebnis |
+|----------|----------|
+| Conformance gegen den CRD-Store | ✅ 24/24 im kind-Cluster gegen echtes RBAC, über das Helm-Chart deployt |
+| Sichtbarkeit | ✅ `kubectl get osbi` / `osbb` zeigt Instanz und Binding mit Service, Plan und Ready |
+| Credentials getrennt | ✅ Nicht im Binding-CR, sondern in einem Secret mit OwnerReference darauf |
+| Neustart-Persistenz | ✅ Instanz, Binding und Credentials überleben das Löschen des Pods |
+| Kontext vollständig | ✅ `platform`, `spaceGuid`, `organizationGuid` werden abgebildet |
 
 ### TLS/mTLS-Nachweis (02.09.2026)
 
@@ -59,7 +69,7 @@ steht in [docs/tls-korifi.md](docs/tls-korifi.md).
 
 **Production Basics (Phase 1)**
 
-- Persistenz: ConfigMap-StateStore (kein SQL), Restart-E2E bewiesen
+- Persistenz: CRD-StateStore (kein SQL), Restart-E2E bewiesen
 - Basic Auth: konstantzeitvergleichen, Secret-Injection, `/healthz` ausgenommen
 - JSON-Logging mit UUID-Correlation-ID (`X-Correlation-ID`) und Audit-
   Identity (`X-OSB-Originating-Identity`)
@@ -173,8 +183,8 @@ cf delete-service -f my-db                         # löscht den Cluster
 | Variable | Default | Bedeutung |
 |----------|---------|-----------|
 | `PORT` | `8080` | HTTP-Listenport |
-| `STORE_BACKEND` | *(leer = memory)* | `k8s` aktiviert den ConfigMap-StateStore |
-| `POD_NAMESPACE` | — | Pflicht bei `STORE_BACKEND=k8s`; Namespace der State-ConfigMap |
+| `STORE_BACKEND` | `memory` | `crd` aktiviert den persistenten Store; ein unbekannter Wert ist ein Startfehler |
+| `POD_NAMESPACE` | — | Pflicht bei `STORE_BACKEND=crd`; Namespace der State-Objekte |
 | `DEFINITIONS_DIR` | — | Verzeichnis mit ServiceDefinition-YAMLs (`/definitions` im Deployment) |
 | `BROKER_AUTH_USER` | — | Basic-Auth-User (mit `BROKER_AUTH_PASSWORD` setzen) |
 | `BROKER_AUTH_PASSWORD` | — | Basic-Auth-Passwort |
@@ -206,6 +216,60 @@ cf delete-service -f my-db                         # löscht den Cluster
 | `SERVER_WRITE_TIMEOUT` | `60s` |
 | `SERVER_IDLE_TIMEOUT` | `120s` |
 | `SERVER_SHUTDOWN_TIMEOUT` | `15s` |
+
+---
+
+## 💾 State Store
+
+Instanzen und Bindings liegen als je ein Custom Resource
+(`OSBServiceInstance`, `OSBServiceBinding`) im Namespace des Brokers.
+
+```bash
+kubectl apply -f deploy/crds/          # einmalig, cluster-weit
+kubectl get osbi -n osb                # Instanzen
+kubectl get osbb -n osb                # Bindings
+```
+
+**Warum nicht mehr eine ConfigMap.** Bis Phase 4 lag der gesamte Zustand als
+ein JSON-Dokument unter einem Key in der ConfigMap `osb-broker-state`. Gemessen
+an realen Datensätzen (543 Bytes je Instanz, 1.496 Bytes je Binding mit
+PostgreSQL-Credentials) war damit das 1-MiB-Limit bei rund **514 Instanzen**
+erreicht — und bis dahin schrieb *jeder* Provision-, Bind- oder
+Deprovision-Aufruf den gesamten Zustand neu, bei 1000 Instanzen also 1,9 MiB
+pro Aufruf. Zwei gleichzeitige Schreiber überschrieben sich dabei still, weil
+die `resourceVersion` für den Update aus einem zweiten Get stammte und nicht
+aus dem, auf dem die Änderung beruhte.
+
+Ein Objekt je Datensatz behebt alle drei Punkte: kein Gesamtlimit, ein
+Schreibzugriff kostet einen Datensatz, und Konflikte betreffen nur den
+Datensatz, an dem wirklich zwei Schreiber arbeiten (`RetryOnConflict` statt
+stillem Überschreiben) — womit auch mehr als eine Replica möglich wird.
+
+**Credentials** stehen nicht im Binding-CR, sondern in einem eigenen Secret,
+auf das `spec.credentialsSecret` verweist. In der ConfigMap lagen sie im
+Klartext neben allem anderen.
+
+**Objektnamen** sind die OSB-ID, wenn sie ein gültiger Kubernetes-Name ist
+(der Normalfall — Cloud Foundry schickt UUIDs). Sonst entscheidet ein Hash;
+die ursprüngliche ID steht immer in `spec.id`, und Lesezugriffe vergleichen
+sie.
+
+### Umstieg von der ConfigMap
+
+Der Schnitt ist hart — der Broker liest die alte ConfigMap nicht mehr. Wer
+bestehende Instanzen hat, muss sie übertragen, sonst sind sie für den Broker
+verloren und die angelegten Datenbanken bleiben als Waisen stehen:
+
+```bash
+go build -o osb-state-migrate ./cmd/osb-state-migrate/
+./osb-state-migrate --namespace osb --dry-run   # erst zählen
+./osb-state-migrate --namespace osb             # dann übertragen
+```
+
+Der Lauf ist idempotent und lässt die alte ConfigMap stehen — sie ist die
+Rückfallebene, bis die Migration geprüft ist. `STORE_BACKEND=k8s` wird
+weiterhin als `crd` gelesen, damit bestehende Deployments beim Upgrade nicht
+still im Speicher landen; der Broker warnt dann beim Start.
 
 ---
 
@@ -379,6 +443,13 @@ Kandidaten für weitere Definitionen (Beitrag = eine YAML):
 
 ## 🗺️ Nächste Schritte (Roadmap v2.3)
 
+- ✅ **Phase 5 — CRD-State-Store**: Instanzen und Bindings als je ein Custom
+  Resource statt eines JSON-Blobs in einer ConfigMap. Behebt das
+  1-MiB-Limit (~514 Instanzen), das Neuschreiben des gesamten Zustands bei
+  jedem Aufruf und die verlorenen Schreibvorgänge bei gleichzeitigem Zugriff.
+  Credentials liegen in Secrets, nicht mehr im Klartext neben dem Zustand.
+  Harter Schnitt mit Migrationswerkzeug (`cmd/osb-state-migrate`); beide
+  CI-Gates fahren jetzt gegen den persistenten Store statt gegen den Speicher.
 - ✅ **Phase 4.5 — TLS/mTLS**: Der Broker terminiert TLS selbst
   (Hot-Reload bei Rotation, ohne Pod-Neustart), authentifiziert wahlweise
   per Basic Auth oder Client-Zertifikat mit CN/SAN-Allowlist, und bringt
@@ -394,7 +465,7 @@ Kandidaten für weitere Definitionen (Beitrag = eine YAML):
     `GET /schemas/service-definition.schema.json` — unauthentifiziert,
     zur Compile-Zeit ins Binary eingebettet
 - **Java-Nachzug**: Phase 1+2 Portierung (Go-Design stabil)
-- **Engine: Multi-Doc-Templates** (4.5): `provision.template` auf mehrere
+- ✅ **Engine: Multi-Doc-Templates** (4.6, abgeschlossen): `provision.template` auf mehrere
   durch `---` getrennte Manifeste erweitern. Hintergrund: die Engine legt
   aktuell genau eine Ressource pro Instanz an (`yaml.Unmarshal` in
   `internal/definition/operator.go`). Mehrere Dienste scheitern daran:
