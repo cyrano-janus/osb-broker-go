@@ -1,0 +1,31 @@
+{{- if and .Values.tls.enabled .Values.tls.certManager.enabled }}
+{{- if .Values.tls.existingSecret }}
+{{- fail "tls.existingSecret and tls.certManager.enabled are mutually exclusive: pick one source for the server certificate" }}
+{{- end }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "osb-broker-go.fullname" . }}
+  labels:
+    {{- include "osb-broker-go.labels" . | nindent 4 }}
+spec:
+  secretName: {{ include "osb-broker-go.tlsSecretName" . }}
+  issuerRef:
+    kind: {{ .Values.tls.certManager.issuerRef.kind }}
+    name: {{ required "tls.certManager.issuerRef.name is required when cert-manager issues the broker certificate" .Values.tls.certManager.issuerRef.name }}
+  duration: {{ .Values.tls.certManager.duration }}
+  renewBefore: {{ .Values.tls.certManager.renewBefore }}
+  usages:
+    - server auth
+  privateKey:
+    rotationPolicy: Always
+  dnsNames:
+    {{- if .Values.tls.certManager.dnsNames }}
+    {{- toYaml .Values.tls.certManager.dnsNames | nindent 4 }}
+    {{- else }}
+    - {{ include "osb-broker-go.fullname" . }}
+    - {{ include "osb-broker-go.fullname" . }}.{{ .Release.Namespace }}
+    - {{ include "osb-broker-go.fullname" . }}.{{ .Release.Namespace }}.svc
+    - {{ include "osb-broker-go.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
+    {{- end }}
+{{- end }}

@@ -44,3 +44,36 @@ Auth secret name
 {{- printf "%s-auth" (include "osb-broker-go.fullname" .) }}
 {{- end }}
 {{- end }}
+
+{{/*
+TLS secret name: an operator-supplied kubernetes.io/tls secret, else the one
+cert-manager issues for this release.
+*/}}
+{{- define "osb-broker-go.tlsSecretName" -}}
+{{- if .Values.tls.existingSecret }}
+{{- .Values.tls.existingSecret }}
+{{- else }}
+{{- printf "%s-tls" (include "osb-broker-go.fullname" .) }}
+{{- end }}
+{{- end }}
+
+{{/*
+Port name, used for the container port, the Service targetPort and the probe
+port. Renaming it with the scheme keeps `kubectl get svc` honest about what
+is actually spoken on the wire.
+*/}}
+{{- define "osb-broker-go.portName" -}}
+{{- if .Values.tls.enabled }}https{{ else }}http{{ end }}
+{{- end }}
+
+{{- define "osb-broker-go.containerPort" -}}
+{{- if .Values.tls.enabled }}8443{{ else }}8080{{ end }}
+{{- end }}
+
+{{/*
+Probe scheme. The kubelet does not verify the server certificate on HTTPS
+probes, so no CA has to be distributed to the nodes.
+*/}}
+{{- define "osb-broker-go.probeScheme" -}}
+{{- if .Values.tls.enabled }}HTTPS{{ else }}HTTP{{ end }}
+{{- end }}

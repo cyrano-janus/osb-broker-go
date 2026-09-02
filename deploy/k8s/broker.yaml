@@ -1,3 +1,11 @@
+# Minimales Klartext-HTTP-Deployment für den schnellen kind-Durchlauf und
+# das bestehende Conformance-Gate.
+#
+# TLS/mTLS werden bewusst NICHT hier gepflegt, sondern ausschließlich über
+# das Helm-Chart (deploy/helm/osb-broker-go, tls.* und auth.mtls.*): ein
+# zweiter, handgepflegter TLS-Manifestsatz würde nur vom Chart wegdriften.
+# Für den Betrieb - und für die Korifi-Registrierung über https:// - ist das
+# Chart der Weg.
 apiVersion: v1
 kind: Namespace
 metadata:
