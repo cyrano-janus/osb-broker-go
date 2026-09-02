@@ -398,6 +398,7 @@ func instanceToSpec(i *Instance) (osbv1.OSBServiceInstanceSpec, error) {
 	spec := osbv1.OSBServiceInstanceSpec{
 		ID: i.ID, ServiceID: i.ServiceID, PlanID: i.PlanID,
 		Context:        toAPIContext(i.Context),
+		Namespace:      i.Namespace,
 		DashboardURL:   i.DashboardURL,
 		Ready:          i.Ready,
 		Parameters:     params,
@@ -421,6 +422,7 @@ func specToInstance(spec *osbv1.OSBServiceInstanceSpec) (*Instance, error) {
 	out := &Instance{
 		ID: spec.ID, ServiceID: spec.ServiceID, PlanID: spec.PlanID,
 		Context:        fromAPIContext(spec.Context),
+		Namespace:      spec.Namespace,
 		Parameters:     params,
 		DashboardURL:   spec.DashboardURL,
 		Ready:          spec.Ready,

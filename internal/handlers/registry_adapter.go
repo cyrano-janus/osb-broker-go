@@ -19,6 +19,7 @@ func (r *stateStoreRegistry) PutInstance(ctx context.Context, rec *definition.In
 		ID:             rec.ID,
 		ServiceID:      rec.ServiceID,
 		PlanID:         rec.PlanID,
+		Namespace:      rec.Namespace,
 		Ready:          true,
 		AppliedObjects: rec.AppliedObjects,
 		AppliedRefs:    toBrokerRefs(rec.AppliedRefs),
@@ -40,6 +41,7 @@ func (r *stateStoreRegistry) GetInstance(ctx context.Context, instanceID string)
 		ID:             inst.ID,
 		ServiceID:      inst.ServiceID,
 		PlanID:         inst.PlanID,
+		Namespace:      inst.Namespace,
 		AppliedObjects: inst.AppliedObjects,
 		AppliedRefs:    toDefinitionRefs(inst.AppliedRefs),
 	}, nil

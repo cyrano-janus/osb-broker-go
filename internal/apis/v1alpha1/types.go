@@ -94,6 +94,10 @@ type OSBServiceInstanceSpec struct {
 	PlanID       string     `json:"planId"`
 	Context      OSBContext `json:"context,omitempty"`
 	DashboardURL string     `json:"dashboardUrl,omitempty"`
+	// Namespace ist der Namespace der Operator-Ressourcen dieser Instanz.
+	// Er steht hier, weil ein OSB-Deprovision oder last_operation ihn nicht
+	// mitliefert und er sonst nicht mehr auffindbar waere.
+	Namespace string `json:"namespace,omitempty"`
 	// Ready meldet, ob das Provisioning abgeschlossen ist.
 	Ready bool `json:"ready,omitempty"`
 	// Parameters sind die frei geformten Benutzerparameter aus dem

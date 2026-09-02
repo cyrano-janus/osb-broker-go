@@ -78,7 +78,7 @@ func (h *Handlers) UnbindServiceInstance(c *gin.Context) {
 	// (Phase 6.4) muss dagegen weg - sonst bliebe bei jedem Unbind eines mit
 	// echten Zugangsdaten im Namespace liegen.
 	if sd, _ := h.resolveDefinition(req.ServiceID); sd != nil {
-		namespace := targetNamespaceFromQuery(c)
+		namespace := h.instanceNamespace(c.Request.Context(), instanceID)
 		if err := h.engine.Engine.DeleteBindingSecret(
 			c.Request.Context(), sd, namespace, bindingID); err != nil {
 			respondOSBError(c, err)

@@ -39,6 +39,14 @@ type Instance struct {
 	Parameters   map[string]interface{}
 	DashboardURL string
 	Ready        bool
+	// Namespace ist der Namespace, in dem die Operator-Ressourcen dieser
+	// Instanz liegen - abgeleitet aus der Space-GUID beim Provision.
+	//
+	// Er muss gespeichert werden, weil er aus spaeteren Requests grundsaetzlich
+	// nicht herleitbar ist: ein OSB-Deprovision oder last_operation traegt
+	// weder context noch space_guid. Vorher setzten drei Codepfade hart
+	// "default" ein und suchten damit am falschen Ort (FINDINGS #7/#16).
+	Namespace string
 	// AppliedObjects lists the K8s object names created for this instance
 	// (multi-doc, 4.6). Persisted via the StateStore so deprovision can
 	// remove every object even after a restart. Empty = single-doc legacy.
@@ -254,6 +262,18 @@ func (b *Broker) Unbind(ctx context.Context, instanceID, bindingID string, req *
 }
 
 // GetInstance retrieves instance details
+// StoredInstance gibt den gespeicherten Datensatz zurueck, nicht die
+// OSB-Antwort.
+//
+// Die Handler brauchen daraus den Namespace: aus einem Deprovision-,
+// last_operation- oder Bind-Request ist er nicht herleitbar (FINDINGS #7).
+// GetInstance liefert nur die nach aussen sichtbaren Felder.
+func (b *Broker) StoredInstance(ctx context.Context, instanceID string) (*Instance, error) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.state.GetInstance(ctx, instanceID)
+}
+
 func (b *Broker) GetInstance(ctx context.Context, instanceID string) (*GetInstanceResponse, error) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
