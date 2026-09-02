@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"log"
 
+	"github.com/example/osb-broker/internal/auth"
 	"github.com/example/osb-broker/internal/broker"
 	"github.com/example/osb-broker/internal/config"
 	"github.com/example/osb-broker/internal/handlers"
@@ -73,12 +74,9 @@ func main() {
 		h.SetMetrics(handlers.NewMetrics())
 	}
 
-	// Basic Auth credentials (Phase 1.2). In Kubernetes these come from a
-	// Secret mounted as env vars. Both empty = auth disabled.
-	if cfg.Auth.Basic.User != "" || cfg.Auth.Basic.Password != "" {
-		h.SetBasicAuthCredentials(cfg.Auth.Basic.User, cfg.Auth.Basic.Password)
-		log.Printf("Basic Auth enabled for user %q", cfg.Auth.Basic.User)
-	}
+	// Authentication (Phase 4.5). Any one configured method succeeding is
+	// enough; an empty chain leaves the OSB endpoints open.
+	h.SetAuthenticator(buildAuthChain(cfg))
 
 	// Setup router
 	router := h.SetupRouter()
@@ -114,4 +112,25 @@ func main() {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 	log.Printf("OSB Broker stopped")
+}
+
+// buildAuthChain assembles the authenticators the configuration selected.
+// The order follows cfg.Auth.Methods, which config normalises, so the
+// WWW-Authenticate challenge order does not depend on how the operator
+// spelled AUTH_METHODS.
+func buildAuthChain(cfg *config.Config) *auth.Chain {
+	var authenticators []auth.Authenticator
+	for _, method := range cfg.Auth.Methods {
+		switch method {
+		case config.MethodBasic:
+			authenticators = append(authenticators,
+				auth.NewBasic(cfg.Auth.Basic.User, cfg.Auth.Basic.Password, cfg.Auth.Realm))
+			log.Printf("Basic Auth enabled for user %q", cfg.Auth.Basic.User)
+		case config.MethodMTLS:
+			authenticators = append(authenticators,
+				auth.NewMTLS(cfg.Auth.MTLS.AllowedCNs, cfg.Auth.MTLS.AllowedDNSNames, cfg.Auth.MTLS.AllowedURIs))
+			log.Printf("mTLS enabled (client CA %s)", cfg.Auth.MTLS.ClientCAFile)
+		}
+	}
+	return auth.NewChain(authenticators...)
 }
