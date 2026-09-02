@@ -67,6 +67,17 @@ spec:
     type: rabbitmq
     provider: rabbitmq-cluster-operator
 
+    # Legt dieselben Credentials zusaetzlich als spec-konformes Secret im
+    # Ziel-Namespace ab. Cloud Foundry braucht das nicht - es bekommt sie in
+    # der OSB-Antwort -, aber ein Kubernetes-Workload sieht diese Antwort nie
+    # und kommt nur ueber ein Secret an sein Binding.
+    #
+    # ACHTUNG: braucht Schreibrechte auf Secrets im Ziel-Namespace. Im
+    # Helm-Chart ist das rbac.projectedBindingSecrets=true. Ohne die
+    # Berechtigung schlaegt der Bind fehl - mit einer Meldung, die genau sie
+    # benennt.
+    projectSecret: true
+
     # Ohne mapping reicht der Broker alle Keys des Secrets durch - inklusive
     # default_user.conf, einer Konfigurationsdatei, die in einem Binding
     # nichts zu suchen hat (FINDINGS #23). Das mapping gibt die Zielform vor.

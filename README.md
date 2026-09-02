@@ -2,7 +2,7 @@
 
 [![Go Version](https://img.shields.io/badge/go-1.22-blue.svg)](https://golang.org)
 [![OSB API](https://img.shields.io/badge/OSB%20API-2.17-green.svg)](https://github.com/openservicebrokerapi/servicebroker/blob/v2.17/spec.md)
-[![Tests](https://img.shields.io/badge/tests-199%20total-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-236%20total-brightgreen.svg)]()
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)]()
 
 > **Open Service Broker 2.17 in Go — Phase 1 + 2 der Roadmap abgeschlossen,
@@ -27,6 +27,18 @@ Datenbank-Store, keine Abhängigkeit von einem fremden Deployment.
 | Live gegen Korifi auf kind | ✅ Registrierung, Marketplace, `cf create-service` |
 | **Generic Engine E2E** | ✅ `cf create-service cnpg-postgresql large my-real-pg` erzeugte einen echten CloudNativePG-Cluster (3 Instanzen, 10Gi), `psql` im Pod antwortet „E2E OK", echte Credentials aus Operator-Secret `<id>-app` |
 | Pod-Restart-Persistenz | ✅ Instances/Bindings in ConfigMap `osb-broker-state`, überleben Kill & Rescheduling |
+
+### Service-Binding-Spec-Nachweis (02.09.2026)
+
+Gegen den echten RabbitMQ-cluster-operator, dessen CRD den
+Provisioned-Service-Duck-Type ausdrücklich dokumentiert:
+
+| Nachweis | Ergebnis |
+|----------|----------|
+| Secret-Name aus `status.binding.name` | ✅ Operator meldete `osb-<id>-default-user`, der Broker nutzte ihn ohne Namenstemplate |
+| Zielform per `mapping` | ✅ Binding enthält `host, password, port, provider, type, uri, username` — `default_user.conf` und `connection_string` sind draußen (FINDINGS #23) |
+| Spec-konformes Secret (6.4) | ✅ Type `servicebinding.io/rabbitmq`, Labels für Instanz und Binding, OwnerReference auf den `RabbitmqCluster` |
+| Aufräumen beim Unbind | ✅ `cf delete-service-key` entfernt das projizierte Secret |
 
 ### State-Store-Nachweis (02.09.2026)
 
@@ -216,6 +228,58 @@ cf delete-service -f my-db                         # löscht den Cluster
 | `SERVER_WRITE_TIMEOUT` | `60s` |
 | `SERVER_IDLE_TIMEOUT` | `120s` |
 | `SERVER_SHUTDOWN_TIMEOUT` | `15s` |
+
+---
+
+## 🔗 Service Binding Specification
+
+Eine Definition beschreibt nicht mehr nur *wo* das Credentials-Secret liegt,
+sondern auch *welche Form* das Binding haben soll — nach der
+[CNCF Service Binding Specification](https://servicebinding.io/).
+
+```yaml
+bind:
+  # Der Operator nennt sein Secret selbst in .status.binding.name.
+  provisionedService: true
+  # Rückfallebene für Operatoren, die das Feld nicht füllen.
+  credentialsFromSecret: "{{ .safeName }}-default-user"
+
+  type: rabbitmq
+  provider: rabbitmq-cluster-operator
+
+  # Gibt die Zielform vor. Ohne mapping reicht der Broker alle Secret-Keys
+  # durch — auch Konfigurationsdateien, die in einem Binding nichts zu
+  # suchen haben.
+  mapping:
+    - name: username
+      from: username
+    - name: uri
+      value: "amqp://{{ .credentials.username }}:{{ .credentials.password }}@{{ .credentials.host }}:{{ .credentials.port }}/"
+
+  # Optional: dasselbe Binding zusätzlich als spec-konformes Secret.
+  projectSecret: true
+```
+
+**Warum `provisionedService` der Kern ist.** Bisher musste jede Definition das
+Namensschema ihres Operators nachbauen — eine Konvention, die bei jedem neuen
+Operator neu zu erraten ist und an der Valkey, Redpanda und NATS gescheitert
+sind. Ein Provisioned Service sagt stattdessen selbst, wo seine Credentials
+liegen. Der Pfad `.status.binding.name` ist bewusst nicht konfigurierbar:
+wäre er es, wäre er wieder eine Konvention und kein Standard.
+
+**Rückwärtskompatibilität.** Eine Definition ohne die neuen Felder verhält
+sich exakt wie vorher — dafür gibt es eigene Tests, Punkt für Punkt.
+
+**`mapping` ersetzt, es ergänzt nicht.** Ist es gesetzt, besteht das Ergebnis
+genau aus den genannten Keys plus `type`/`provider`. Ein Adapter, der daneben
+noch alle Originalschlüssel durchreicht, macht die definierte Zielform
+zunichte. Ein fehlender Quellschlüssel bricht hart ab, statt still ein halb
+gefülltes Binding zu liefern, das erst in der App auffällt.
+
+**`projectSecret` braucht zusätzliche Rechte.** Das Secret entsteht im
+Ziel-Namespace der Instanz, nicht im Broker-Namespace — im Helm-Chart ist das
+`rbac.projectedBindingSecrets: true`. Fehlt die Berechtigung, schlägt der Bind
+fehl mit einer Meldung, die genau sie benennt.
 
 ---
 
@@ -443,6 +507,13 @@ Kandidaten für weitere Definitionen (Beitrag = eine YAML):
 
 ## 🗺️ Nächste Schritte (Roadmap v2.3)
 
+- ✅ **Phase 6 — CNCF Service Binding Specification**: Der Secret-Name kommt
+  aus `.status.binding.name` des Operators statt aus einem nachgebauten
+  Namensschema; `mapping` gibt die Zielform vor, `type`/`provider` machen das
+  Binding spec-konform, und `projectSecret` legt es zusätzlich als Secret für
+  Kubernetes-Workloads ab. Bestehende Definitionen laufen unverändert weiter.
+  Ohne neue Abhängigkeit — die Templates nutzen die vorhandene
+  `text/template`-Engine statt CEL.
 - ✅ **Phase 5 — CRD-State-Store**: Instanzen und Bindings als je ein Custom
   Resource statt eines JSON-Blobs in einer ConfigMap. Behebt das
   1-MiB-Limit (~514 Instanzen), das Neuschreiben des gesamten Zustands bei
