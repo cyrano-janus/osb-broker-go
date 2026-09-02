@@ -55,7 +55,29 @@ spec:
     timeoutSeconds: 600
 
   bind:
-    # Der cluster-operator legt pro RabbitmqCluster automatisch ein
-    # Default-User-Secret an (<name>-default-user mit username/password)
-    # und referenziert es in status.binding.
+    # Der cluster-operator implementiert den Provisioned-Service-Duck-Type der
+    # CNCF Service Binding Specification: er nennt sein Credentials-Secret
+    # selbst in status.binding.name. Damit muss die Definition kein
+    # Namensschema mehr nachbauen.
+    provisionedService: true
+    # Rueckfallebene fuer aeltere Operator-Versionen, die status.binding noch
+    # nicht fuellen - das ist der bisherige Weg, unveraendert.
     credentialsFromSecret: "{{ .safeName }}-default-user"
+
+    type: rabbitmq
+    provider: rabbitmq-cluster-operator
+
+    # Ohne mapping reicht der Broker alle Keys des Secrets durch - inklusive
+    # default_user.conf, einer Konfigurationsdatei, die in einem Binding
+    # nichts zu suchen hat (FINDINGS #23). Das mapping gibt die Zielform vor.
+    mapping:
+      - name: username
+        from: username
+      - name: password
+        from: password
+      - name: host
+        from: host
+      - name: port
+        from: port
+      - name: uri
+        value: "amqp://{{ .credentials.username }}:{{ .credentials.password }}@{{ .credentials.host }}:{{ .credentials.port }}/"
