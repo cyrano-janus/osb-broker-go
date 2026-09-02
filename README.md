@@ -615,6 +615,9 @@ Kandidaten für weitere Definitionen (Beitrag = eine YAML):
        Format; strukturiertes Logging (JSON) und ggf. OpenTelemetry-Hooks
        früh vorbereiten, damit Logs/Traces später ohne Code-Umbau anbandeln.
 
+Aktueller Arbeitsstand und Empfehlung für den nächsten Schritt:
+[docs/STAND.md](docs/STAND.md)
+
 Gesamt-Roadmap inkl. Java-Status:
 [development-open-service-broker/roadmap.md](https://github.com/cyrano-janus/development-open-service-broker/blob/main/roadmap.md)
 
