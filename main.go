@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"log"
 
 	"github.com/example/osb-broker/internal/broker"
@@ -82,16 +83,33 @@ func main() {
 	// Setup router
 	router := h.SetupRouter()
 
+	// TLS (Phase 4.5). The certificate is served through the reloader's
+	// callbacks, so cert-manager renewals are picked up without a restart.
+	var tlsConfig *tls.Config
+	if cfg.TLS.Enabled {
+		reloader, err := server.NewCertReloader(cfg.TLS.CertFile, cfg.TLS.KeyFile, cfg.TLS.ClientCAFile)
+		if err != nil {
+			log.Fatalf("tls: %v", err)
+		}
+		reloader.Start(ctx, cfg.TLS.ReloadInterval)
+		tlsConfig = server.BuildTLSConfig(cfg.TLS, reloader)
+	}
+
 	srv := server.New(server.Options{
 		Addr:              ":" + cfg.Port,
 		Handler:           router,
+		TLS:               tlsConfig,
 		ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
 		ReadTimeout:       cfg.Server.ReadTimeout,
 		WriteTimeout:      cfg.Server.WriteTimeout,
 		IdleTimeout:       cfg.Server.IdleTimeout,
 	})
 
-	log.Printf("Starting OSB Broker on port %s", cfg.Port)
+	scheme := "http"
+	if cfg.TLS.Enabled {
+		scheme = "https"
+	}
+	log.Printf("Starting OSB Broker on port %s (%s, auth: %v)", cfg.Port, scheme, cfg.Auth.Methods)
 	if err := server.Run(ctx, srv, cfg.Server.ShutdownTimeout); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
