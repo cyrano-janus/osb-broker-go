@@ -8,10 +8,13 @@ package checker
 
 import (
 	"bytes"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 )
 
@@ -22,6 +25,13 @@ type Config struct {
 	Pass     string
 	IDPrefix string
 	Timeout  int64 // seconds; reserved for future per-check deadlines
+
+	// TLS options (Phase 4.5). CACert verifies the broker certificate;
+	// ClientCert/ClientKey authenticate the checker via mTLS.
+	CACert     string
+	ClientCert string
+	ClientKey  string
+	Insecure   bool
 }
 
 const cnpgServiceID = "f48a9e21-cnpg-0000-0000-000000000001"
@@ -44,8 +54,59 @@ func pass(check string, format string, args ...interface{}) {
 }
 
 type client struct {
+	// http carries credentials and, when configured, the client
+	// certificate.
 	http *http.Client
+	// anon carries neither. The auth-enforcement check needs a caller the
+	// broker cannot possibly authenticate: with mTLS enabled the
+	// credentialled client would be authenticated by its certificate alone
+	// and the expected 401 would never appear.
+	anon *http.Client
 	cfg  Config
+}
+
+// newHTTPClients builds the credentialled and the anonymous client.
+func newHTTPClients(cfg Config) (authed, anon *http.Client, err error) {
+	base, err := tlsConfig(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	anonTLS := base.Clone()
+	anonTLS.Certificates = nil
+
+	authedTLS := base.Clone()
+	if cfg.ClientCert != "" || cfg.ClientKey != "" {
+		pair, err := tls.LoadX509KeyPair(cfg.ClientCert, cfg.ClientKey)
+		if err != nil {
+			return nil, nil, fmt.Errorf("load client certificate: %w", err)
+		}
+		authedTLS.Certificates = []tls.Certificate{pair}
+	}
+
+	return &http.Client{Transport: &http.Transport{TLSClientConfig: authedTLS}},
+		&http.Client{Transport: &http.Transport{TLSClientConfig: anonTLS}},
+		nil
+}
+
+func tlsConfig(cfg Config) (*tls.Config, error) {
+	out := &tls.Config{
+		MinVersion:         tls.VersionTLS12,
+		InsecureSkipVerify: cfg.Insecure,
+	}
+	if cfg.CACert == "" {
+		return out, nil
+	}
+	pem, err := os.ReadFile(cfg.CACert)
+	if err != nil {
+		return nil, fmt.Errorf("read CA certificate: %w", err)
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(pem) {
+		return nil, fmt.Errorf("CA file %s contains no usable certificate", cfg.CACert)
+	}
+	out.RootCAs = pool
+	return out, nil
 }
 
 func (c *client) do(method, path string, body interface{}) (int, []byte) {
@@ -58,7 +119,9 @@ func (c *client) do(method, path string, body interface{}) (int, []byte) {
 	if err != nil {
 		return -1, nil
 	}
-	req.SetBasicAuth(c.cfg.User, c.cfg.Pass)
+	if c.cfg.User != "" || c.cfg.Pass != "" {
+		req.SetBasicAuth(c.cfg.User, c.cfg.Pass)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Broker-API-Version", "2.17")
 	resp, err := c.http.Do(req)
@@ -122,7 +185,13 @@ func catalogHasService(c *client, serviceID string) bool {
 // Run executes all conformance checks and returns the failure count.
 func Run(cfg Config) int {
 	failures = 0
-	c := &client{http: &http.Client{}, cfg: cfg}
+
+	authed, anon, err := newHTTPClients(cfg)
+	if err != nil {
+		fail("tls-setup", "%v", err)
+		return failures
+	}
+	c := &client{http: authed, anon: anon, cfg: cfg}
 
 	checkAuthEnforcement(c)
 	svcs := checkCatalogStructure(c)
@@ -165,7 +234,7 @@ func checkAuthEnforcement(c *client) {
 		return
 	}
 	req.Header.Set("X-Broker-API-Version", "2.17")
-	resp, err := c.http.Do(req)
+	resp, err := c.anon.Do(req)
 	if err != nil {
 		fail(check, "request failed: %v", err)
 		return
@@ -182,7 +251,7 @@ func checkAuthEnforcement(c *client) {
 	pass(check, "unauthenticated request -> 401 with WWW-Authenticate")
 
 	hreq, _ := http.NewRequest("GET", strings.TrimSuffix(c.cfg.BaseURL, "/")+"/healthz", nil)
-	hresp, err := c.http.Do(hreq)
+	hresp, err := c.anon.Do(hreq)
 	if err != nil {
 		fail(check, "healthz request failed: %v", err)
 		return
