@@ -8,6 +8,28 @@ auth:
   username: broker-user
   password: broker-secret
 
+  # mTLS für zertifikatsbasierte Clients (osb-checker, eigene Consumer).
+  # Korifi selbst authentifiziert sich weiterhin per Basic Auth über TLS.
+  mtls:
+    enabled: false
+    required: false
+    caSecretName: osb-broker-clientca
+    allowedCNs:
+      - osb-checker
+
+# HTTPS im kind-Cluster. Voraussetzung: cert-manager läuft und ein
+# CA-ClusterIssuer existiert; dessen Root-CA muss in den Trust-Stores der
+# Korifi-Pods liegen, sonst lehnt Korifi den Broker beim Registrieren ab
+# (experimental.managedServices.trustInsecureBrokers steht per Default auf
+# false). Siehe docs/tls-korifi.md.
+tls:
+  enabled: true
+  certManager:
+    enabled: true
+    issuerRef:
+      kind: ClusterIssuer
+      name: osb-ca-issuer
+
 definitions:
   create: true
   # Gebündelte Definitionen aus definitions/ des Repos

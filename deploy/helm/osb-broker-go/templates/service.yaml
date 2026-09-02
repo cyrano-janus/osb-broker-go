@@ -7,8 +7,9 @@ metadata:
 spec:
   type: {{ .Values.service.type }}
   ports:
-  - port: {{ .Values.service.port }}
-    targetPort: http
+  - name: {{ include "osb-broker-go.portName" . }}
+    port: {{ .Values.service.port }}
+    targetPort: {{ include "osb-broker-go.portName" . }}
     protocol: TCP
   selector:
     {{- include "osb-broker-go.selectorLabels" . | nindent 4 }}

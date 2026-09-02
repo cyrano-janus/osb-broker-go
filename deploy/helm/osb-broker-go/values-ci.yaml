@@ -1,0 +1,48 @@
+# Werte für das TLS/mTLS-Conformance-Gate (CI-Job L2b).
+#
+# Die Zertifikate erzeugt der Workflow per openssl und legt sie als Secrets
+# ab - kein cert-manager im CI-Cluster. Der State-Store läuft im Speicher,
+# wie im bestehenden L2-Gate auch.
+
+image:
+  repository: osb-broker-go
+  tag: pr
+  pullPolicy: IfNotPresent
+
+fullnameOverride: osb-broker-go
+
+service:
+  port: 443
+
+config:
+  storeBackend: memory
+
+auth:
+  create: true
+  username: chk
+  password: chkpass
+  mtls:
+    enabled: true
+    # Optional, nicht erzwungen: so bleiben die /healthz-Probes ohne
+    # Client-Zertifikat erreichbar, und der Checker kann die 401-Erwartung
+    # aus auth-enforcement überhaupt beobachten.
+    required: false
+    caSecretName: osb-broker-clientca
+    caKey: ca.crt
+    allowedCNs:
+      - osb-checker
+
+tls:
+  enabled: true
+  existingSecret: osb-broker-tls
+  certManager:
+    enabled: false
+
+# Der Workflow reicht die CNPG-Definition per --set-file nach, damit L2b
+# denselben Lifecycle prüft wie das bestehende HTTP-Gate.
+definitions:
+  create: true
+
+rbac:
+  create: true
+  secretsAcrossNamespaces: true

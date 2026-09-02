@@ -19,16 +19,23 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "osb-broker-go.fullname" . }}
+      {{- with .Values.podSecurityContext }}
+      # fsGroup makes the mounted TLS material group-readable for the
+      # non-root container user. Without it a 0400 secret file is readable
+      # only by root and the broker cannot open its own key.
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
       - name: broker
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:
-        - containerPort: 8080
-          name: http
+        - containerPort: {{ include "osb-broker-go.containerPort" . }}
+          name: {{ include "osb-broker-go.portName" . }}
         env:
         - name: PORT
-          value: "8080"
+          value: {{ include "osb-broker-go.containerPort" . | quote }}
         - name: METRICS_ENABLED
           value: {{ .Values.metrics.enabled | quote }}
         - name: STORE_BACKEND
@@ -53,31 +60,107 @@ spec:
             secretKeyRef:
               name: {{ include "osb-broker-go.authSecretName" . }}
               key: password
+        {{- if .Values.tls.enabled }}
+        - name: TLS_ENABLED
+          value: "true"
+        - name: TLS_CERT_FILE
+          value: {{ printf "%s/tls.crt" .Values.tls.mountPath | quote }}
+        - name: TLS_KEY_FILE
+          value: {{ printf "%s/tls.key" .Values.tls.mountPath | quote }}
+        - name: TLS_MIN_VERSION
+          value: {{ .Values.tls.minVersion | quote }}
+        - name: TLS_RELOAD_INTERVAL
+          value: {{ .Values.tls.reloadInterval | quote }}
+        {{- end }}
+        {{- if .Values.auth.mtls.enabled }}
+        - name: MTLS_ENABLED
+          value: "true"
+        - name: MTLS_REQUIRE
+          value: {{ .Values.auth.mtls.required | quote }}
+        - name: MTLS_CLIENT_CA_FILE
+          value: {{ printf "%s/%s" .Values.auth.mtls.mountPath .Values.auth.mtls.caKey | quote }}
+        {{- with .Values.auth.mtls.allowedCNs }}
+        - name: MTLS_ALLOWED_CNS
+          value: {{ join "," . | quote }}
+        {{- end }}
+        {{- with .Values.auth.mtls.allowedDNSNames }}
+        - name: MTLS_ALLOWED_DNS_NAMES
+          value: {{ join "," . | quote }}
+        {{- end }}
+        {{- with .Values.auth.mtls.allowedURIs }}
+        - name: MTLS_ALLOWED_URIS
+          value: {{ join "," . | quote }}
+        {{- end }}
+        {{- end }}
+        {{- if and .Values.auth.mtls.enabled .Values.auth.mtls.required }}
+        # MTLS_REQUIRE aborts the TLS handshake for clients without a
+        # certificate, and the kubelet presents none - so the probes cannot
+        # speak HTTP here and fall back to a plain TCP connect.
+        livenessProbe:
+          tcpSocket:
+            port: {{ include "osb-broker-go.portName" . }}
+          initialDelaySeconds: 3
+          periodSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: {{ include "osb-broker-go.portName" . }}
+          initialDelaySeconds: 2
+          periodSeconds: 5
+        {{- else }}
         livenessProbe:
           httpGet:
             path: /healthz
-            port: http
+            port: {{ include "osb-broker-go.portName" . }}
+            scheme: {{ include "osb-broker-go.probeScheme" . }}
           initialDelaySeconds: 3
           periodSeconds: 10
         readinessProbe:
           httpGet:
             path: /healthz
-            port: http
+            port: {{ include "osb-broker-go.portName" . }}
+            scheme: {{ include "osb-broker-go.probeScheme" . }}
           initialDelaySeconds: 2
           periodSeconds: 5
+        {{- end }}
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
-        {{- if or .Values.definitions.files (eq .Values.config.storeBackend "k8s") }}
+        {{- if or .Values.definitions.files .Values.tls.enabled .Values.auth.mtls.enabled }}
         volumeMounts:
         {{- if .Values.definitions.files }}
         - name: definitions
           mountPath: /definitions
           readOnly: true
         {{- end }}
+        {{- if .Values.tls.enabled }}
+        - name: tls
+          mountPath: {{ .Values.tls.mountPath }}
+          readOnly: true
         {{- end }}
-      {{- if .Values.definitions.files }}
+        {{- if .Values.auth.mtls.enabled }}
+        - name: client-ca
+          mountPath: {{ .Values.auth.mtls.mountPath }}
+          readOnly: true
+        {{- end }}
+        {{- end }}
+      {{- if or .Values.definitions.files .Values.tls.enabled .Values.auth.mtls.enabled }}
       volumes:
+      {{- if .Values.definitions.files }}
       - name: definitions
         configMap:
           name: {{ include "osb-broker-go.fullname" . }}-definitions
+      {{- end }}
+      {{- if .Values.tls.enabled }}
+      # No checksum annotation on purpose: the broker reloads rotated
+      # certificates in place, so a renewal must not restart the pod.
+      - name: tls
+        secret:
+          secretName: {{ include "osb-broker-go.tlsSecretName" . }}
+          defaultMode: 0440
+      {{- end }}
+      {{- if .Values.auth.mtls.enabled }}
+      - name: client-ca
+        secret:
+          secretName: {{ required "auth.mtls.caSecretName is required when mTLS is enabled" .Values.auth.mtls.caSecretName }}
+          defaultMode: 0444
+      {{- end }}
       {{- end }}

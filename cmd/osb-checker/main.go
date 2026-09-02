@@ -14,11 +14,23 @@ func main() {
 	user := flag.String("user", "", "basic auth user")
 	pass := flag.String("pass", "", "basic auth password")
 	prefix := flag.String("id-prefix", "conformance", "instance/binding id prefix")
+	caCert := flag.String("ca-cert", "", "PEM CA bundle used to verify the broker certificate")
+	clientCert := flag.String("client-cert", "", "client certificate for mTLS")
+	clientKey := flag.String("client-key", "", "client private key for mTLS")
+	insecure := flag.Bool("insecure", false, "skip broker certificate verification (testing only)")
 	flag.Parse()
+
+	if *insecure {
+		fmt.Fprintln(os.Stderr, "osb-checker: WARNING --insecure disables broker certificate verification; never use this in CI")
+	}
 
 	cfg := checker.Config{
 		BaseURL: *url, User: *user, Pass: *pass,
-		IDPrefix: *prefix,
+		IDPrefix:   *prefix,
+		CACert:     *caCert,
+		ClientCert: *clientCert,
+		ClientKey:  *clientKey,
+		Insecure:   *insecure,
 	}
 	failures := checker.Run(cfg)
 	if failures > 0 {

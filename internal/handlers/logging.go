@@ -40,6 +40,12 @@ type structuredLogEntry struct {
 	DurationMS          int64  `json:"duration_ms"`
 	ClientIP            string `json:"client_ip,omitempty"`
 	OriginatingIdentity string `json:"originating_identity,omitempty"`
+	// AuthMethod and AuthSubject record who authenticated and how (Phase
+	// 4.5). Empty when authentication is disabled. The credentials
+	// themselves - the Authorization header, the client certificate - are
+	// never logged.
+	AuthMethod  string `json:"auth_method,omitempty"`
+	AuthSubject string `json:"auth_subject,omitempty"`
 }
 
 func structuredLoggingMiddleware() gin.HandlerFunc {
@@ -71,6 +77,10 @@ func structuredLoggingMiddleware() gin.HandlerFunc {
 			DurationMS:          time.Since(start).Milliseconds(),
 			ClientIP:            c.ClientIP(),
 			OriginatingIdentity: originating,
+		}
+		if id := AuthIdentity(c); id != nil {
+			entry.AuthMethod = id.Method
+			entry.AuthSubject = id.Subject
 		}
 		line, err := json.Marshal(entry)
 		if err != nil {

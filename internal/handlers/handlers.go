@@ -1,10 +1,9 @@
 package handlers
 
 import (
-	"crypto/subtle"
-	"encoding/base64"
 	"net/http"
 
+	"github.com/example/osb-broker/internal/auth"
 	"github.com/example/osb-broker/internal/broker"
 	"github.com/gin-gonic/gin"
 )
@@ -14,11 +13,11 @@ type Handlers struct {
 	broker *broker.Broker
 	// engine provides definition-based services (Phase 2); nil = disabled.
 	engine *EngineHolder
-	// Basic Auth credentials (Basic Auth user / password). When both are
-	// empty, authentication is disabled (backwards compatibility). In
-	// Kubernetes these values are injected from a Secret via main().
-	authUser string
-	authPass string
+	// authChain holds the configured authentication methods (Phase 4.5).
+	// nil or empty = authentication disabled (backwards compatibility).
+	// main() builds it from the configuration; SetBasicAuthCredentials
+	// remains as the shorthand for a basic-only chain.
+	authChain *auth.Chain
 	// metrics is the Prometheus collector set; nil = metrics disabled.
 	metrics *Metrics
 }
@@ -33,13 +32,6 @@ func (h *Handlers) SetEngine(e *EngineHolder) {
 // /metrics endpoint (unauthenticated).
 func (h *Handlers) SetMetrics(m *Metrics) {
 	h.metrics = m
-}
-
-// SetBasicAuthCredentials configures the Basic Auth credentials required on
-// all OSB endpoints. Empty user AND password disable authentication.
-func (h *Handlers) SetBasicAuthCredentials(user, pass string) {
-	h.authUser = user
-	h.authPass = pass
 }
 
 // New creates a new Handlers instance
@@ -71,9 +63,10 @@ func (h *Handlers) SetupRouter() *gin.Engine {
 		router.Use(h.metrics.MetricsMiddleware())
 	}
 
-	// Basic Auth for all OSB endpoints (healthz exempt). No-op when no
-	// credentials are configured.
-	router.Use(h.basicAuthMiddleware)
+	// Authentication for all OSB endpoints (healthz, docs and metrics are
+	// exempt because they are registered above this line). No-op when no
+	// method is configured.
+	router.Use(h.authMiddleware)
 
 	// Middleware to check API version
 	router.Use(h.apiVersionMiddleware)
@@ -95,46 +88,6 @@ func (h *Handlers) SetupRouter() *gin.Engine {
 	router.GET("/v2/service_instances/:instance_id/service_bindings/:binding_id/last_operation", h.GetLastBindingOperation)
 
 	return router
-}
-
-// basicAuthMiddleware enforces HTTP Basic Auth on all OSB endpoints when
-// credentials are configured. Returns 401 with WWW-Authenticate per RFC 7617.
-func (h *Handlers) basicAuthMiddleware(c *gin.Context) {
-	// Auth disabled when no credentials configured.
-	if h.authUser == "" && h.authPass == "" {
-		c.Next()
-		return
-	}
-
-	header := c.GetHeader("Authorization")
-	const prefix = "Basic "
-	valid := false
-	if len(header) > len(prefix) && header[:len(prefix)] == prefix {
-		payload, err := base64.StdEncoding.DecodeString(header[len(prefix):])
-		if err == nil {
-			userPass := string(payload)
-			for i := 0; i < len(userPass); i++ {
-				if userPass[i] == ':' {
-					user, pass := userPass[:i], userPass[i+1:]
-					// constant-time compare to avoid timing oracles
-					userOK := subtle.ConstantTimeCompare([]byte(user), []byte(h.authUser)) == 1
-					passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(h.authPass)) == 1
-					valid = userOK && passOK
-					break
-				}
-			}
-		}
-	}
-
-	if !valid {
-		c.Header("WWW-Authenticate", `Basic realm="osb-broker"`)
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-			"error":       "Unauthorized",
-			"description": "Invalid or missing Basic Auth credentials",
-		})
-		return
-	}
-	c.Next()
 }
 
 // apiVersionMiddleware checks for required API version header

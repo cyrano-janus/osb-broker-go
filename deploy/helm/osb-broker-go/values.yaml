@@ -14,15 +14,61 @@ fullnameOverride: ""
 
 service:
   type: ClusterIP
-  port: 80
+  # 443 matches the HTTPS default below. With tls.enabled=false set this
+  # back to 80.
+  port: 443
 
-# Basic Auth für den Broker. Wenn create=true, legt das Chart das Secret an;
-# sonst muss `existingSecret` existieren (keys: username, password).
+# TLS-Terminierung im Broker (Phase 4.5). HTTPS ist der Betriebszustand;
+# tls.enabled=false fällt auf reines HTTP zurück (lokale Entwicklung).
+#
+# Das Serverzertifikat kommt entweder aus einem vorhandenen
+# kubernetes.io/tls-Secret (`existingSecret`) oder von cert-manager
+# (`certManager.enabled`) - beides gleichzeitig ist ein Fehler.
+#
+# Rotation braucht keinen Pod-Neustart: der Broker liest Zertifikat und
+# Client-CA alle `reloadInterval` neu ein.
+tls:
+  enabled: true
+  existingSecret: ""
+  mountPath: /etc/osb/tls
+  minVersion: "1.2"        # 1.2 | 1.3
+  reloadInterval: 30s
+  certManager:
+    enabled: true
+    issuerRef:
+      kind: ClusterIssuer
+      name: ""             # Pflichtangabe, sonst schlägt das Rendern fehl
+    duration: 2160h        # 90 Tage
+    renewBefore: 360h      # 15 Tage vorher erneuern
+    dnsNames: []           # leer = <fullname>[.namespace[.svc[.cluster.local]]]
+
+# Authentifizierung. Jede aktivierte Methode genügt für sich; Cloud Foundry
+# schickt Basic Auth, zertifikatsbasierte Clients kommen über mTLS.
+#
+# Basic Auth: wenn create=true, legt das Chart das Secret an; sonst muss
+# `existingSecret` existieren (keys: username, password).
 auth:
   create: true
   existingSecret: ""
   username: broker-user
   password: "change-me"
+
+  # mTLS: Client-Zertifikate gegen `caSecretName` prüfen und die Identität
+  # gegen die Allowlists abgleichen. Leere Allowlists akzeptieren JEDES von
+  # dieser CA signierte Zertifikat - der Broker warnt dann beim Start.
+  mtls:
+    enabled: false
+    # required: true schaltet crypto/tls auf RequireAndVerifyClientCert.
+    # Kubelet-Probes legen kein Client-Zertifikat vor; das Chart stellt sie
+    # dann automatisch auf tcpSocket um, und ein Prometheus-Scrape auf
+    # /metrics braucht ein eigenes Zertifikat.
+    required: false
+    caSecretName: ""       # Secret mit dem Client-CA-Bundle
+    caKey: ca.crt
+    mountPath: /etc/osb/ca
+    allowedCNs: []
+    allowedDNSNames: []
+    allowedURIs: []        # z. B. spiffe://osb/checker
 
 # Broker-Konfiguration (Umgebungsvariablen)
 config:
@@ -62,6 +108,15 @@ rbac:
       resources: [seaweeds]
       verbs: [create, get, list, update, delete]
   secretsAcrossNamespaces: true   # ClusterRole für Secret-Reads (Bind)
+
+# Der Container läuft als nonroot (UID/GID 65532, distroless). fsGroup
+# sorgt dafür, dass die gemounteten Secret-Dateien für diese Gruppe lesbar
+# sind - ohne das scheitert der Broker beim Öffnen seines eigenen Keys.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
 
 resources:
   requests:
