@@ -40,7 +40,8 @@ spec:
           value: {{ .Values.metrics.enabled | quote }}
         - name: STORE_BACKEND
           value: {{ .Values.config.storeBackend | quote }}
-        {{- if eq .Values.config.storeBackend "k8s" }}
+        {{- if eq .Values.config.storeBackend "crd" }}
+        # Der CRD-Store legt seine Objekte in diesem Namespace an.
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:
