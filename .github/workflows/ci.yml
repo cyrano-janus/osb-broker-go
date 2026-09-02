@@ -141,11 +141,103 @@ jobs:
           name: checker-log
           path: /tmp/checker.log
 
+  conformance-tls:
+    name: L2b — TLS/mTLS-Conformance (kind + Helm + osb-checker über HTTPS)
+    runs-on: ubuntu-latest
+    needs: verify
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build checker from PR code
+        run: go build -o /tmp/osb-checker ./cmd/osb-checker/
+
+      - name: Generate CA, server and client certificates
+        run: |
+          set -e
+          mkdir -p /tmp/certs && cd /tmp/certs
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 -sha256 \
+            -keyout ca.key -out ca.crt -subj "/CN=osb-ci-ca"
+          # The checker reaches the broker through kubectl port-forward, so
+          # the server certificate must be valid for localhost as well as
+          # for the in-cluster service names.
+          openssl req -newkey rsa:2048 -nodes -keyout tls.key -out server.csr \
+            -subj "/CN=osb-broker-go"
+          openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
+            -days 1 -sha256 -out tls.crt \
+            -extfile <(printf "subjectAltName=DNS:localhost,DNS:osb-broker-go,DNS:osb-broker-go.osb.svc,DNS:osb-broker-go.osb.svc.cluster.local,IP:127.0.0.1\nextendedKeyUsage=serverAuth\n")
+          openssl req -newkey rsa:2048 -nodes -keyout client.key -out client.csr \
+            -subj "/CN=osb-checker"
+          openssl x509 -req -in client.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
+            -days 1 -sha256 -out client.crt \
+            -extfile <(printf "extendedKeyUsage=clientAuth\n")
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: ci-tls
+          wait: 30s
+
+      - name: Deploy broker over TLS via the Helm chart
+        run: |
+          set -e
+          docker build -q -t osb-broker-go:pr .
+          kind load docker-image osb-broker-go:pr --name ci-tls
+          kubectl create namespace osb --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create secret tls osb-broker-tls -n osb \
+            --cert=/tmp/certs/tls.crt --key=/tmp/certs/tls.key \
+            --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create secret generic osb-broker-clientca -n osb \
+            --from-file=ca.crt=/tmp/certs/ca.crt \
+            --dry-run=client -o yaml | kubectl apply -f -
+          # The chart is what carries TLS; this is also the only CI job that
+          # exercises it at all.
+          helm upgrade --install osb deploy/helm/osb-broker-go -n osb \
+            -f deploy/helm/osb-broker-go/values-ci.yaml \
+            --wait --timeout 180s
+          kubectl rollout status deployment/osb-broker-go -n osb --timeout=120s
+
+      - name: Run osb-checker over HTTPS with a client certificate
+        run: |
+          kubectl port-forward -n osb svc/osb-broker-go 18443:443 &
+          PF_PID=$!
+          sleep 3
+          # No client certificate here on purpose: proves the probes' path
+          # stays open under VerifyClientCertIfGiven.
+          curl -sS --cacert /tmp/certs/ca.crt \
+            -o /dev/null -w "healthz: %{http_code}\n" https://localhost:18443/healthz
+          set +e
+          /tmp/osb-checker --url https://localhost:18443 \
+            --ca-cert /tmp/certs/ca.crt \
+            --client-cert /tmp/certs/client.crt --client-key /tmp/certs/client.key \
+            --user chk --pass chkpass \
+            --id-prefix tls-${{ github.event.number }} | tee /tmp/checker-tls.log
+          RC="${PIPESTATUS[0]}"
+          set -e
+          kill "$PF_PID" 2>/dev/null || true
+          cat /tmp/checker-tls.log >> "$GITHUB_STEP_SUMMARY" || true
+          exit "$RC"
+
+      - name: Broker logs on failure
+        if: failure()
+        run: kubectl logs -n osb deployment/osb-broker-go --tail=100 || true
+
+      - name: Upload checker log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checker-tls-log
+          path: /tmp/checker-tls.log
+
   release:
     name: L3 — Release (tags only)
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    needs: [verify, conformance]
+    needs: [verify, conformance, conformance-tls]
     permissions:
       contents: write
       packages: write

@@ -109,6 +109,15 @@ rbac:
       verbs: [create, get, list, update, delete]
   secretsAcrossNamespaces: true   # ClusterRole für Secret-Reads (Bind)
 
+# Der Container läuft als nonroot (UID/GID 65532, distroless). fsGroup
+# sorgt dafür, dass die gemounteten Secret-Dateien für diese Gruppe lesbar
+# sind - ohne das scheitert der Broker beim Öffnen seines eigenen Keys.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+
 resources:
   requests:
     cpu: 50m
