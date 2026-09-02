@@ -5,6 +5,8 @@ package definition
 
 import (
 	"fmt"
+	"regexp"
+	"text/template"
 
 	"sigs.k8s.io/yaml"
 )
@@ -107,9 +109,54 @@ type Readiness struct {
 // Bind defines how binding credentials are extracted.
 type Bind struct {
 	// CredentialsFromSecret is a Go template for the secret name.
-	CredentialsFromSecret string            `json:"credentialsFromSecret"`
+	//
+	// Pflicht, solange ProvisionedService nicht gesetzt ist; daneben dient es
+	// als Rueckfallebene, wenn ein Operator das Feld status.binding.name noch
+	// nicht fuellt.
+	CredentialsFromSecret string            `json:"credentialsFromSecret,omitempty"`
 	CredentialKeys        []string          `json:"credentialKeys,omitempty"` // filter; empty = all keys
 	ExtraLabels           map[string]string `json:"extraLabels,omitempty"`
+
+	// ProvisionedService liest den Secret-Namen aus .status.binding.name des
+	// provisionierten CR, statt ihn aus einem Namenstemplate zu raten
+	// (CNCF Service Binding Specification, "Provisioned Service" duck type).
+	//
+	// Das ist der eigentliche Gewinn gegenueber der bisherigen Konvention:
+	// der Operator sagt selbst, wo die Credentials liegen, statt dass der
+	// Broker ein Namensschema nachbaut, das bei jedem Operator anders ist.
+	ProvisionedService bool `json:"provisionedService,omitempty"`
+
+	// Type ist der well-known Diensttyp der Spec (postgresql, redis, mysql,
+	// rabbitmq, s3 ...). Er wird den Credentials als Feld "type" beigelegt -
+	// die Spec verlangt es von jedem Binding-Secret.
+	Type string `json:"type,omitempty"`
+	// Provider benennt optional die Implementierung hinter dem Typ.
+	Provider string `json:"provider,omitempty"`
+
+	// Mapping formt die Keys des Operator-Secrets auf die Zielform um.
+	//
+	// Ist Mapping gesetzt, besteht das Ergebnis GENAU aus den hier genannten
+	// Keys (plus type/provider). Das ist Absicht: ein Adapter, der zusaetzlich
+	// noch alle Originalschluessel durchreicht, macht das Ergebnis
+	// unvorhersehbar und den Zweck - eine definierte Zielform - zunichte.
+	Mapping []CredentialMapping `json:"mapping,omitempty"`
+
+	// ProjectSecret schreibt die Credentials zusaetzlich als spec-konformes
+	// Secret in den Ziel-Namespace, fuer Konsumenten ausserhalb von Cloud
+	// Foundry.
+	ProjectSecret bool `json:"projectSecret,omitempty"`
+}
+
+// CredentialMapping beschreibt einen Zielschluessel: entweder uebernommen aus
+// einem Schluessel des Operator-Secrets (From) oder zusammengesetzt (Value).
+type CredentialMapping struct {
+	// Name ist der Schluessel im Ergebnis.
+	Name string `json:"name"`
+	// From ist der Schluessel im Operator-Secret.
+	From string `json:"from,omitempty"`
+	// Value ist ein Go-Template ueber .credentials, etwa zum Zusammensetzen
+	// einer URI aus mehreren Feldern.
+	Value string `json:"value,omitempty"`
 }
 
 // Parse decodes and validates a ServiceDefinition YAML document.
@@ -167,8 +214,43 @@ func (sd *ServiceDefinition) Validate() error {
 	if sd.Spec.Readiness.StatusJSONPath == "" {
 		return fmt.Errorf("spec.readiness.statusJSONPath is required")
 	}
-	if sd.Spec.Bind.CredentialsFromSecret == "" {
-		return fmt.Errorf("spec.bind.credentialsFromSecret is required")
+	return sd.Spec.Bind.validate()
+}
+
+// wellKnownTypePattern beschreibt, was als Diensttyp taugt: der Wert landet
+// als Key-Inhalt im projizierten Secret und in den Credentials.
+var wellKnownTypePattern = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
+
+func (b *Bind) validate() error {
+	if b.CredentialsFromSecret == "" && !b.ProvisionedService {
+		return fmt.Errorf("spec.bind: either credentialsFromSecret or provisionedService is required")
+	}
+	if b.Type != "" && !wellKnownTypePattern.MatchString(b.Type) {
+		return fmt.Errorf("spec.bind.type %q must be lower-case alphanumeric with dashes (e.g. postgresql)", b.Type)
+	}
+	if b.ProjectSecret && b.Type == "" {
+		return fmt.Errorf("spec.bind.projectSecret requires spec.bind.type (the specification requires a type on every binding secret)")
+	}
+
+	seen := map[string]bool{}
+	for i, m := range b.Mapping {
+		if m.Name == "" {
+			return fmt.Errorf("spec.bind.mapping[%d]: name is required", i)
+		}
+		if seen[m.Name] {
+			return fmt.Errorf("spec.bind.mapping[%d]: duplicate name %q", i, m.Name)
+		}
+		seen[m.Name] = true
+
+		hasFrom, hasValue := m.From != "", m.Value != ""
+		if hasFrom == hasValue {
+			return fmt.Errorf("spec.bind.mapping[%d] %q: exactly one of from or value is required", i, m.Name)
+		}
+		if hasValue {
+			if _, err := template.New("m").Option("missingkey=error").Parse(m.Value); err != nil {
+				return fmt.Errorf("spec.bind.mapping[%d] %q: template: %w", i, m.Name, err)
+			}
+		}
 	}
 	return nil
 }
