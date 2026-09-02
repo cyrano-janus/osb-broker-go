@@ -73,9 +73,17 @@ func (h *Handlers) UnbindServiceInstance(c *gin.Context) {
 		PlanID:    planID,
 	}
 
-	// Phase 2: definition-based services unbind via engine (secret is not
-	// deleted — it belongs to the operator).
+	// Definition-basierte Services: das Credentials-Secret des Operators
+	// bleibt stehen, es gehoert ihm. Ein von uns projiziertes Secret
+	// (Phase 6.4) muss dagegen weg - sonst bliebe bei jedem Unbind eines mit
+	// echten Zugangsdaten im Namespace liegen.
 	if sd, _ := h.resolveDefinition(req.ServiceID); sd != nil {
+		namespace := targetNamespaceFromQuery(c)
+		if err := h.engine.Engine.DeleteBindingSecret(
+			c.Request.Context(), sd, namespace, bindingID); err != nil {
+			respondOSBError(c, err)
+			return
+		}
 		h.observeUnbind(req.ServiceID)
 		c.JSON(http.StatusOK, broker.UnbindResponse{})
 		return

@@ -19,6 +19,19 @@ rules:
   resources: ["secrets"]
   verbs: [get]
 {{- end }}
+{{- if .Values.rbac.projectedBindingSecrets }}
+# Schreibrechte auf Secrets in JEDEM Namespace - noetig fuer Definitionen mit
+# spec.bind.projectSecret (Phase 6.4), die das Binding zusaetzlich als
+# spec-konformes Secret im Ziel-Namespace ablegen.
+#
+# Bewusst eine eigene Option und nicht Teil von secretsAcrossNamespaces: das
+# ist Lesen, dies ist Schreiben. RBAC kann nicht auf Labels einschraenken, die
+# Berechtigung gilt also fuer alle Secrets. Wer 6.4 nicht braucht, laesst sie
+# aus.
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: [create, update, patch, delete]
+{{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

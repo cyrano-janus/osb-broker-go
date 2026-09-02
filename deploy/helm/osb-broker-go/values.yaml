@@ -112,6 +112,14 @@ rbac:
       resources: [seaweeds]
       verbs: [create, get, list, update, delete]
   secretsAcrossNamespaces: true   # ClusterRole für Secret-Reads (Bind)
+  # Schreibrechte auf Secrets in allen Namespaces. Nur nötig für Definitionen
+  # mit spec.bind.projectSecret (Phase 6.4) - sie legen das Binding
+  # zusätzlich als spec-konformes Secret im Ziel-Namespace ab, damit
+  # Kubernetes-Workloads es nutzen können.
+  #
+  # Bleibt es aus, während eine Definition projectSecret setzt, schlägt der
+  # Bind mit einer Meldung fehl, die genau diese fehlende Berechtigung nennt.
+  projectedBindingSecrets: false
 
 # Der Container läuft als nonroot (UID/GID 65532, distroless). fsGroup
 # sorgt dafür, dass die gemounteten Secret-Dateien für diese Gruppe lesbar

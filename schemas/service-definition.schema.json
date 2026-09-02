@@ -4,7 +4,12 @@
   "title": "ServiceDefinition",
   "description": "Declarative mapping of an OSB service offering onto a Kubernetes custom resource managed by an external operator. One YAML document per marketplace service — config over code.",
   "type": "object",
-  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "spec"
+  ],
   "properties": {
     "apiVersion": {
       "const": "broker.osb.io/v1alpha1"
@@ -14,24 +19,41 @@
     },
     "metadata": {
       "type": "object",
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "properties": {
         "name": {
           "type": "string",
           "description": "Internal identifier; also the ConfigMap key when bundled.",
           "pattern": "^[a-z0-9-]+$",
-          "examples": ["cnpg-postgresql"]
+          "examples": [
+            "cnpg-postgresql"
+          ]
         }
       }
     },
     "spec": {
       "type": "object",
-      "required": ["offering", "provision", "readiness", "bind"],
+      "required": [
+        "offering",
+        "provision",
+        "readiness",
+        "bind"
+      ],
       "properties": {
-        "offering": { "$ref": "#/definitions/offering" },
-        "provision": { "$ref": "#/definitions/provision" },
-        "readiness": { "$ref": "#/definitions/readiness" },
-        "bind": { "$ref": "#/definitions/bind" }
+        "offering": {
+          "$ref": "#/definitions/offering"
+        },
+        "provision": {
+          "$ref": "#/definitions/provision"
+        },
+        "readiness": {
+          "$ref": "#/definitions/readiness"
+        },
+        "bind": {
+          "$ref": "#/definitions/bind"
+        }
       }
     }
   },
@@ -39,18 +61,26 @@
     "offering": {
       "type": "object",
       "description": "How the service appears in the OSB catalog.",
-      "required": ["id", "name", "plans"],
+      "required": [
+        "id",
+        "name",
+        "plans"
+      ],
       "properties": {
         "id": {
           "type": "string",
           "description": "OSB service_id (UUID recommended). Stable across broker restarts.",
           "pattern": "^[a-zA-Z0-9-]+$",
-          "examples": ["f48a9e21-cnpg-0000-0000-000000000001"]
+          "examples": [
+            "f48a9e21-cnpg-0000-0000-000000000001"
+          ]
         },
         "name": {
           "type": "string",
           "description": "Marketplace name shown to consumers (cf marketplace).",
-          "examples": ["cnpg-postgresql"]
+          "examples": [
+            "cnpg-postgresql"
+          ]
         },
         "description": {
           "type": "string"
@@ -61,14 +91,19 @@
         },
         "tags": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "plans": {
           "type": "array",
           "minItems": 1,
           "items": {
             "type": "object",
-            "required": ["id", "name"],
+            "required": [
+              "id",
+              "name"
+            ],
             "properties": {
               "id": {
                 "type": "string",
@@ -76,20 +111,30 @@
               },
               "name": {
                 "type": "string",
-                "examples": ["small", "large"]
+                "examples": [
+                  "small",
+                  "large"
+                ]
               },
-              "description": { "type": "string" },
+              "description": {
+                "type": "string"
+              },
               "params": {
                 "type": "object",
                 "description": "Sizing knobs substituted into the provision template via {{ .plan.<key> }}.",
                 "additionalProperties": true,
                 "examples": [
-                  { "storageSize": "10Gi", "instances": 3 }
+                  {
+                    "storageSize": "10Gi",
+                    "instances": 3
+                  }
                 ]
               },
               "allowedParameters": {
                 "type": "array",
-                "items": { "type": "string" },
+                "items": {
+                  "type": "string"
+                },
                 "description": "Whitelist of parameter keys a consumer may send in provision/update requests. Unknown keys are rejected with 400. Empty/absent = no user parameters allowed."
               },
               "free": {
@@ -104,16 +149,24 @@
     "provision": {
       "type": "object",
       "description": "Which custom resource to create per instance.",
-      "required": ["apiVersion", "kind", "template"],
+      "required": [
+        "apiVersion",
+        "kind",
+        "template"
+      ],
       "properties": {
         "apiVersion": {
           "type": "string",
           "description": "CRD apiVersion of the target operator.",
-          "examples": ["postgresql.cnpg.io/v1"]
+          "examples": [
+            "postgresql.cnpg.io/v1"
+          ]
         },
         "kind": {
           "type": "string",
-          "examples": ["Cluster"]
+          "examples": [
+            "Cluster"
+          ]
         },
         "template": {
           "type": "string",
@@ -125,7 +178,9 @@
     "readiness": {
       "type": "object",
       "description": "How to evaluate instance readiness for last_operation polling.",
-      "required": ["statusJSONPath"],
+      "required": [
+        "statusJSONPath"
+      ],
       "properties": {
         "statusJSONPath": {
           "type": "string",
@@ -148,22 +203,84 @@
     },
     "bind": {
       "type": "object",
-      "description": "Where binding credentials come from.",
-      "required": ["credentialsFromSecret"],
+      "description": "Where binding credentials come from, and how they are shaped for the CNCF Service Binding Specification.",
       "properties": {
         "credentialsFromSecret": {
           "type": "string",
-          "description": "Go template for the secret name; usually '{{ .safeName }}-app' or similar operator convention.",
-          "examples": ["{{ .safeName }}-app"]
+          "description": "Go template for the secret name; usually '{{ .safeName }}-app' or similar operator convention. Required unless provisionedService is set; also used as a fallback when the operator does not populate .status.binding.name.",
+          "examples": [
+            "{{ .safeName }}-app"
+          ]
         },
         "credentialKeys": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "Optional whitelist of secret keys exposed as credentials. Absent = all keys."
         },
         "extraLabels": {
           "type": "object",
-          "additionalProperties": { "type": "string" }
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "provisionedService": {
+          "type": "boolean",
+          "description": "Read the secret name from .status.binding.name of the provisioned custom resource (CNCF Service Binding Specification, 'Provisioned Service' duck type) instead of guessing it from a name template."
+        },
+        "type": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+          "description": "Well-known service type of the specification. Added to the credentials as 'type' and required on a projected secret.",
+          "examples": [
+            "postgresql",
+            "mysql",
+            "redis",
+            "rabbitmq",
+            "mongodb",
+            "kafka",
+            "s3"
+          ]
+        },
+        "provider": {
+          "type": "string",
+          "description": "Optional implementation behind the type, e.g. 'cloudnative-pg'."
+        },
+        "mapping": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/credentialMapping"
+          },
+          "description": "Shapes the operator's secret keys into the target form. When set, the result consists of exactly these keys plus type/provider."
+        },
+        "projectSecret": {
+          "type": "boolean",
+          "description": "Additionally write the credentials as a specification-conformant secret into the target namespace, for consumers outside Cloud Foundry. Requires type."
+        }
+      }
+    },
+    "credentialMapping": {
+      "type": "object",
+      "description": "One target key: either taken from a secret key or composed from a template.",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Key in the resulting credentials."
+        },
+        "from": {
+          "type": "string",
+          "description": "Key in the operator's secret."
+        },
+        "value": {
+          "type": "string",
+          "description": "Go template over .credentials, e.g. to compose a URI.",
+          "examples": [
+            "postgresql://{{ .credentials.user }}@{{ .credentials.host }}:5432/app"
+          ]
         }
       }
     }

@@ -32,6 +32,15 @@ func (h *Handlers) bindDefinition(c *gin.Context, instanceID, bindingID string, 
 		respondOSBError(c, err)
 		return
 	}
+	// Phase 6.4: dasselbe Binding zusaetzlich als spec-konformes Secret
+	// ablegen, damit Konsumenten ausserhalb von Cloud Foundry es nutzen
+	// koennen - die sehen die OSB-Antwort nie. No-op ohne projectSecret.
+	if _, err := h.engine.Engine.ProjectBindingSecret(
+		c.Request.Context(), sd, namespace, instanceID, bindingID, creds); err != nil {
+		respondOSBError(c, err)
+		return
+	}
+
 	h.observeBind(req.ServiceID)
 
 	c.JSON(http.StatusCreated, broker.BindResponse{Credentials: creds})

@@ -398,6 +398,8 @@ func runLifecycleAudit(c *client, serviceID, planID string) string {
 	}
 
 	if bStatus == 201 {
+		checkServiceBindingSpec(bBody)
+
 		// Idempotent re-bind returns 200 with the same credentials.
 		rbStatus, rbBody := c.do("PUT", "/v2/service_instances/"+instanceID+"/service_bindings/"+instanceID+"-b1", map[string]interface{}{
 			"service_id": serviceID,
@@ -545,4 +547,72 @@ func cleanupAudit(c *client, instanceID, serviceID, planID string) {
 		return
 	}
 	pass("lifecycle-deprovision-gone", "second deprovision -> 410 Gone")
+}
+
+// wellKnownBindingKeys nennt je Diensttyp die Felder, die die CNCF Service
+// Binding Specification als "well-known" fuehrt. Ein Konsument, der sich auf
+// den Typ verlaesst, erwartet genau diese.
+var wellKnownBindingKeys = map[string][]string{
+	"postgresql": {"host", "port", "username", "password"},
+	"mysql":      {"host", "port", "username", "password"},
+	"mongodb":    {"host", "port", "username", "password"},
+	"redis":      {"host", "port", "password"},
+	"rabbitmq":   {"host", "port", "username", "password"},
+	"kafka":      {"bootstrap-servers"},
+	"s3":         {"bucket", "region", "access-key-id", "secret-access-key"},
+}
+
+// checkServiceBindingSpec prueft eine Bind-Antwort gegen die CNCF Service
+// Binding Specification (Phase 6.5).
+//
+// Der Checker sieht nur die OSB-Schnittstelle, nicht den Cluster - das
+// projizierte Secret und das status.binding.name-Feld kann er also nicht
+// pruefen. Was er sehen kann, ist der Typ und ob die Credentials zu ihm
+// passen. Ohne type ist der Dienst schlicht nicht spec-konform; das ist
+// erlaubt und wird als SKIP gemeldet, nicht als Fehler - sonst waere jeder
+// bestehende Broker ueber Nacht rot.
+func checkServiceBindingSpec(body []byte) {
+	const check = "service-binding-spec"
+
+	var resp struct {
+		Credentials map[string]interface{} `json:"credentials"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		fail(check, "bind response is not valid JSON: %s", truncate(body))
+		return
+	}
+
+	rawType, ok := resp.Credentials["type"]
+	if !ok {
+		fmt.Printf("SKIP [%s]: binding carries no 'type' - service is not declared as specification-conformant\n", check)
+		return
+	}
+
+	serviceType, ok := rawType.(string)
+	if !ok || serviceType == "" {
+		fail(check, "'type' must be a non-empty string, got %v", rawType)
+		return
+	}
+	if serviceType != strings.ToLower(serviceType) {
+		fail(check, "'type' %q must be lower-case", serviceType)
+		return
+	}
+	pass(check, "binding declares type %q", serviceType)
+
+	expected, known := wellKnownBindingKeys[serviceType]
+	if !known {
+		fmt.Printf("SKIP [%s]: %q is not a well-known type, no key expectations\n", check, serviceType)
+		return
+	}
+	var missing []string
+	for _, key := range expected {
+		if _, ok := resp.Credentials[key]; !ok {
+			missing = append(missing, key)
+		}
+	}
+	if len(missing) > 0 {
+		fail(check, "type %q is missing well-known keys: %s", serviceType, strings.Join(missing, ", "))
+		return
+	}
+	pass(check, "type %q carries all well-known keys", serviceType)
 }

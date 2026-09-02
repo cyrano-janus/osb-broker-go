@@ -74,11 +74,11 @@ func (d TemplateData) safeName() string   { return d.SafeName }
 // template readability.
 func (t TemplateData) lowerCase() map[string]interface{} {
 	return map[string]interface{}{
-		"instanceID":  t.InstanceID,
-		"safeName":    t.SafeName,
-		"bindingID":   t.BindingID,
-		"plan":        t.Plan,
-		"parameters":  t.Parameters,
+		"instanceID": t.InstanceID,
+		"safeName":   t.SafeName,
+		"bindingID":  t.BindingID,
+		"plan":       t.Plan,
+		"parameters": t.Parameters,
 	}
 }
 

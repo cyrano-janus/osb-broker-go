@@ -55,7 +55,40 @@ spec:
     timeoutSeconds: 600
 
   bind:
-    # Der cluster-operator legt pro RabbitmqCluster automatisch ein
-    # Default-User-Secret an (<name>-default-user mit username/password)
-    # und referenziert es in status.binding.
+    # Der cluster-operator implementiert den Provisioned-Service-Duck-Type der
+    # CNCF Service Binding Specification: er nennt sein Credentials-Secret
+    # selbst in status.binding.name. Damit muss die Definition kein
+    # Namensschema mehr nachbauen.
+    provisionedService: true
+    # Rueckfallebene fuer aeltere Operator-Versionen, die status.binding noch
+    # nicht fuellen - das ist der bisherige Weg, unveraendert.
     credentialsFromSecret: "{{ .safeName }}-default-user"
+
+    type: rabbitmq
+    provider: rabbitmq-cluster-operator
+
+    # Legt dieselben Credentials zusaetzlich als spec-konformes Secret im
+    # Ziel-Namespace ab. Cloud Foundry braucht das nicht - es bekommt sie in
+    # der OSB-Antwort -, aber ein Kubernetes-Workload sieht diese Antwort nie
+    # und kommt nur ueber ein Secret an sein Binding.
+    #
+    # ACHTUNG: braucht Schreibrechte auf Secrets im Ziel-Namespace. Im
+    # Helm-Chart ist das rbac.projectedBindingSecrets=true. Ohne die
+    # Berechtigung schlaegt der Bind fehl - mit einer Meldung, die genau sie
+    # benennt.
+    projectSecret: true
+
+    # Ohne mapping reicht der Broker alle Keys des Secrets durch - inklusive
+    # default_user.conf, einer Konfigurationsdatei, die in einem Binding
+    # nichts zu suchen hat (FINDINGS #23). Das mapping gibt die Zielform vor.
+    mapping:
+      - name: username
+        from: username
+      - name: password
+        from: password
+      - name: host
+        from: host
+      - name: port
+        from: port
+      - name: uri
+        value: "amqp://{{ .credentials.username }}:{{ .credentials.password }}@{{ .credentials.host }}:{{ .credentials.port }}/"
