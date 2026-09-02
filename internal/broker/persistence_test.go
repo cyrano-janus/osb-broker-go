@@ -15,10 +15,14 @@ import (
 
 func newTestInstance(id string) *Instance {
 	return &Instance{
-		ID:           id,
-		ServiceID:    "service-1",
-		PlanID:       "plan-free",
-		Context:      Context{Platform: "cloudfoundry", SpaceGUID: "space-1"},
+		ID:        id,
+		ServiceID: "service-1",
+		PlanID:    "plan-free",
+		Context:   Context{Platform: "cloudfoundry", SpaceGUID: "space-1"},
+		// Der Namespace, in dem die Operator-Ressourcen dieser Instanz
+		// liegen. DELETE- und last_operation-Requests tragen ihn nicht, er
+		// muss also aus dem Store kommen (FINDINGS #7/#16).
+		Namespace:    "space-1",
 		Parameters:   map[string]interface{}{"foo": "bar"},
 		DashboardURL: "https://dashboard.example.com/" + id,
 		Ready:        true,

@@ -34,6 +34,8 @@ type InstanceRecord struct {
 	ID        string `json:"id"`
 	ServiceID string `json:"serviceId"`
 	PlanID    string `json:"planId"`
+	// Namespace der Operator-Ressourcen dieser Instanz (FINDINGS #7/#16).
+	Namespace string `json:"namespace,omitempty"`
 	// AppliedObjects lists the K8s object names created for this instance
 	// (multi-doc, 4.6). Single-doc templates produce exactly one entry.
 	// Deprovision uses it to remove every object; empty = legacy behaviour
@@ -150,9 +152,13 @@ func (e *Engine) provisionDefinition(ctx context.Context, sd *ServiceDefinition,
 	// applied-object list enables multi-doc deprovision.
 	if e.reg != nil {
 		if err := e.reg.PutInstance(ctx, &InstanceRecord{
-			ID:             instanceID,
-			ServiceID:      sd.Spec.Offering.ID,
-			PlanID:         planID,
+			ID:        instanceID,
+			ServiceID: sd.Spec.Offering.ID,
+			PlanID:    planID,
+			// Ohne diesen Eintrag muesste jeder spaetere Aufruf den Namespace
+			// aus den angelegten Objekten erschliessen - was nur solange
+			// traegt, wie ueberhaupt welche angelegt wurden (FINDINGS #7/#16).
+			Namespace:      namespace,
 			AppliedObjects: refNames(applied),
 			AppliedRefs:    applied,
 		}); err != nil {

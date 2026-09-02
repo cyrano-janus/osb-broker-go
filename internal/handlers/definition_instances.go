@@ -37,7 +37,9 @@ func (h *Handlers) provisionDefinitionWithRequest(c *gin.Context, instanceID str
 		return
 	}
 
-	namespace := targetNamespace(req.Context)
+	// Beide erlaubten Quellen auswerten: Korifi schickt space_guid
+	// ausschliesslich als Top-Level-Feld (FINDINGS #3).
+	namespace := targetNamespace(req.ResolvedContext())
 	if err := h.engine.Engine.ProvisionInstance(c.Request.Context(), req.ServiceID, instanceID, namespace, req.PlanID, req.Parameters); err != nil {
 		respondOSBError(c, err)
 		return
@@ -59,7 +61,7 @@ func (h *Handlers) deprovisionWithEngine(c *gin.Context, instanceID, serviceID s
 		c.JSON(http.StatusBadRequest, gin.H{"error": "BadRequest", "description": "unknown definition service"})
 		return
 	}
-	namespace := targetNamespaceFromQuery(c)
+	namespace := h.instanceNamespace(c.Request.Context(), instanceID)
 
 	// OSB 2.17: deleting a non-existent instance is 410 Gone. The CR delete
 	// alone would succeed idempotently — so check existence first: the
@@ -102,13 +104,44 @@ func ValidatePlanParamsForService(h *Handlers, serviceID, planID string, paramet
 	return sd.ValidatePlanParameters(planID, parameters)
 }
 
+// defaultNamespace gilt, wo die Plattform keinen Space kennt.
+const defaultNamespace = "default"
+
+// targetNamespace bildet den Cloud-Foundry-Space auf einen Namespace ab.
+// Korifi legt seine Space-Namespaces genau unter der Space-GUID an.
 func targetNamespace(ctx broker.Context) string {
 	if ctx.SpaceGUID != "" {
 		return ctx.SpaceGUID
 	}
-	return "default"
+	return defaultNamespace
 }
 
-func targetNamespaceFromQuery(c *gin.Context) string {
-	return "default"
+// instanceNamespace ermittelt, in welchem Namespace die Ressourcen einer
+// bestehenden Instanz liegen.
+//
+// Aus dem Request ist das grundsaetzlich nicht herleitbar: ein
+// OSB-Deprovision, ein last_operation oder ein Bind tragen weder context noch
+// space_guid. Frueher stand hier hart "default" - und weil
+// OperatorClient.Delete ein IsNotFound ignoriert, meldete ein Deprovision im
+// falschen Namespace Erfolg, waehrend die Datenbank weiterlief (FINDINGS #7).
+//
+// Drei Stufen, absteigend nach Verlaesslichkeit:
+//  1. das beim Provision gespeicherte Namespace-Feld,
+//  2. der Namespace der angelegten Objekte - fuer Datensaetze, die vor der
+//     Einfuehrung des Feldes geschrieben wurden,
+//  3. "default", damit sich das Verhalten fuer alles Uebrige nicht aendert.
+func (h *Handlers) instanceNamespace(ctx context.Context, instanceID string) string {
+	inst, err := h.broker.StoredInstance(ctx, instanceID)
+	if err != nil || inst == nil {
+		return defaultNamespace
+	}
+	if inst.Namespace != "" {
+		return inst.Namespace
+	}
+	for _, ref := range inst.AppliedRefs {
+		if ref.Namespace != "" {
+			return ref.Namespace
+		}
+	}
+	return defaultNamespace
 }

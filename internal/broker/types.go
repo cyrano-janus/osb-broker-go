@@ -22,6 +22,29 @@ type ProvisionRequest struct {
 	Context    Context                `json:"context"`
 	Parameters map[string]interface{} `json:"parameters,omitempty"`
 	AcceptsIncomplete bool            `json:"accepts_incomplete"`
+
+	// OrganizationGUID und SpaceGUID sind die Top-Level-Felder aus OSB <= 2.12.
+	// Die Spezifikation fuehrt sie als veraltet, Cloud Foundry sendet sie aber
+	// weiter - Korifi sogar ausschliesslich, ohne context-Objekt. Wer nur
+	// context liest, bekommt von dort nie eine Space-GUID (FINDINGS #3).
+	OrganizationGUID string `json:"organization_guid,omitempty"`
+	SpaceGUID        string `json:"space_guid,omitempty"`
+}
+
+// ResolvedContext fuehrt beide erlaubten Quellen zusammen.
+//
+// context hat Vorrang, weil die Spezifikation die Top-Level-Felder als
+// veraltet fuehrt; wo context ein Feld nicht setzt, traegt Top-Level bei,
+// statt dass die Information verloren geht.
+func (r *ProvisionRequest) ResolvedContext() Context {
+	ctx := r.Context
+	if ctx.SpaceGUID == "" {
+		ctx.SpaceGUID = r.SpaceGUID
+	}
+	if ctx.OrganizationGUID == "" {
+		ctx.OrganizationGUID = r.OrganizationGUID
+	}
+	return ctx
 }
 
 // ProvisionResponse represents a provision response

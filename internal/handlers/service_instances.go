@@ -109,7 +109,9 @@ func (h *Handlers) UpdateServiceInstance(c *gin.Context) {
 
 	// Phase 3: definition-based services update via engine (CR re-render).
 	if sd, _ := h.resolveDefinition(req.ServiceID); sd != nil {
-		namespace := "default"
+		// Der PATCH-Request traegt keinen Space; der Namespace kommt aus dem
+		// gespeicherten Datensatz (FINDINGS #16).
+		namespace := h.instanceNamespace(c.Request.Context(), instanceID)
 		if err := ValidatePlanParamsForService(h, req.ServiceID, req.PlanID, req.Parameters); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "BadRequest", "description": err.Error()})
 			return
@@ -158,7 +160,12 @@ func (h *Handlers) GetLastOperation(c *gin.Context) {
 	// Phase 2: definition-based services derive state from CR readiness.
 	if serviceID := c.Query("service_id"); serviceID != "" {
 		if sd, _ := h.resolveDefinition(serviceID); sd != nil {
-			namespace := "default"
+			// Ebenso hier: ohne den gespeicherten Namespace suchte
+			// last_operation in "default", fand nichts und fiel auf den
+			// Legacy-Pfad zurueck, der hart "succeeded" meldet - Erfolg fuer
+			// eine Instanz, die der Broker gar nicht gefunden hat
+			// (FINDINGS #16).
+			namespace := h.instanceNamespace(c.Request.Context(), instanceID)
 			state, err := h.engine.Engine.LastOperation(c.Request.Context(), sd, namespace, instanceID)
 			if err != nil {
 				c.JSON(http.StatusNotFound, gin.H{

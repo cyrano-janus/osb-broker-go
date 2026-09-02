@@ -73,8 +73,15 @@ func newDefinitionRouter(t *testing.T) (*gin.Engine, *definition.OperatorClient)
 	h := New(b)
 	h.SetEngine(&EngineHolder{Engine: engine, Op: oc})
 
+	// Der zuletzt gebaute Broker, damit Tests den gespeicherten Datensatz
+	// pruefen koennen.
+	testBroker = b
+
 	return h.SetupRouter(), oc
 }
+
+// testBroker haelt den Broker der zuletzt gebauten Testroute.
+var testBroker *broker.Broker
 
 func putJSON(router *gin.Engine, path string, body interface{}) *httptest.ResponseRecorder {
 	b, _ := json.Marshal(body)

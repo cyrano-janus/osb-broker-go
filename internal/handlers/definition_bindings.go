@@ -18,7 +18,9 @@ func (h *Handlers) bindDefinition(c *gin.Context, instanceID, bindingID string, 
 		return
 	}
 
-	namespace := targetNamespace(req.Context)
+	// Der Bind-Request traegt keine Space-GUID. Der Namespace gehoert zur
+	// Instanz, nicht zum Bind - also aus dem Datensatz.
+	namespace := h.instanceNamespace(c.Request.Context(), instanceID)
 	creds, _, err := h.engine.Engine.BindCredentials(c.Request.Context(), sd, namespace, instanceID)
 	if err != nil {
 		if isNotFoundErr(err) {

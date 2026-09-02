@@ -57,6 +57,13 @@ spec:
                   type: string
                 dashboardUrl:
                   type: string
+                namespace:
+                  type: string
+                  description: >-
+                    Namespace der Operator-Ressourcen dieser Instanz, abgeleitet
+                    aus der Space-GUID beim Provision. Steht hier, weil ein
+                    OSB-Deprovision oder last_operation ihn nicht mitliefert und
+                    er sonst nicht mehr auffindbar waere.
                 ready:
                   type: boolean
                   description: Ob das Provisioning abgeschlossen ist.
