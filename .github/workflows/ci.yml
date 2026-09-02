@@ -96,6 +96,11 @@ jobs:
         run: |
           docker build -q -t osb-broker-go:pr .
           kind load docker-image osb-broker-go:pr --name ci
+          # Phase 5: der Zustand liegt in eigenen CRDs. Ohne sie startet der
+          # Broker zwar, aber jedes Provision scheitert.
+          kubectl apply -f deploy/crds/
+          kubectl wait --for condition=established --timeout=60s \
+            crd/osbserviceinstances.broker.osb.io crd/osbservicebindings.broker.osb.io
           kubectl create namespace osb --dry-run=client -o yaml | kubectl apply -f -
           kubectl create secret generic osb-broker-auth -n osb \
             --from-literal=username=chk \
@@ -107,16 +112,18 @@ jobs:
           # RBAC zuerst (Propagation-Delay abwarten), dann Broker-Deploy
           kubectl apply -f deploy/k8s/operator-rbac.yaml
           sleep 5
+          # Kein sed mehr auf STORE_BACKEND: das Gate fuhr bisher gegen den
+          # In-Memory-Store und pruefte damit ausgerechnet die Persistenz
+          # nicht, die im Betrieb zaehlt. Jetzt laeuft es gegen den CRD-Store.
           sed -e 's|image: osb-broker-go:v[0-9]*|image: osb-broker-go:pr|' \
-              -e 's|value: \"k8s\"|value: \"memory\"|' \
               deploy/k8s/broker.yaml | kubectl apply -f -
           kubectl rollout status deployment/osb-broker-go -n osb --timeout=120s
           sleep 3
           echo "--- RBAC self-check ---"
           echo "Pod SA: $(kubectl get pod -n osb -l app=osb-broker-go -o jsonpath='{.items[0].spec.serviceAccountName}')"
           echo "Role rules: $(kubectl get role osb-broker-state -n osb -o jsonpath='{.rules}')"
-          echo "can-i create cm: $(kubectl auth can-i --as=system:serviceaccount:osb:osb-broker-go create configmaps -n osb)"
-          echo "can-i create cm named osb-broker-state: $(kubectl auth can-i --as=system:serviceaccount:osb:osb-broker-go create configmap/osb-broker-state -n osb)"
+          echo "can-i create instances: $(kubectl auth can-i --as=system:serviceaccount:osb:osb-broker-go create osbserviceinstances.broker.osb.io -n osb)"
+          echo "can-i create bindings: $(kubectl auth can-i --as=system:serviceaccount:osb:osb-broker-go create osbservicebindings.broker.osb.io -n osb)"
           kubectl get role,rolebinding -n osb || true
 
       - name: Run osb-checker against the PR broker
@@ -133,6 +140,17 @@ jobs:
           kill "$PF_PID" 2>/dev/null || true
           cat /tmp/checker.log >> "$GITHUB_STEP_SUMMARY" || true
           exit "$RC"
+
+      - name: Zustand liegt wirklich in CRs
+        if: always()
+        run: |
+          # Der Checker raeumt am Ende auf, deshalb zaehlt hier nicht die
+          # Anzahl - sondern dass die Ressourcenart existiert und der Broker
+          # sie benutzen durfte. Ein stiller Rueckfall auf In-Memory faellt
+          # damit auf.
+          kubectl get osbserviceinstances.broker.osb.io -n osb || true
+          kubectl get osbservicebindings.broker.osb.io -n osb || true
+          kubectl logs -n osb deployment/osb-broker-go --tail=30 | grep -i "state store" || true
 
       - name: Upload checker log
         if: always()
@@ -188,6 +206,9 @@ jobs:
           docker build -q -t osb-broker-go:pr .
           kind load docker-image osb-broker-go:pr --name ci-tls
           kubectl create namespace osb --dry-run=client -o yaml | kubectl apply -f -
+          kubectl apply -f deploy/crds/
+          kubectl wait --for condition=established --timeout=60s \
+            crd/osbserviceinstances.broker.osb.io crd/osbservicebindings.broker.osb.io
           kubectl create secret tls osb-broker-tls -n osb \
             --cert=/tmp/certs/tls.crt --key=/tmp/certs/tls.key \
             --dry-run=client -o yaml | kubectl apply -f -

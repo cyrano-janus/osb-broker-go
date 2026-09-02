@@ -1,0 +1,92 @@
+# Zustand eines Service-Bindings (Phase 5).
+#
+# Die Credentials stehen absichtlich NICHT hier, sondern in einem Secret, auf
+# das spec.credentialsSecret verweist. In der abgeloesten State-ConfigMap
+# lagen sie im Klartext neben allem anderen (FINDINGS #19); ein CR haette das
+# nur mit anderem Objektnamen wiederholt. Ein Secret laesst sich getrennt per
+# RBAC schuetzen und at rest verschluesseln.
+#
+# Installation: kubectl apply -f deploy/crds/
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: osbservicebindings.broker.osb.io
+spec:
+  group: broker.osb.io
+  scope: Namespaced
+  names:
+    kind: OSBServiceBinding
+    listKind: OSBServiceBindingList
+    plural: osbservicebindings
+    singular: osbservicebinding
+    shortNames: [osbb]
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: Instance
+          type: string
+          jsonPath: .spec.instanceId
+        - name: Service
+          type: string
+          jsonPath: .spec.serviceId
+        - name: Ready
+          type: boolean
+          jsonPath: .spec.ready
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [id, instanceId, serviceId, planId]
+              properties:
+                id:
+                  type: string
+                  description: >-
+                    Die OSB-Binding-ID, wie die Plattform sie geschickt hat.
+                    Der Objektname ist davon nur abgeleitet.
+                instanceId:
+                  type: string
+                  description: >-
+                    Die OSB-Instanz-ID. Zusaetzlich traegt das Objekt das Label
+                    broker.osb.io/instance mit dem abgeleiteten Objektnamen der
+                    Instanz, damit sich Bindings serverseitig filtern lassen.
+                serviceId:
+                  type: string
+                planId:
+                  type: string
+                appGuid:
+                  type: string
+                ready:
+                  type: boolean
+                syslogDrainUrl:
+                  type: string
+                routeServiceUrl:
+                  type: string
+                credentialsSecret:
+                  type: string
+                  description: >-
+                    Name des Secrets mit den Credentials (Key
+                    credentials.json). Leer, wenn das Binding keine hat.
+                context:
+                  type: object
+                  properties:
+                    platform: {type: string}
+                    organizationGuid: {type: string}
+                    spaceGuid: {type: string}
+                    clusterId: {type: string}
+                    namespace: {type: string}
+                    originatingIdentity: {type: string}
+                parameters:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                volumeMounts:
+                  type: array
+                  items:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true

@@ -32,12 +32,12 @@ func main() {
 	// Initialize in-memory catalog store
 	serviceStore := store.NewInMemoryStore()
 
-	// State store selection (Phase 1.1): "k8s" persists instances/bindings
-	// in a ConfigMap so they survive pod restarts; "memory" is the default
-	// for local runs and tests.
+	// State store selection (Phase 5): "crd" haelt jeden Datensatz als
+	// eigenes Custom Resource; "memory" ist fuer lokale Laeufe und Tests.
+	// Ein unbekannter Wert wurde bereits in config.Load abgelehnt.
 	var stateStore broker.StateStore
 	switch cfg.StoreBackend {
-	case "k8s":
+	case config.BackendCRD:
 		restCfg, err := k8sconfig.GetConfig()
 		if err != nil {
 			log.Fatalf("load kubeconfig: %v", err)
@@ -46,11 +46,10 @@ func main() {
 		if err != nil {
 			log.Fatalf("build k8s client: %v", err)
 		}
-		stateStore = broker.NewK8sStateStore(k8sClient, cfg.PodNamespace)
-		log.Printf("State store: kubernetes ConfigMap in namespace %q", cfg.PodNamespace)
+		stateStore = broker.NewCRDStateStore(k8sClient, cfg.PodNamespace)
+		log.Printf("State store: OSBServiceInstance/OSBServiceBinding in namespace %q", cfg.PodNamespace)
 	default:
 		stateStore = broker.NewInMemoryStateStore()
-		log.Printf("WARNING: STORE_BACKEND unset - using in-memory state (lost on restart)")
 	}
 
 	// Initialize broker

@@ -1,8 +1,7 @@
 # Werte für das TLS/mTLS-Conformance-Gate (CI-Job L2b).
 #
 # Die Zertifikate erzeugt der Workflow per openssl und legt sie als Secrets
-# ab - kein cert-manager im CI-Cluster. Der State-Store läuft im Speicher,
-# wie im bestehenden L2-Gate auch.
+# ab - kein cert-manager im CI-Cluster.
 
 image:
   repository: osb-broker-go
@@ -15,7 +14,9 @@ service:
   port: 443
 
 config:
-  storeBackend: memory
+  # Der CRD-Store, nicht memory: sonst prueft das Gate ausgerechnet die
+  # Persistenz nicht, die im Betrieb zaehlt. Die CRDs legt der Workflow an.
+  storeBackend: crd
 
 auth:
   create: true

@@ -38,8 +38,7 @@ func NewInMemoryStateStore() StateStore {
 func (m *memoryStateStore) PutInstance(_ context.Context, i *Instance) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	cp := *i
-	m.instances[i.ID] = &cp
+	m.instances[i.ID] = i.DeepCopy()
 	return nil
 }
 
@@ -50,8 +49,7 @@ func (m *memoryStateStore) GetInstance(_ context.Context, id string) (*Instance,
 	if !ok {
 		return nil, fmt.Errorf("%w: instance %q", ErrNotFound, id)
 	}
-	cp := *i
-	return &cp, nil
+	return i.DeepCopy(), nil
 }
 
 func (m *memoryStateStore) DeleteInstance(_ context.Context, id string) error {
@@ -64,8 +62,7 @@ func (m *memoryStateStore) DeleteInstance(_ context.Context, id string) error {
 func (m *memoryStateStore) PutBinding(_ context.Context, b *Binding) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	cp := *b
-	m.bindings[b.ID] = &cp
+	m.bindings[b.ID] = b.DeepCopy()
 	return nil
 }
 
@@ -76,8 +73,7 @@ func (m *memoryStateStore) GetBinding(_ context.Context, id string) (*Binding, e
 	if !ok {
 		return nil, fmt.Errorf("%w: binding %q", ErrNotFound, id)
 	}
-	cp := *b
-	return &cp, nil
+	return b.DeepCopy(), nil
 }
 
 func (m *memoryStateStore) DeleteBinding(_ context.Context, id string) error {
@@ -93,8 +89,7 @@ func (m *memoryStateStore) ListBindingsByInstance(_ context.Context, instanceID 
 	var out []*Binding
 	for _, b := range m.bindings {
 		if b.InstanceID == instanceID {
-			cp := *b
-			out = append(out, &cp)
+			out = append(out, b.DeepCopy())
 		}
 	}
 	return out, nil

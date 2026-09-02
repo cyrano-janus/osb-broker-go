@@ -20,6 +20,19 @@ const (
 	MethodMTLS  = "mtls"
 )
 
+// State-Store-Backends (Phase 5).
+const (
+	// BackendCRD haelt jeden Datensatz als eigenes Custom Resource.
+	BackendCRD = "crd"
+	// BackendMemory verliert den Zustand beim Neustart; fuer lokale Laeufe
+	// und Tests.
+	BackendMemory = "memory"
+	// backendK8sLegacy war der Name des ConfigMap-Stores. Er wird als Alias
+	// auf BackendCRD akzeptiert, damit bestehende Deployments beim Upgrade
+	// nicht still auf In-Memory zurueckfallen.
+	backendK8sLegacy = "k8s"
+)
+
 // Config is the fully resolved broker configuration.
 type Config struct {
 	Port           string
@@ -99,7 +112,7 @@ func LoadFrom(get func(string) string) (*Config, error) {
 
 	c := &Config{
 		Port:           l.str("PORT", "8080"),
-		StoreBackend:   l.str("STORE_BACKEND", ""),
+		StoreBackend:   l.str("STORE_BACKEND", BackendMemory),
 		PodNamespace:   l.str("POD_NAMESPACE", ""),
 		DefinitionsDir: l.str("DEFINITIONS_DIR", ""),
 		// Legacy contract from Phase 4.3: metrics are on unless the value is
@@ -142,6 +155,12 @@ func LoadFrom(get func(string) string) (*Config, error) {
 		return nil, l.err
 	}
 
+	backend, legacyBackendName, err := normaliseStoreBackend(c.StoreBackend)
+	if err != nil {
+		return nil, err
+	}
+	c.StoreBackend = backend
+
 	minVersion, err := parseMinVersion(l.str("TLS_MIN_VERSION", "1.2"))
 	if err != nil {
 		return nil, err
@@ -160,6 +179,10 @@ func LoadFrom(get func(string) string) (*Config, error) {
 		return nil, err
 	}
 	c.collectWarnings()
+	if legacyBackendName {
+		c.Warnings = append(c.Warnings,
+			"STORE_BACKEND=k8s bezeichnete den abgeloesten ConfigMap-Store und wird als \"crd\" gelesen; bitte auf STORE_BACKEND=crd umstellen")
+	}
 	return c, nil
 }
 
@@ -172,6 +195,21 @@ func (c *Config) AuthEnabled() bool { return len(c.Auth.Methods) > 0 }
 // of the two being set is enough, matching the existing main.go check.
 func (c *Config) basicConfigured() bool {
 	return c.Auth.Basic.User != "" || c.Auth.Basic.Password != ""
+}
+
+// normaliseStoreBackend prueft den Wert und loest den Alias auf. Ein
+// unbekannter Wert ist ein Fehler: vorher fiel jeder Tippfehler still auf
+// In-Memory zurueck, der Broker lief scheinbar normal und verlor beim
+// naechsten Neustart alle Instanzen.
+func normaliseStoreBackend(v string) (backend string, wasLegacyName bool, err error) {
+	switch v {
+	case BackendCRD, BackendMemory:
+		return v, false, nil
+	case backendK8sLegacy:
+		return BackendCRD, true, nil
+	default:
+		return "", false, fmt.Errorf("STORE_BACKEND: %q ist unbekannt (erlaubt: %s, %s)", v, BackendCRD, BackendMemory)
+	}
 }
 
 func parseMinVersion(v string) (uint16, error) {
@@ -247,8 +285,8 @@ func (c *Config) deriveClientAuth() tls.ClientAuthType {
 // Validate rejects configurations that cannot work, with the offending
 // environment variable named.
 func (c *Config) Validate() error {
-	if c.StoreBackend == "k8s" && c.PodNamespace == "" {
-		return fmt.Errorf("STORE_BACKEND=k8s requires POD_NAMESPACE")
+	if c.StoreBackend == BackendCRD && c.PodNamespace == "" {
+		return fmt.Errorf("STORE_BACKEND=%s requires POD_NAMESPACE", BackendCRD)
 	}
 	if c.TLS.Enabled {
 		if c.TLS.CertFile == "" {
@@ -270,6 +308,10 @@ func (c *Config) Validate() error {
 }
 
 func (c *Config) collectWarnings() {
+	if c.StoreBackend == BackendMemory {
+		c.Warnings = append(c.Warnings,
+			"state store is in-memory - instances and bindings are lost on restart; set STORE_BACKEND=crd for production use")
+	}
 	if !c.AuthEnabled() {
 		c.Warnings = append(c.Warnings,
 			"authentication is disabled - set BROKER_AUTH_USER/BROKER_AUTH_PASSWORD or MTLS_ENABLED for production use")
