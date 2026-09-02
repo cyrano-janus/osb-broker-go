@@ -6,6 +6,7 @@ import (
 	"github.com/example/osb-broker/internal/broker"
 	"github.com/example/osb-broker/internal/config"
 	"github.com/example/osb-broker/internal/handlers"
+	"github.com/example/osb-broker/internal/server"
 	"github.com/example/osb-broker/internal/store"
 	k8sconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
 )
@@ -20,6 +21,11 @@ func main() {
 	for _, w := range cfg.Warnings {
 		log.Printf("WARNING: %s", w)
 	}
+
+	// Cancelled on SIGTERM so a rollout drains in-flight requests instead
+	// of cutting them off.
+	ctx, stop := server.SignalContext()
+	defer stop()
 
 	// Initialize in-memory catalog store
 	serviceStore := store.NewInMemoryStore()
@@ -76,8 +82,18 @@ func main() {
 	// Setup router
 	router := h.SetupRouter()
 
+	srv := server.New(server.Options{
+		Addr:              ":" + cfg.Port,
+		Handler:           router,
+		ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
+		ReadTimeout:       cfg.Server.ReadTimeout,
+		WriteTimeout:      cfg.Server.WriteTimeout,
+		IdleTimeout:       cfg.Server.IdleTimeout,
+	})
+
 	log.Printf("Starting OSB Broker on port %s", cfg.Port)
-	if err := router.Run(":" + cfg.Port); err != nil {
+	if err := server.Run(ctx, srv, cfg.Server.ShutdownTimeout); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
+	log.Printf("OSB Broker stopped")
 }
