@@ -319,3 +319,112 @@ func TestShapeCredentials_OhneTypBleibtDasFeldWeg(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, got, "type")
 }
+
+// --- 6.4: spec-konformes Secret fuer Konsumenten ausserhalb von Cloud Foundry ---
+
+func TestProjectBindingSecret_SchreibtEinSpecKonformesSecret(t *testing.T) {
+	sd := parseBind(t, `    credentialsFromSecret: "{{ .safeName }}-app"
+    projectSecret: true
+    type: postgresql
+    provider: cloudnative-pg
+    mapping:
+      - name: username
+        from: user
+      - name: host
+        from: host
+`)
+	e := bindTestEngine(t, sd, nil, map[string]map[string][]byte{
+		SanitizeInstanceName("inst-1") + "-app": {"user": []byte("app"), "host": []byte("db-rw")},
+	})
+	ctx := context.Background()
+
+	creds, _, err := e.BindCredentials(ctx, sd, "default", "inst-1")
+	require.NoError(t, err)
+
+	name, err := e.ProjectBindingSecret(ctx, sd, "default", "inst-1", "bind-1", creds)
+	require.NoError(t, err)
+	require.NotEmpty(t, name)
+
+	sec, err := e.op.GetSecretObj(ctx, "default", name)
+	require.NoError(t, err)
+
+	// Die Spezifikation verlangt den Typ als Eintrag im Secret; der
+	// Kubernetes-Secret-Type traegt ihn zusaetzlich als servicebinding.io/<typ>.
+	assert.Equal(t, "postgresql", string(sec.Data["type"]))
+	assert.Equal(t, "cloudnative-pg", string(sec.Data["provider"]))
+	assert.Equal(t, "app", string(sec.Data["username"]))
+	assert.Equal(t, "db-rw", string(sec.Data["host"]))
+	assert.Equal(t, "servicebinding.io/postgresql", string(sec.Type))
+	assert.Equal(t, "osb-broker-go", sec.Labels["app.kubernetes.io/managed-by"])
+}
+
+func TestProjectBindingSecret_OhneProjectSecretPassiertNichts(t *testing.T) {
+	sd := parseBind(t, "    credentialsFromSecret: \"{{ .safeName }}-app\"\n    type: postgresql\n")
+	e := bindTestEngine(t, sd, nil, map[string]map[string][]byte{
+		SanitizeInstanceName("inst-1") + "-app": {"user": []byte("app")},
+	})
+
+	name, err := e.ProjectBindingSecret(context.Background(), sd, "default", "inst-1", "bind-1",
+		map[string]interface{}{"user": "app"})
+	require.NoError(t, err)
+	assert.Empty(t, name, "ohne projectSecret darf kein Secret entstehen")
+}
+
+func TestProjectBindingSecret_IstIdempotent(t *testing.T) {
+	sd := parseBind(t, "    credentialsFromSecret: s\n    projectSecret: true\n    type: redis\n")
+	e := bindTestEngine(t, sd, nil, nil)
+	ctx := context.Background()
+
+	first, err := e.ProjectBindingSecret(ctx, sd, "default", "inst-1", "bind-1",
+		map[string]interface{}{"password": "a"})
+	require.NoError(t, err)
+
+	// Rebind mit rotierten Credentials: derselbe Name, neuer Inhalt.
+	second, err := e.ProjectBindingSecret(ctx, sd, "default", "inst-1", "bind-1",
+		map[string]interface{}{"password": "b"})
+	require.NoError(t, err)
+	assert.Equal(t, first, second)
+
+	sec, err := e.op.GetSecretObj(ctx, "default", first)
+	require.NoError(t, err)
+	assert.Equal(t, "b", string(sec.Data["password"]))
+}
+
+func TestDeleteBindingSecret_RaeumtBeimUnbindAb(t *testing.T) {
+	// Ohne das bliebe bei jedem Unbind ein Secret mit echten
+	// Datenbank-Credentials im Namespace stehen.
+	sd := parseBind(t, "    credentialsFromSecret: s\n    projectSecret: true\n    type: redis\n")
+	e := bindTestEngine(t, sd, nil, nil)
+	ctx := context.Background()
+
+	name, err := e.ProjectBindingSecret(ctx, sd, "default", "inst-1", "bind-1",
+		map[string]interface{}{"password": "a"})
+	require.NoError(t, err)
+
+	require.NoError(t, e.DeleteBindingSecret(ctx, sd, "default", "bind-1"))
+
+	_, err = e.op.GetSecretObj(ctx, "default", name)
+	assert.Error(t, err, "das projizierte Secret muss mit dem Binding verschwinden")
+}
+
+func TestDeleteBindingSecret_IstIdempotent(t *testing.T) {
+	// Unbind darf beim zweiten Aufruf nicht 500 werden.
+	sd := parseBind(t, "    credentialsFromSecret: s\n    projectSecret: true\n    type: redis\n")
+	e := bindTestEngine(t, sd, nil, nil)
+	assert.NoError(t, e.DeleteBindingSecret(context.Background(), sd, "default", "nie-dagewesen"))
+}
+
+func TestProjectBindingSecret_NamenSindProBindungEindeutigUndGueltig(t *testing.T) {
+	sd := parseBind(t, "    credentialsFromSecret: s\n    projectSecret: true\n    type: redis\n")
+	e := bindTestEngine(t, sd, nil, nil)
+	ctx := context.Background()
+
+	a, err := e.ProjectBindingSecret(ctx, sd, "default", "inst-1", "Binding_MIT.Sonderzeichen", map[string]interface{}{"x": "1"})
+	require.NoError(t, err)
+	b, err := e.ProjectBindingSecret(ctx, sd, "default", "inst-1", "andere-bindung", map[string]interface{}{"x": "1"})
+	require.NoError(t, err)
+
+	assert.NotEqual(t, a, b)
+	assert.LessOrEqual(t, len(a), 63)
+	assert.Equal(t, strings.ToLower(a), a)
+}

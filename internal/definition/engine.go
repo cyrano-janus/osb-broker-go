@@ -12,9 +12,9 @@ import (
 // applies them through an OperatorClient. It is storage-agnostic — the
 // broker keeps its own bookkeeping via its StateStore.
 type Engine struct {
-	op           *OperatorClient
-	definitions  []*ServiceDefinition
-	byServiceID  map[string]*ServiceDefinition
+	op          *OperatorClient
+	definitions []*ServiceDefinition
+	byServiceID map[string]*ServiceDefinition
 	// InstanceRegistry lets the engine record provisioned/deprovisioned
 	// instances in the broker's persistent state (decoupled via interface).
 	reg InstanceRegistry
@@ -73,11 +73,11 @@ func NewEngine(op *OperatorClient, defs ...*ServiceDefinition) *Engine {
 
 // CatalogEntry is a minimal view for building the OSB catalog.
 type CatalogEntry struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Bindable    bool     `json:"bindable"`
-	Tags        []string `json:"tags,omitempty"`
+	ID          string        `json:"id"`
+	Name        string        `json:"name"`
+	Description string        `json:"description"`
+	Bindable    bool          `json:"bindable"`
+	Tags        []string      `json:"tags,omitempty"`
 	Plans       []CatalogPlan `json:"plans"`
 }
 

@@ -18,10 +18,10 @@ const (
 
 // ServiceDefinition is the top-level document.
 type ServiceDefinition struct {
-	APIVersion string       `json:"apiVersion"`
-	Kind       string       `json:"kind"`
-	Metadata   Metadata     `json:"metadata"`
-	Spec       Spec         `json:"spec"`
+	APIVersion string   `json:"apiVersion"`
+	Kind       string   `json:"kind"`
+	Metadata   Metadata `json:"metadata"`
+	Spec       Spec     `json:"spec"`
 }
 
 // Metadata identifies the definition.

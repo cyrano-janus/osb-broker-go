@@ -3,10 +3,19 @@ package definition
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"text/template"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+)
+
+// Labels am projizierten Secret, damit Workloads es finden koennen.
+const (
+	managedByValue  = "osb-broker-go"
+	LabelInstanceID = "osb.broker.osb.io/instance-id"
+	LabelBindingID  = "osb.broker.osb.io/binding-id"
 )
 
 // Umsetzung der CNCF Service Binding Specification (Phase 6).
@@ -134,4 +143,80 @@ func applyMapping(mapping []CredentialMapping, raw map[string]interface{}) (map[
 		out[m.Name] = buf.String()
 	}
 	return out, nil
+}
+
+// --- 6.4: spec-konformes Secret fuer Konsumenten ausserhalb von Cloud Foundry ---
+
+// bindingSecretSuffix haengt an den abgeleiteten Namen des projizierten
+// Secrets. Der Name ist rein aus der Binding-ID abgeleitet und braucht keinen
+// gespeicherten Zustand - so laesst er sich beim Unbind wieder bilden.
+const bindingSecretSuffix = "-binding"
+
+// secretTypePrefix ist der von der Spezifikation vorgesehene Praefix fuer den
+// Kubernetes-Secret-Type.
+const secretTypePrefix = "servicebinding.io/"
+
+// projectedSecretName leitet den Namen des projizierten Secrets ab.
+func projectedSecretName(bindingID string) string {
+	// SanitizeInstanceName kuerzt auf ein gueltiges DNS-1123-Label und haengt
+	// bei Ueberlaenge einen Hash an; das Suffix muss in die 63 Zeichen passen.
+	return SanitizeInstanceName(bindingID + bindingSecretSuffix)
+}
+
+// ProjectBindingSecret schreibt die Credentials zusaetzlich als
+// spec-konformes Secret in den Ziel-Namespace.
+//
+// Damit wird ein Binding auch fuer Konsumenten nutzbar, die nicht ueber Cloud
+// Foundry kommen: ein Workload referenziert das Secret ueber eine
+// ServiceBinding-Ressource, statt die Credentials aus einer OSB-Antwort zu
+// bekommen, die er nie sieht.
+//
+// Ohne spec.bind.projectSecret passiert nichts; der Rueckgabewert ist dann
+// leer.
+func (e *Engine) ProjectBindingSecret(ctx context.Context, sd *ServiceDefinition, namespace, instanceID, bindingID string, creds map[string]interface{}) (string, error) {
+	if !sd.Spec.Bind.ProjectSecret {
+		return "", nil
+	}
+
+	data := make(map[string][]byte, len(creds))
+	for k, v := range creds {
+		data[k] = []byte(fmt.Sprintf("%v", v))
+	}
+
+	labels := map[string]string{
+		"app.kubernetes.io/managed-by": managedByValue,
+		LabelInstanceID:                SanitizeInstanceName(instanceID),
+		LabelBindingID:                 SanitizeInstanceName(bindingID),
+	}
+	// ExtraLabels war bisher deklariert, aber nirgends gelesen. Hier hat es
+	// einen Sinn: Workloads suchen ihr Binding-Secret ueber Labels.
+	for k, v := range sd.Spec.Bind.ExtraLabels {
+		labels[k] = v
+	}
+
+	name := projectedSecretName(bindingID)
+	// Das provisionierte CR als Owner: wird die Instanz geloescht, raeumt
+	// Kubernetes das Secret mit ab - auch dann, wenn kein Unbind mehr kommt.
+	owner, err := e.op.GetCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind,
+		namespace, SanitizeInstanceName(instanceID))
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return "", err
+	}
+
+	if err := e.op.WriteSecret(ctx, namespace, name,
+		corev1.SecretType(secretTypePrefix+sd.Spec.Bind.Type), data, labels, owner); err != nil {
+		return "", err
+	}
+	return name, nil
+}
+
+// DeleteBindingSecret entfernt das projizierte Secret. Ohne das bliebe bei
+// jedem Unbind ein Secret mit echten Credentials im Namespace stehen.
+//
+// Idempotent: ein zweites Unbind darf nicht fehlschlagen.
+func (e *Engine) DeleteBindingSecret(ctx context.Context, sd *ServiceDefinition, namespace, bindingID string) error {
+	if !sd.Spec.Bind.ProjectSecret {
+		return nil
+	}
+	return e.op.DeleteSecret(ctx, namespace, projectedSecretName(bindingID))
 }

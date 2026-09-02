@@ -8,6 +8,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -18,7 +19,6 @@ import (
 
 // ErrNotFound mirrors broker.ErrNotFound semantics without an import cycle.
 var ErrNotFound = errors.New("not found")
-
 
 // OperatorClient performs the generic CR lifecycle against arbitrary
 // operator APIs (Phase 2.3/2.4/2.5): apply, delete, readiness lookup and
@@ -324,4 +324,60 @@ func refNames(refs []ObjectRef) []string {
 		names = append(names, r.Name)
 	}
 	return names
+}
+
+// WriteSecret legt ein Secret an oder aktualisiert es.
+//
+// Fuer das projizierte Binding-Secret aus Phase 6. Ein Rebind mit rotierten
+// Credentials muss denselben Namen behalten und den Inhalt ersetzen, sonst
+// zeigen Workloads auf ein Secret mit veralteten Zugangsdaten.
+func (o *OperatorClient) WriteSecret(ctx context.Context, namespace, name string,
+	secretType corev1.SecretType, data map[string][]byte, labels map[string]string,
+	owner *unstructured.Unstructured) error {
+
+	sec := &corev1.Secret{}
+	sec.SetNamespace(namespace)
+	sec.SetName(name)
+
+	err := o.Client.Get(ctx, client.ObjectKeyFromObject(sec), sec)
+	exists := err == nil
+	if err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("get secret %q: %w", name, err)
+	}
+
+	sec.Type = secretType
+	sec.Data = data
+	sec.Labels = labels
+	if owner != nil {
+		sec.OwnerReferences = []metav1.OwnerReference{{
+			APIVersion: owner.GetAPIVersion(),
+			Kind:       owner.GetKind(),
+			Name:       owner.GetName(),
+			UID:        owner.GetUID(),
+		}}
+	}
+
+	if exists {
+		// Der Type eines bestehenden Secrets ist unveraenderlich; ein Wechsel
+		// des Diensttyps in der Definition erfordert ein Neuanlegen.
+		if err := o.Client.Update(ctx, sec); err != nil {
+			return fmt.Errorf("update secret %q: %w", name, err)
+		}
+		return nil
+	}
+	if err := o.Client.Create(ctx, sec); err != nil {
+		return fmt.Errorf("create secret %q: %w", name, err)
+	}
+	return nil
+}
+
+// DeleteSecret entfernt ein Secret; ein fehlendes ist kein Fehler.
+func (o *OperatorClient) DeleteSecret(ctx context.Context, namespace, name string) error {
+	sec := &corev1.Secret{}
+	sec.SetNamespace(namespace)
+	sec.SetName(name)
+	if err := o.Client.Delete(ctx, sec); err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("delete secret %q: %w", name, err)
+	}
+	return nil
 }
