@@ -28,6 +28,20 @@ Datenbank-Store, keine Abhängigkeit von einem fremden Deployment.
 | **Generic Engine E2E** | ✅ `cf create-service cnpg-postgresql large my-real-pg` erzeugte einen echten CloudNativePG-Cluster (3 Instanzen, 10Gi), `psql` im Pod antwortet „E2E OK", echte Credentials aus Operator-Secret `<id>-app` |
 | Pod-Restart-Persistenz | ✅ Instances/Bindings in ConfigMap `osb-broker-state`, überleben Kill & Rescheduling |
 
+### TLS/mTLS-Nachweis (02.09.2026)
+
+| Nachweis | Ergebnis |
+|----------|----------|
+| Conformance über HTTPS mit Client-Zertifikat | ✅ 24/24 Checks, im kind-Cluster über das Helm-Chart deployt — und 24/24 auch mit dem Client-Zertifikat allein, ohne Basic Auth |
+| Zertifikatsrotation ohne Neustart | ✅ TLS-Secret im laufenden Pod getauscht: ausgelieferte Seriennummer wechselt, `restartCount` bleibt 0 |
+| **Korifi-Registrierung über `https://`** | ✅ `CFServiceBroker` ready bei `trustInsecureServiceBrokers=false` — Korifi hat das Zertifikat gegen die Plattform-CA geprüft |
+| Voller Lifecycle über HTTPS | ✅ `cf create-service cnpg-postgresql small` → gesunder CNPG-Cluster, `cf create-service-key` liefert echte Credentials, `cf delete-service` räumt ab |
+| mTLS-Autorisierung | ✅ Ein von derselben CA signiertes, aber nicht auf der Allowlist stehendes Client-Zertifikat bekommt 401 |
+| Probes bleiben offen | ✅ `/healthz` ohne Client-Zertifikat erreichbar (`VerifyClientCertIfGiven`) |
+
+Die Korifi-seitige Einrichtung (Plattform-CA, Trust-Store der Korifi-Pods)
+steht in [docs/tls-korifi.md](docs/tls-korifi.md).
+
 ### Funktionsumfang im Detail
 
 **OSB 2.17 Endpoints**
