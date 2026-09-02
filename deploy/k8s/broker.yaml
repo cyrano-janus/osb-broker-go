@@ -17,17 +17,24 @@ metadata:
   name: osb-broker-go
   namespace: osb
 ---
-# Least-privilege: the broker may only manage its own state ConfigMap.
+# Least-privilege: der Broker verwaltet nur seinen eigenen Zustand.
+#
+# Vor Phase 5 stand hier eine einzelne ConfigMap, per resourceNames
+# festgenagelt - was bei `create` nicht greift, weil der Name zum Zeitpunkt
+# der Autorisierung noch nicht feststeht. Mit einer eigenen Ressourcenart je
+# Datensatz entfaellt der Sonderfall.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: osb-broker-state
   namespace: osb
 rules:
+- apiGroups: ["broker.osb.io"]
+  resources: ["osbserviceinstances", "osbservicebindings"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 - apiGroups: [""]
-  resources: ["configmaps"]
-  resourceNames: ["osb-broker-state"]
-  verbs: ["get", "create", "update"]
+  resources: ["secrets"]
+  verbs: ["get", "list", "create", "update", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -72,7 +79,7 @@ spec:
         - name: PORT
           value: "8080"
         - name: STORE_BACKEND
-          value: "k8s"
+          value: "crd"
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:

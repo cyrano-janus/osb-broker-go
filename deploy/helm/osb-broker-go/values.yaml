@@ -72,7 +72,11 @@ auth:
 
 # Broker-Konfiguration (Umgebungsvariablen)
 config:
-  storeBackend: k8s        # k8s | memory
+  # crd  = ein OSBServiceInstance/OSBServiceBinding je Datensatz (Phase 5).
+  #        Setzt voraus, dass die CRDs installiert sind:
+  #          kubectl apply -f deploy/crds/
+  # memory = geht beim Neustart verloren, nur fuer lokale Laeufe.
+  storeBackend: crd
   logRequests: true
 
 # ServiceDefinitions als ConfigMap gerendert.
@@ -84,8 +88,8 @@ definitions:
   #     apiVersion: broker.osb.io/v1alpha1
   #     ...
 
-# RBAC: StateStore-ConfigMap im Release-Namespace + optionaler
-# clusterweiter Zugriff auf Operator-CRs (z. B. postgresql.cnpg.io).
+# RBAC: eigene State-CRDs und Credentials-Secrets im Release-Namespace +
+# optionaler clusterweiter Zugriff auf Operator-CRs (z. B. postgresql.cnpg.io).
 rbac:
   create: true
   operatorCRDs:
