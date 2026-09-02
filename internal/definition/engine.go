@@ -221,7 +221,7 @@ func (e *Engine) LastOperation(ctx context.Context, sd *ServiceDefinition, names
 // BindCredentials renders the secret name from the definition, reads it and
 // returns the credentials map plus the resolved secret name.
 func (e *Engine) BindCredentials(ctx context.Context, sd *ServiceDefinition, namespace, instanceID string) (map[string]interface{}, string, error) {
-	secretName, err := RenderSecretName(sd, instanceID)
+	secretName, err := e.resolveSecretName(ctx, sd, namespace, instanceID)
 	if err != nil {
 		return nil, "", err
 	}
@@ -229,7 +229,11 @@ func (e *Engine) BindCredentials(ctx context.Context, sd *ServiceDefinition, nam
 	if err != nil {
 		return nil, "", err
 	}
-	return ExtractCredentials(data, sd.Spec.Bind.CredentialKeys), secretName, nil
+	creds, err := shapeCredentials(&sd.Spec.Bind, data)
+	if err != nil {
+		return nil, "", err
+	}
+	return creds, secretName, nil
 }
 
 var _ = schema.GroupVersionKind{} // placeholder to keep k8s import if unused later
