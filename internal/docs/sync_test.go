@@ -93,12 +93,54 @@ func headingLevels(content string) []int {
 
 var linkPattern = regexp.MustCompile(`\[[^\]]*\]\(([^)]+)\)`)
 
+// stripCode entfernt Code-Bloecke und Inline-Code. Ohne das haelt der
+// Link-Test einen regulaeren Ausdruck wie ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ fuer
+// einen Markdown-Link auf die Datei "[-a-z0-9]*[a-z0-9]" - Klammer auf,
+// Klammer zu, fertig ist der Fehlalarm.
+func stripCode(content string) string {
+	var b strings.Builder
+	inFence := false
+	var fence string
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case inFence:
+			if strings.HasPrefix(trimmed, fence) {
+				inFence = false
+			}
+			continue
+		case strings.HasPrefix(trimmed, "```"):
+			inFence, fence = true, "```"
+			continue
+		case strings.HasPrefix(trimmed, "~~~"):
+			inFence, fence = true, "~~~"
+			continue
+		}
+		// Inline-Code: alles zwischen zwei Backticks faellt weg.
+		for {
+			i := strings.IndexByte(line, '`')
+			if i < 0 {
+				break
+			}
+			j := strings.IndexByte(line[i+1:], '`')
+			if j < 0 {
+				line = line[:i]
+				break
+			}
+			line = line[:i] + line[i+1+j+1:]
+		}
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
 // relativeLinks liefert alle Linkziele, die auf eine Datei im Repo zeigen.
 // Externe URLs, Anker und mailto fallen raus - die kann dieser Test nicht
 // pruefen, ohne ins Netz zu gehen.
 func relativeLinks(content string) []string {
 	var out []string
-	for _, m := range linkPattern.FindAllStringSubmatch(content, -1) {
+	for _, m := range linkPattern.FindAllStringSubmatch(stripCode(content), -1) {
 		target := strings.TrimSpace(m[1])
 		if target == "" || strings.HasPrefix(target, "#") {
 			continue

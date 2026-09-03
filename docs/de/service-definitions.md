@@ -1,0 +1,324 @@
+# ServiceDefinitions
+
+> [English](../en/service-definitions.md) · Führende Fassung: deutsch
+
+Eine ServiceDefinition ist eine YAML-Datei, die einen Kubernetes-Operator über
+die OSB-API verfügbar macht. Sie ist der einzige Erweiterungspunkt des Brokers:
+ein neuer Service bedeutet eine neue Datei, keinen neuen Code.
+
+**Maschinenlesbare Quelle ist `schemas/service-definition.schema.json`.** Dieses
+Dokument erklärt die Felder, es listet sie nicht ab. Wenn Schema und Text
+auseinandergehen, gilt das Schema — `internal/definition/schema_sync_test.go`
+hält es am Go-Typ fest, diesen Text hält niemand fest außer dem Leser.
+
+## Was ein Operator mitbringen muss
+
+Nicht jeder Operator lässt sich anbinden. Es braucht drei Dinge, und alle drei
+müssen zusammen vorhanden sein:
+
+1. **Eine CRD für Service-Instanzen.** Etwas, das der Broker anlegen kann und
+   das für den Operator eine Instanz bedeutet.
+2. **Credentials als Kubernetes-Secret.** Der Operator muss die Zugangsdaten in
+   ein Secret schreiben, dessen Namen der Broker ermitteln kann — entweder über
+   `.status.binding.name` am CR oder über ein vorhersagbares Namensschema.
+3. **Ein Statusfeld für Readiness.** Etwas im `status`, das von „wird angelegt"
+   auf „fertig" umspringt.
+
+**Wo das Versprechen „nur YAML" bricht.** Fehlt eines der drei, hilft die beste
+Definition nicht. Von den sieben mitgelieferten Definitionen sind nur zwei
+durchgängig erprobt:
+
+| Definition | Zustand |
+|---|---|
+| `cnpg-postgresql` | Ende zu Ende verifiziert, die Referenz für die einfache Form |
+| `rabbitmq-cluster` | Ende zu Ende verifiziert, die Referenz für alle Merkmale aus Phase 6 |
+| `redis-standalone` | Secret wird vom Betreiber von Hand angelegt, nicht vom Operator |
+| `minio-objectstorage` | als DEPRECATED geführt |
+| `valkey-cluster` | Operator erzeugt kein Credential-Secret |
+| `redpanda-cluster` | dito |
+| `seaweedfs-s3` | Nachfolger von MinIO, nicht durchgemessen |
+
+Vier der sieben können also gar nicht binden. Das ist keine Schwäche der
+Definitionen, sondern der Operatoren — und der Grund, warum die Frage nach dem
+Dreier-Muster **vor** dem Schreiben einer Definition kommt.
+
+## Aufbau
+
+```yaml
+apiVersion: broker.osb.io/v1alpha1     # Pflicht, exakt diese Konstante
+kind: ServiceDefinition                # Pflicht, exakt diese Konstante
+metadata:
+  name: <name>                         # Pflicht, [a-z0-9-]+, interner Bezeichner
+spec:
+  offering:   # Pflicht — der Katalogeintrag
+  provision:  # Pflicht — die anzulegenden Objekte
+  readiness:  # Pflicht — woran last_operation „fertig" erkennt
+  bind:       # Pflicht — woher die Credentials kommen
+```
+
+Alle vier `spec`-Blöcke sind Pflicht. `Parse` validiert beim Laden; eine
+fehlerhafte Datei bricht den **Start des Brokers** ab, nicht erst den ersten
+Request. Das ist Absicht: ein Broker, der mit halbem Katalog hochkommt, ist
+schlimmer als einer, der gar nicht startet.
+
+## `spec.offering`
+
+| Feld | Pflicht | Wirkung |
+|---|---|---|
+| `id` | ja | Die OSB-`service_id`. **Muss für immer stabil bleiben** — Cloud Foundry speichert sie, und `resolveDefinition` schlägt darüber nach. Eine Änderung macht bestehende Instanzen unauffindbar. |
+| `name` | ja | Der Name im Marketplace: `cf create-service <name> …`. |
+| `description` | nein | Katalogtext. |
+| `bindable` | nein | Vorgabe **true**. |
+| `tags` | nein | Katalog-Tags. |
+| `plans` | ja | Mindestens einer, IDs eindeutig. |
+
+### Pläne
+
+| Feld | Pflicht | Wirkung |
+|---|---|---|
+| `id` | ja | Die OSB-`plan_id`, eindeutig innerhalb des Angebots. |
+| `name` | ja | `cf create-service <svc> <name> …`. |
+| `description` | nein | Katalogtext. |
+| `params` | nein | **Die Stellschrauben.** Landen im Template als `{{ .plan.<key> }}`. |
+| `allowedParameters` | nein | Erlaubte Schlüssel für Benutzerparameter. Siehe Warnung unten. |
+| `free` | nein | Wird gelesen und **nicht verwendet** — der Katalog setzt für jeden Plan hart `free: true`. |
+
+**Der Typ eines `params`-Wertes zählt.** YAML liest `1` als Zahl und `1Gi` als
+Zeichenkette. Ein Template wie `{{ if eq .plan.replicas 1 }}` vergleicht
+typsicher und schlägt fehl, wenn der Wert als `1.0` notiert wurde.
+
+**`allowedParameters` wird nur bei `PATCH` geprüft, nicht bei `PUT`.** Beim
+Provision nimmt der Broker beliebige Parameter entgegen — und verwirft sie
+anschließend kommentarlos, weil Benutzerparameter das Template ohnehin nie
+erreichen. Siehe [known-issues.md](known-issues.md).
+
+## `spec.provision`
+
+| Feld | Pflicht | Wirkung |
+|---|---|---|
+| `apiVersion` | ja | Vorgabe-Gruppe/Version für Dokumente, die selbst keine nennen. |
+| `kind` | ja | Vorgabe-Art, dito. |
+| `template` | ja | Go-Template, das ein vollständiges Manifest rendert — oder mehrere, getrennt durch `\n---`. |
+
+**`apiVersion` und `kind` sind mehr als eine Vorgabe.** Readiness-Prüfung,
+Provisioned-Service-Suche und der Eigentümerverweis des projizierten Secrets
+schlagen **immer** unter dieser Art und dem Namen `safeName` nach. In einem
+Multi-Doc-Template muss das also das Hauptobjekt beschreiben, nicht irgendeines.
+
+### Was im Template zur Verfügung steht
+
+Beide Schreibweisen funktionieren — erst wird die Kleinschreibung versucht, bei
+Fehlschlag die Go-Schreibweise:
+
+| klein | Go | Inhalt |
+|---|---|---|
+| `.instanceID` | `.InstanceID` | die rohe OSB-`instance_id` |
+| `.safeName` | `.SafeName` | daraus abgeleiteter, DNS-tauglicher Objektname |
+| `.plan` | `.Plan` | die `params` des gewählten Plans |
+| `.bindingID` | `.BindingID` | beim Provision leer |
+| `.parameters` | `.Parameters` | **immer leer**, siehe unten |
+
+Einzige Hilfsfunktion: `upper`. Es gilt `missingkey=error` — ein Tippfehler im
+Feldnamen ist ein Fehler, keine leere Zeichenkette.
+
+**`{{ .safeName }}` für `metadata.name`, `{{ .instanceID }}` nur für Labels.**
+`SanitizeInstanceName` macht aus der Instanz-ID einen gültigen DNS-Label-Namen:
+Kleinbuchstaben, alles außerhalb `[a-z0-9-]` wird zum Bindestrich, und
+**immer** das Präfix `osb-`. Das Präfix ist nicht Kosmetik — manche
+Operator-Webhooks lehnen nackte GUID-Namen ab, auch wenn sie formal gültig
+sind, CloudNativePG 1.24 zum Beispiel. Über 63 Zeichen wird gekürzt und ein
+Stück SHA-256 der Original-ID angehängt, damit der Name eindeutig bleibt.
+
+**Benutzerparameter erreichen das Template nicht.** `.parameters` ist im Typ
+vorgesehen, wird aber von keinem Aufrufer gefüllt. Wer `{{ .parameters.x }}`
+schreibt, bekommt wegen `missingkey=error` einen Fehler. Plan-Parameter
+funktionieren, Benutzerparameter nicht — siehe
+[known-issues.md](known-issues.md).
+
+### Mehrere Objekte je Instanz
+
+Das Template darf mehrere YAML-Dokumente enthalten, getrennt durch `---`. Je
+Dokument werden fehlende `apiVersion`, `kind` und `namespace` aus der Definition
+beziehungsweise dem Ziel-Namespace ergänzt. **Ein Dokument ohne
+`metadata.name` ist ein harter Fehler** — ohne Namen ließe sich das Objekt
+später nicht wieder löschen.
+
+## `spec.readiness`
+
+| Feld | Pflicht | Wirkung |
+|---|---|---|
+| `statusJSONPath` | ja | **gjson**-Pfad über das gesamte CR. |
+| `expectedValue` | nein | Vorgabe `"True"`, Vergleich ohne Rücksicht auf Groß-/Kleinschreibung. |
+| `timeoutSeconds` | nein | Wird gelesen und **nie durchgesetzt**. |
+
+**Es ist gjson, nicht JSONPath.** Kein führendes `$`, Array-Filter in der Form
+`#(type=="Ready")`:
+
+```yaml
+statusJSONPath: 'status.conditions.#(type=="Ready").status'
+expectedValue: "True"
+```
+
+Ein führender Punkt wird abgeschnitten, ein nicht auffindbarer Pfad bedeutet
+**noch nicht bereit** — nie *Fehler*. Das ist gewollt, weil ein Operator die
+Condition erst anlegt, wenn er sie kennt. Die Kehrseite: eine Condition, die es
+gar nicht gibt, sieht genauso aus wie eine, die noch nicht da ist, und der
+Broker meldet ewig `in progress`. Genau das passiert bei
+`rabbitmq-cluster`, dessen Operator `AllReplicasReady` und `ClusterAvailable`
+veröffentlicht statt `Ready`.
+
+**Den Pfad ermittelt man am lebenden Objekt**, nicht aus der Dokumentation des
+Operators — siehe
+[how-to/add-a-service.md](how-to/add-a-service.md).
+
+## `spec.bind`
+
+| Feld | Pflicht | Wirkung |
+|---|---|---|
+| `credentialsFromSecret` | ja, außer bei `provisionedService` | Go-Template für den Secret-Namen; verfügbar sind nur `instanceID` und `safeName`. Dient zusätzlich als Rückfallebene. |
+| `credentialKeys` | nein | Auswahl der durchzureichenden Schlüssel. Leer = alle. **Wird ignoriert, sobald `mapping` gesetzt ist.** |
+| `provisionedService` | nein | Secret-Namen aus `.status.binding.name` des CR lesen (CNCF Provisioned Service). |
+| `type` | nein | Well-known-Diensttyp, `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`. Pflicht bei `projectSecret`. |
+| `provider` | nein | Implementierung hinter dem Typ. |
+| `mapping` | nein | Formt das Ergebnis. **Ersetzt, erweitert nicht.** |
+| `projectSecret` | nein | Credentials zusätzlich als spec-konformes Secret in den Ziel-Namespace schreiben. |
+| `extraLabels` | nein | Zusätzliche Labels, **nur** auf dem projizierten Secret. |
+
+**Ohne `mapping` landet alles im Binding.** Jeder Schlüssel des
+Operator-Secrets wird durchgereicht — auch Konfigurationsdateien. Beim
+RabbitMQ-Operator waren das `default_user.conf` und `connection_string`, die in
+einem Binding nichts verloren haben. Mit `mapping` besteht das Ergebnis **genau**
+aus den genannten Schlüsseln plus `type` und `provider`. Ein Adapter, der
+zusätzlich noch alle Originalschlüssel durchreicht, macht das Ergebnis
+unvorhersehbar und den Zweck zunichte.
+
+`type` und `provider` werden **nach** dem Mapping gesetzt. Ein Mapping-Eintrag
+namens `type` kann den Wert aus der Definition also nicht stillschweigend
+überschreiben.
+
+### Mapping-Einträge
+
+| Feld | Wirkung |
+|---|---|
+| `name` | Schlüssel im Ergebnis, eindeutig. |
+| `from` | Schlüssel im Operator-Secret. **Fehlt er zur Bindezeit, ist das ein harter Fehler** — bewusst kein stilles Weglassen. |
+| `value` | Go-Template über `.credentials.<key>`, etwa zum Zusammensetzen einer URI. |
+
+Genau eines von `from` und `value` ist erforderlich. `value`-Templates werden
+schon beim **Laden** der Definition übersetzt, nicht erst beim Binden — ein
+kaputtes Template bricht den Start ab, nicht den Kundenrequest.
+
+## Beispiel 1: die einfache Form
+
+`definitions/cnpg-postgresql.yaml`, gekürzt auf das Wesentliche:
+
+```yaml
+apiVersion: broker.osb.io/v1alpha1
+kind: ServiceDefinition
+metadata:
+  name: cnpg-postgresql
+spec:
+  offering:
+    id: f48a9e21-cnpg-0000-0000-000000000001   # für immer stabil
+    name: cnpg-postgresql
+    bindable: true
+    tags: [postgresql, database, cnpg]
+    plans:
+      - id: plan-small-0000-0000-000000000001
+        name: small
+        params: { storageSize: 1Gi, instances: 1 }
+      - id: plan-large-0000-0000-000000000002
+        name: large
+        params: { storageSize: 10Gi, instances: 3 }
+
+  provision:
+    apiVersion: postgresql.cnpg.io/v1
+    kind: Cluster
+    template: |
+      apiVersion: postgresql.cnpg.io/v1
+      kind: Cluster
+      metadata:
+        name: {{ .safeName }}                  # osb-<guid>, nicht die nackte GUID
+        labels:
+          app.kubernetes.io/managed-by: osb-broker-go
+          osb.io/instance-id: {{ .instanceID }}  # im Label ist die rohe ID in Ordnung
+      spec:
+        instances: {{ .plan.instances }}
+        storage:
+          size: {{ .plan.storageSize }}
+
+  readiness:
+    statusJSONPath: 'status.conditions.#(type=="Ready").status'
+    expectedValue: "True"
+
+  bind:
+    credentialsFromSecret: "{{ .safeName }}-app"   # Namenskonvention von CNPG
+```
+
+Wirkung: `cf create-service cnpg-postgresql large mydb` legt einen `Cluster`
+namens `osb-<instanz-guid>` im Space-Namespace an, drei Instanzen, 10Gi.
+`cf create-service-key` reicht **alle** Schlüssel des Secrets `osb-<guid>-app`
+durch — bei CNPG sind das `username`, `password`, `host`, `port`, `dbname`,
+`uri`, `jdbc-uri`, `pgpass` und `user`.
+
+## Beispiel 2: alle Merkmale
+
+`definitions/rabbitmq-cluster.yaml` unterscheidet sich nur im `bind`-Block, und
+der zeigt alles, was Phase 6 gebracht hat:
+
+```yaml
+  bind:
+    provisionedService: true                              # 1
+    credentialsFromSecret: "{{ .safeName }}-default-user" # 2
+    type: rabbitmq                                        # 3
+    provider: rabbitmq-cluster-operator
+    projectSecret: true                                   # 4
+    mapping:                                              # 5
+      - { name: username, from: username }
+      - { name: password, from: password }
+      - { name: host,     from: host }
+      - { name: port,     from: port }
+      - name: uri
+        value: "amqp://{{ .credentials.username }}:{{ .credentials.password }}@{{ .credentials.host }}:{{ .credentials.port }}/"
+```
+
+1. **Der Operator sagt selbst, wo die Credentials liegen** — der Broker liest
+   `.status.binding.name` am CR, statt ein Namensschema nachzubauen. Der Pfad ist
+   absichtlich nicht konfigurierbar: wäre er es, wäre es wieder eine Konvention
+   und kein Standard.
+2. **Rückfallebene** für Operator-Versionen, die das Feld noch nicht füllen.
+3. **Diensttyp und Anbieter** landen in den Credentials und im Secret-Typ.
+4. **Zusätzlich ein spec-konformes Secret** im Ziel-Namespace, für Konsumenten
+   außerhalb von Cloud Foundry. Braucht `rbac.projectedBindingSecrets: true` im
+   Helm-Chart, sonst scheitert das Schreiben.
+5. **Die Zielform**, exakt: `username`, `password`, `host`, `port`, `uri` — dazu
+   `type` und `provider`. Nichts sonst.
+
+Das projizierte Secret heißt `osb-<binding-guid>-binding`, trägt den Typ
+`servicebinding.io/rabbitmq` und gehört dem provisionierten CR. Wird die Instanz
+gelöscht, räumt Kubernetes es mit ab, auch ohne vorheriges Unbind.
+
+## Felder, die nichts tun
+
+Damit niemand Zeit damit verliert:
+
+| Feld | Was man erwartet | Was passiert |
+|---|---|---|
+| `readiness.timeoutSeconds` | Abbruch nach Ablauf | wird gelesen, nie ausgewertet |
+| `plan.free` | freier oder kostenpflichtiger Plan | Katalog setzt hart `free: true` |
+| `metadata.annotations` | Steuerung des Verhaltens | der Go-Typ kennt nur `name` |
+| `.parameters` im Template | Benutzerparameter | immer leer |
+
+## Wenn eine Definition ausgerollt wird
+
+Der Broker liest das Definitionsverzeichnis **beim Start**. Eine geänderte
+Definition wirkt erst nach einem Neustart des Pods — das Helm-Chart trägt
+bewusst keine Prüfsummen-Annotation auf dem Pod-Template. Wer die
+Entwicklungsplattform nutzt, bekommt den Neustart über `make broker-deploy`
+mitgeliefert; siehe
+[how-to/add-a-service.md](how-to/add-a-service.md).
+
+Zwei Tests reden beim Bauen mit: `internal/definition/catalog_test.go` verlangt,
+dass jede Datei in `definitions/` parst, und `schema_sync_test.go`, dass jedes
+Go-Feld im JSON-Schema steht. Ein neues Feld ohne Schema-Eintrag lässt die Suite
+scheitern.
