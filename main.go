@@ -1,3 +1,11 @@
+// Command osb-broker ist der Einstiegspunkt: er verdrahtet Konfiguration,
+// Zustandsspeicher, Engine, Authentifizierung und Server und startet ihn.
+// Fachlogik gehoert hier nicht hinein.
+//
+// Die Reihenfolge ist bewusst fail-fast: config.Load bricht bei einer
+// unbrauchbaren Umgebung ab, und eine nicht parsende ServiceDefinition
+// beendet den Start - ein Broker mit halbem Katalog ist schlimmer als einer,
+// der gar nicht hochkommt.
 package main
 
 import (

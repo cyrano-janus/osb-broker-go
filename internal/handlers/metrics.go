@@ -1,4 +1,4 @@
-// Package handlers — metrics.go: Prometheus metrics for the OSB broker.
+// metrics.go: Prometheus metrics for the OSB broker.
 //
 // Exposed metrics:
 //
