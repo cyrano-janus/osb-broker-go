@@ -1,0 +1,216 @@
+package docs
+
+import (
+	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// Die Dokumentation liegt zweisprachig vor: docs/de/ ist die fuehrende Fassung,
+// docs/en/ zieht nach. Zwei vollstaendige Baeume driften auseinander, sobald
+// jemand nur einen anfasst - und niemand merkt es, weil beide fuer sich
+// gelesen stimmig bleiben.
+//
+// Dieser Waechter vergleicht keine Uebersetzungen. Er prueft nur die Struktur:
+// dieselben Dateien, dieselbe Gliederung, keine toten Verweise, und in jedem
+// Dokument ein Link auf die Gegensprache. Das faengt den haeufigen Fall - ein
+// neues Kapitel nur auf Deutsch geschrieben - und laesst den seltenen Fall -
+// eine schlechte Uebersetzung - ungeprueft. Mehr kann ein Test hier nicht
+// leisten, ohne falsch Alarm zu schlagen.
+
+const (
+	repoRoot = "../.."
+	deDir    = "docs/de"
+	enDir    = "docs/en"
+)
+
+// markdownFiles sammelt alle .md-Dateien unter dir, relativ zu dir.
+func markdownFiles(t *testing.T, dir string) []string {
+	t.Helper()
+	root := filepath.Join(repoRoot, dir)
+	var out []string
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() || !strings.HasSuffix(info.Name(), ".md") {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		out = append(out, rel)
+		return nil
+	})
+	require.NoError(t, err)
+	sort.Strings(out)
+	return out
+}
+
+// headingLevels liefert die Ueberschriftenebenen eines Dokuments in
+// Lesereihenfolge, z.B. [1 2 2 3 2]. Fenced Code Blocks werden uebersprungen:
+// eine Kommentarzeile "# make verify" in einem Shell-Beispiel ist keine
+// Ueberschrift.
+func headingLevels(content string) []int {
+	var levels []int
+	inFence := false
+	var fence string
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case inFence:
+			if strings.HasPrefix(trimmed, fence) {
+				inFence = false
+			}
+			continue
+		case strings.HasPrefix(trimmed, "```"):
+			inFence, fence = true, "```"
+			continue
+		case strings.HasPrefix(trimmed, "~~~"):
+			inFence, fence = true, "~~~"
+			continue
+		}
+		if !strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		level := len(trimmed) - len(strings.TrimLeft(trimmed, "#"))
+		// "#5 - Titel" ist eine Befundnummer, keine Ueberschrift: nach den
+		// Rauten muss ein Leerzeichen stehen.
+		if level > 6 || !strings.HasPrefix(trimmed[level:], " ") {
+			continue
+		}
+		levels = append(levels, level)
+	}
+	return levels
+}
+
+var linkPattern = regexp.MustCompile(`\[[^\]]*\]\(([^)]+)\)`)
+
+// relativeLinks liefert alle Linkziele, die auf eine Datei im Repo zeigen.
+// Externe URLs, Anker und mailto fallen raus - die kann dieser Test nicht
+// pruefen, ohne ins Netz zu gehen.
+func relativeLinks(content string) []string {
+	var out []string
+	for _, m := range linkPattern.FindAllStringSubmatch(content, -1) {
+		target := strings.TrimSpace(m[1])
+		if target == "" || strings.HasPrefix(target, "#") {
+			continue
+		}
+		if strings.Contains(target, "://") || strings.HasPrefix(target, "mailto:") {
+			continue
+		}
+		if i := strings.IndexByte(target, '#'); i >= 0 {
+			target = target[:i]
+		}
+		if target == "" {
+			continue
+		}
+		out = append(out, target)
+	}
+	return out
+}
+
+func read(t *testing.T, parts ...string) string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(append([]string{repoRoot}, parts...)...))
+	require.NoError(t, err)
+	return string(raw)
+}
+
+func bothTreesExist(t *testing.T) bool {
+	t.Helper()
+	for _, d := range []string{deDir, enDir} {
+		if _, err := os.Stat(filepath.Join(repoRoot, d)); err != nil {
+			t.Skipf("%s existiert noch nicht - der Baum wird gerade aufgebaut", d)
+			return false
+		}
+	}
+	return true
+}
+
+func TestDocsSync_BeideSprachbaeumeTragenDieselbenDateien(t *testing.T) {
+	if !bothTreesExist(t) {
+		return
+	}
+	de := markdownFiles(t, deDir)
+	en := markdownFiles(t, enDir)
+
+	assert.Equal(t, de, en,
+		"docs/de/ und docs/en/ enthalten nicht dieselben Dateien - ein Dokument wurde nur in einer Sprache angelegt oder umbenannt")
+}
+
+func TestDocsSync_GliederungStimmtJeDokumentpaarUeberein(t *testing.T) {
+	if !bothTreesExist(t) {
+		return
+	}
+	for _, rel := range markdownFiles(t, deDir) {
+		enPath := filepath.Join(repoRoot, enDir, rel)
+		if _, err := os.Stat(enPath); err != nil {
+			continue // der Dateimengen-Test meldet das bereits
+		}
+		deLevels := headingLevels(read(t, deDir, rel))
+		enLevels := headingLevels(read(t, enDir, rel))
+
+		assert.Equal(t, deLevels, enLevels,
+			"docs/de/%s und docs/en/%s haben unterschiedliche Gliederungen - ein Abschnitt fehlt in einer der beiden Fassungen", rel, rel)
+	}
+}
+
+func TestDocsSync_KeineTotenRelativenVerweise(t *testing.T) {
+	roots := []string{"docs"}
+	for _, name := range []string{"README.md", "README.de.md", "CONTRIBUTING.md", "CONTRIBUTING.de.md"} {
+		if _, err := os.Stat(filepath.Join(repoRoot, name)); err == nil {
+			roots = append(roots, name)
+		}
+	}
+
+	var files []string
+	for _, r := range roots {
+		info, err := os.Stat(filepath.Join(repoRoot, r))
+		if err != nil {
+			continue
+		}
+		if !info.IsDir() {
+			files = append(files, r)
+			continue
+		}
+		for _, rel := range markdownFiles(t, r) {
+			files = append(files, filepath.Join(r, rel))
+		}
+	}
+
+	for _, f := range files {
+		dir := filepath.Dir(filepath.Join(repoRoot, f))
+		for _, link := range relativeLinks(read(t, f)) {
+			resolved := filepath.Join(dir, link)
+			_, err := os.Stat(resolved)
+			assert.NoError(t, err,
+				"%s verweist auf %q - das Ziel gibt es nicht", f, link)
+		}
+	}
+}
+
+func TestDocsSync_JedesDokumentVerweistAufDieGegensprache(t *testing.T) {
+	if !bothTreesExist(t) {
+		return
+	}
+	for _, pair := range []struct{ from, to string }{{deDir, enDir}, {enDir, deDir}} {
+		for _, rel := range markdownFiles(t, pair.from) {
+			content := read(t, pair.from, rel)
+			// Der Verweis ist ein relativer Pfad in den anderen Baum; wie tief
+			// er hinauflaeuft, haengt vom Unterverzeichnis ab - deshalb wird
+			// nur auf den Zielbaum und den Dateinamen geprueft.
+			want := filepath.ToSlash(filepath.Join(filepath.Base(pair.to), rel))
+
+			assert.Contains(t, content, want,
+				"docs/%s/%s enthaelt keinen Verweis auf die Gegensprache (erwartet ein Link, der auf %q endet)", pair.from, rel, want)
+		}
+	}
+}
