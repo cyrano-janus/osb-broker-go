@@ -173,19 +173,14 @@ not drift apart:
 a finding for [known-issues.md](../known-issues.md), not a reason to adjust
 either suite.
 
-The checker repository is private and cloned over SSH. CI needs a **deploy
-key** for it: add a public key without write access under *Settings → Deploy
-keys* in the checker repository, and put the private half into `osb-broker-go`
-as the repository secret `OSB_CHECKER_SSH_KEY`. Narrower than a personal token —
-it is valid for that one repository only.
-
-Without the secret the step is skipped and the gate stays complete — just
-without the counter-check.
+The checker repository is public; CI clones it without credentials and without
+a pinned revision — the counter-check should run whatever the current checker
+is.
 
 Locally:
 
 ```bash
-git clone git@github.com:cyrano-janus/osb-checker
+git clone https://github.com/cyrano-janus/osb-checker
 cd osb-checker && cp config.yaml configs/config.yaml
 # configs/ is gitignored: it holds real credentials
 go build -o osb-checker . && ./osb-checker -f configs/config.yaml

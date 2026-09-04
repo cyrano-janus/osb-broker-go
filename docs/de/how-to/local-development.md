@@ -172,19 +172,13 @@ nicht auseinanderdriften:
 Widerspruch ist ein Befund fuer [known-issues.md](../known-issues.md), kein
 Grund, eine der beiden Suiten anzupassen.
 
-Das Checker-Repo ist privat und wird über SSH geklont. Die CI braucht dafür
-einen **Deploy-Key**: im Checker-Repo unter *Settings → Deploy keys* einen
-öffentlichen Schlüssel ohne Schreibrecht hinterlegen, den privaten Teil in
-`osb-broker-go` als Repository-Secret `OSB_CHECKER_SSH_KEY`. Enger als ein
-persönliches Token — er gilt für genau dieses eine Repository.
-
-Fehlt das Secret, entfällt der Schritt und der Gate bleibt vollständig — nur
-ohne Gegenprobe.
+Das Checker-Repo ist öffentlich; die CI klont es ohne Anmeldung und ohne
+gepinnten Stand — die Gegenprobe soll den jeweils aktuellen Checker fahren.
 
 Lokal:
 
 ```bash
-git clone git@github.com:cyrano-janus/osb-checker
+git clone https://github.com/cyrano-janus/osb-checker
 cd osb-checker && cp config.yaml configs/config.yaml
 # configs/ ist gitignoriert: dort stehen echte Zugangsdaten
 go build -o osb-checker . && ./osb-checker -f configs/config.yaml

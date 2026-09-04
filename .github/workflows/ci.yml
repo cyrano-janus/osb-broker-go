@@ -42,20 +42,6 @@ jobs:
     name: L2 — Conformance-Gate (kind + CNPG + osb-checker)
     runs-on: ubuntu-latest
     needs: verify
-    env:
-      # Zweitmeinung durch den eigenstaendigen Checker. Das Repo ist privat und
-      # wird ueber SSH geklont, der Checkout braucht deshalb einen Deploy-Key.
-      #
-      # Hier steht bewusst nur ein Wahrheitswert und nicht der Schluessel: der
-      # secrets-Kontext ist in `if` nicht verfuegbar, ein Umweg ueber env also
-      # noetig - aber der private Schluessel muss dafuer nicht in die Umgebung
-      # jedes Schritts. Er geht direkt an actions/checkout.
-      #
-      # Fehlt das Secret, entfaellt der Schritt lautlos: der Gate bleibt
-      # vollstaendig, nur ohne Gegenprobe. Eine CI, die an einem fehlenden
-      # Secret scheitert, zwingt jeden Fork zu einer Einrichtung, die er nicht
-      # braucht.
-      HAVE_CHECKER_KEY: ${{ secrets.OSB_CHECKER_SSH_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -156,13 +142,13 @@ jobs:
           exit "$RC"
 
       - name: Checkout standalone osb-checker
-        if: env.HAVE_CHECKER_KEY == 'true'
         uses: actions/checkout@v4
         with:
+          # Oeffentliches Repo, deshalb ohne Anmeldung. Bewusst ohne ref: die
+          # Gegenprobe soll den jeweils aktuellen Stand des Werkzeugs fahren -
+          # ein gepinnter Tag wuerde genau die Befunde verpassen, wegen derer
+          # der Checker weiterentwickelt wird.
           repository: cyrano-janus/osb-checker
-          # Read-only Deploy-Key des Checker-Repos. Enger als ein PAT: er gilt
-          # fuer genau dieses eine Repository, nicht fuer das Konto.
-          ssh-key: ${{ secrets.OSB_CHECKER_SSH_KEY }}
           path: .osb-checker-standalone
 
       - name: Zweitmeinung — standalone osb-checker (nur berichtend)
@@ -176,7 +162,6 @@ jobs:
         # Gate, das immer rot ist, wird abgeschaltet statt beachtet. Der
         # Bericht steht trotzdem in der Zusammenfassung und als Artefakt.
         # Zu entfernen, sobald known-issues.md die Blocker nicht mehr fuehrt.
-        if: env.HAVE_CHECKER_KEY == 'true'
         continue-on-error: true
         run: |
           cd .osb-checker-standalone
@@ -209,7 +194,7 @@ jobs:
           exit "$RC"
 
       - name: Upload standalone checker log
-        if: always() && env.HAVE_CHECKER_KEY == 'true'
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: standalone-checker-log
