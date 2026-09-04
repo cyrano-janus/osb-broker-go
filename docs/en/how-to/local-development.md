@@ -173,9 +173,14 @@ not drift apart:
 a finding for [known-issues.md](../known-issues.md), not a reason to adjust
 either suite.
 
-The standalone run needs a token in CI because the repository is private:
-repository secret `OSB_CHECKER_TOKEN`. Without it the step is skipped and the
-gate stays complete — just without the counter-check.
+The checker repository is private and cloned over SSH. CI needs a **deploy
+key** for it: add a public key without write access under *Settings → Deploy
+keys* in the checker repository, and put the private half into `osb-broker-go`
+as the repository secret `OSB_CHECKER_SSH_KEY`. Narrower than a personal token —
+it is valid for that one repository only.
+
+Without the secret the step is skipped and the gate stays complete — just
+without the counter-check.
 
 Locally:
 

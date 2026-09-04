@@ -172,9 +172,14 @@ nicht auseinanderdriften:
 Widerspruch ist ein Befund fuer [known-issues.md](../known-issues.md), kein
 Grund, eine der beiden Suiten anzupassen.
 
-Der standalone-Lauf braucht in der CI ein Token, weil das Repo privat ist:
-Repository-Secret `OSB_CHECKER_TOKEN`. Fehlt es, entfaellt der Schritt und der
-Gate bleibt vollstaendig — nur ohne Gegenprobe.
+Das Checker-Repo ist privat und wird über SSH geklont. Die CI braucht dafür
+einen **Deploy-Key**: im Checker-Repo unter *Settings → Deploy keys* einen
+öffentlichen Schlüssel ohne Schreibrecht hinterlegen, den privaten Teil in
+`osb-broker-go` als Repository-Secret `OSB_CHECKER_SSH_KEY`. Enger als ein
+persönliches Token — er gilt für genau dieses eine Repository.
+
+Fehlt das Secret, entfällt der Schritt und der Gate bleibt vollständig — nur
+ohne Gegenprobe.
 
 Lokal:
 
