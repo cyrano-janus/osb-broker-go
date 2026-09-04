@@ -16,20 +16,6 @@ target platform or only the development platform?** What separates the two is in
 
 ### Blockers for production Cloud Foundry and TAS
 
-**Provision always answers synchronously.** `accepts_incomplete` is modelled in
-`internal/broker/types.go:24` as a field in the request body; OSB transmits it as
-a query parameter. The branch in `internal/handlers/service_instances.go:42` is
-therefore unreachable and `StatusAccepted` never occurs in the repository. The
-broker reports "done" as soon as the CR is created — with CloudNativePG that is
-minutes too early. The entire `last_operation` machinery exists and runs empty.
-*FINDINGS #4 and #15.*
-
-**Bindings on the definition path are not persisted.** `bindDefinition` never
-calls `state.PutBinding`. `GET …/service_bindings/:bid` always goes through the
-state store and therefore returns 404; `cf service-key` fails on it. A repeated
-bind incorrectly answers `201`, and the 409 check "instance still has bindings"
-can never fire for definition services. *FINDINGS #28.*
-
 **`last_operation` for bindings is a constant.** `GetLastBindingOperation`
 returns `succeeded` regardless of anything, including for unknown IDs.
 
@@ -51,14 +37,13 @@ parameters are accepted and then discarded — not an error, just no effect, and
 that is the more unpleasant variant.
 
 **`readiness.timeoutSeconds` is never enforced.** A stuck operator makes the
-instance report `in progress` forever. The engine has no `failed` state at all.
+instance report `in progress` forever. `last_operation` only reports `failed`
+when the record exists and the object is gone — an operator that never satisfies
+the readiness condition is not covered by it.
 
 **A failed provision leaves orphaned CRs behind.** If applying breaks between
 two documents, the first one stays without any record pointing at it.
 *FINDINGS #6.*
-
-**Unbind does not delete the record.** For definition services unbind only
-removes the projected secret and does not call `broker.Unbind`.
 
 **`osb_active_instances` and `osb_active_bindings` are never set.** Both gauges
 are registered and permanently report 0.

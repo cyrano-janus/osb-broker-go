@@ -16,21 +16,6 @@ in [target-platforms.md](target-platforms.md).
 
 ### Blocker für produktives Cloud Foundry und TAS
 
-**Provision antwortet immer synchron.** `accepts_incomplete` ist in
-`internal/broker/types.go:24` als Feld im Request-Body modelliert; OSB überträgt
-es als Query-Parameter. Der Zweig in `internal/handlers/service_instances.go:42`
-ist damit unerreichbar, `StatusAccepted` kommt im Repo nie vor. Der Broker meldet
-„fertig", sobald das CR angelegt ist — bei CloudNativePG Minuten zu früh. Der
-gesamte `last_operation`-Apparat existiert und läuft leer.
-*FINDINGS #4 und #15.*
-
-**Bindings des Definitions-Pfads werden nicht persistiert.** `bindDefinition`
-ruft nie `state.PutBinding`. `GET …/service_bindings/:bid` läuft immer über den
-State Store und liefert daher 404; `cf service-key` scheitert daran. Ein
-wiederholtes Bind antwortet fälschlich `201`, und die 409-Prüfung „Instanz hat
-noch Bindings" kann für Definitions-Services nie zuschlagen.
-*FINDINGS #28.*
-
 **`last_operation` für Bindings ist eine Konstante.**
 `GetLastBindingOperation` gibt unabhängig von allem `succeeded` zurück, auch für
 unbekannte IDs.
@@ -55,15 +40,13 @@ Provision werden beliebige Parameter angenommen und danach verworfen — kein
 Fehler, nur Wirkungslosigkeit, und das ist die unangenehmere Variante.
 
 **`readiness.timeoutSeconds` wird nie durchgesetzt.** Ein hängender Operator
-lässt die Instanz ewig `in progress` melden. Einen Zustand `failed` kennt die
-Engine gar nicht.
+lässt die Instanz ewig `in progress` melden. `last_operation` meldet `failed`
+nur, wenn der Datensatz da ist und das Objekt fehlt — ein Operator, der die
+Readiness-Bedingung nie erfüllt, ist davon nicht erfasst.
 
 **Fehlgeschlagenes Provision hinterlässt verwaiste CRs.** Bricht das Anwenden
 zwischen zwei Dokumenten ab, bleibt das erste stehen, ohne dass ein Datensatz
 darauf verweist. *FINDINGS #6.*
-
-**Unbind löscht den Datensatz nicht.** Für Definitions-Services entfernt Unbind
-nur das projizierte Secret und ruft `broker.Unbind` nicht.
 
 **`osb_active_instances` und `osb_active_bindings` werden nie gesetzt.** Beide
 Gauges sind registriert und melden dauerhaft 0.

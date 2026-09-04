@@ -79,6 +79,8 @@ case at all; here it stands in for the platform.
 | Registration, marketplace, `cf create-service` | against Korifi on kind |
 | Generic engine end to end | `cf create-service cnpg-postgresql large` creates a real CloudNativePG cluster (3 instances, 10Gi); `psql` in the pod answers, credentials from the operator secret |
 | Restart persistence | instances and bindings survive kill and rescheduling |
+| Asynchronous provisioning | `202` with `operation`, `last_operation` reports `in progress` until the operator is done, then `succeeded`; without `accepts_incomplete=true` the broker answers `422 AsyncRequired` |
+| Complete binding lifecycle | bind `201`, repeat `200` with the same credentials, `GET binding` `200`, unbind `200`, unbind of an unknown binding `410` |
 | Secret name from `status.binding.name` | the RabbitMQ operator reports `osb-<id>-default-user` and the broker uses it without a name template |
 | Target shape via `mapping` | the binding contains exactly `host, password, port, provider, type, uri, username`; `default_user.conf` and `connection_string` stay out |
 | Spec-conformant secret | type `servicebinding.io/rabbitmq`, labels for instance and binding, `OwnerReference` on the `RabbitmqCluster` |
@@ -112,17 +114,15 @@ locations in [reference/osb-api.md](reference/osb-api.md).
 
 | Deviation | on Korifi | on production CF / TAS |
 |---|---|---|
-| Provision always answers `201`, never `202` | barely noticeable, the test services are fast | **blocker** — real backing services take minutes, the platform considers the instance ready immediately and binds against a secret that does not exist |
-| Definition bindings are not persisted | invisible as long as nobody calls `GET binding` | **blocker** — `cf service-key` reads through `GET binding` and gets a 404 |
 | `last_operation` for bindings always answers `succeeded` | invisible | **blocker** as soon as bindings become asynchronous |
 | Demo catalogue `service-1` / `service-2` always present | cosmetic | **not acceptable** in a production marketplace |
 | User parameters never reach the template | `cf create-service -c` has no effect | functional gap, not a breach |
 | `allowedParameters` only checked on `PATCH` | invisible | quietly wrong — provision accepts everything and discards it without comment |
 | Error classification from error text | invisible | wrong status codes misdirect the platform's retry logic |
 
-The four points marked **blocker** are the reason the rebuild proposed in
-[ADR 0003](adr/0003-replace-http-layer.md) is up for decision: all of them sit
-in the HTTP layer, none in the engine and none in the state store.
+The points marked **blocker** sit in the HTTP layer, none in the engine and none
+in the state store — and both hang on the dual path that
+[ADR 0003](adr/0003-replace-http-layer.md) puts up for decision.
 
 ## What happens to Korifi
 

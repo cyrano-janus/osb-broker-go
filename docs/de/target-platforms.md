@@ -79,6 +79,8 @@ sie ersetzt hier die Plattform.
 | Registrierung, Marketplace, `cf create-service` | gegen Korifi auf kind |
 | Generic Engine Ende zu Ende | `cf create-service cnpg-postgresql large` erzeugt einen echten CloudNativePG-Cluster (3 Instanzen, 10Gi); `psql` im Pod antwortet, Credentials aus dem Operator-Secret |
 | Neustart-Persistenz | Instanzen und Bindings überleben Kill und Rescheduling |
+| Asynchrones Provision | `202` mit `operation`, `last_operation` meldet `in progress` bis der Operator fertig ist, danach `succeeded`; ohne `accepts_incomplete=true` antwortet der Broker `422 AsyncRequired` |
+| Binding-Lebenszyklus vollständig | Bind `201`, Wiederholung `200` mit denselben Zugangsdaten, `GET binding` `200`, Unbind `200`, Unbind einer unbekannten Binding `410` |
 | Secret-Name aus `status.binding.name` | der RabbitMQ-Operator meldet `osb-<id>-default-user`, der Broker nutzt ihn ohne Namenstemplate |
 | Zielform per `mapping` | das Binding enthält genau `host, password, port, provider, type, uri, username`; `default_user.conf` und `connection_string` bleiben draußen |
 | Spec-konformes Secret | Typ `servicebinding.io/rabbitmq`, Labels für Instanz und Binding, `OwnerReference` auf den `RabbitmqCluster` |
@@ -113,18 +115,15 @@ nicht. Die Langfassung je Punkt steht in
 
 | Abweichung | auf Korifi | auf produktivem CF / TAS |
 |---|---|---|
-| Provision antwortet immer `201`, nie `202` | fällt kaum auf, die Testservices sind schnell | **Blocker** — echte Backing-Services brauchen Minuten, die Plattform hält die Instanz sofort für fertig und bindet gegen ein nicht existierendes Secret |
-| Definitions-Bindings werden nicht persistiert | unauffällig, solange niemand `GET binding` ruft | **Blocker** — `cf service-key` liest über `GET binding` und bekommt 404 |
 | `last_operation` für Bindings antwortet hart `succeeded` | unauffällig | **Blocker**, sobald Bindings asynchron werden |
 | Demo-Katalog `service-1` / `service-2` immer im Katalog | kosmetisch | **nicht vertretbar** in einem produktiven Marketplace |
 | Benutzerparameter erreichen das Template nie | `cf create-service -c` wirkt nicht | funktionale Lücke, kein Bruch |
 | `allowedParameters` nur bei `PATCH` geprüft | unauffällig | still falsch — Provision nimmt alles an und verwirft es kommentarlos |
 | Fehlerklassifikation über Fehlertexte | unauffällig | falsche Statuscodes steuern die Retry-Logik der Plattform fehl |
 
-Die vier mit **Blocker** markierten Punkte sind der Grund, warum der in
-[ADR 0003](adr/0003-replace-http-layer.md) vorgeschlagene Umbau
-zur Entscheidung steht: sie liegen alle in der HTTP-Schicht, keiner in der
-Engine und keiner im Zustandsspeicher.
+Die mit **Blocker** markierten Punkte liegen in der HTTP-Schicht, keiner in der
+Engine und keiner im Zustandsspeicher — und beide hängen am Doppelpfad, den
+[ADR 0003](adr/0003-replace-http-layer.md) zur Entscheidung stellt.
 
 ## Was mit Korifi passiert
 

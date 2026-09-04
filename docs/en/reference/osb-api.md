@@ -15,13 +15,13 @@ All `/v2` routes sit behind authentication and the `X-Broker-API-Version` check.
 | Method and path | Behaviour |
 |---|---|
 | `GET /v2/catalog` | Union of the static demo catalogue and `engine.Catalog()` |
-| `PUT /v2/service_instances/:id` | Provision. Definition path or fallback path; `201`, `200` for a known instance |
+| `PUT /v2/service_instances/:id` | Provision. Definition path: `202` with `operation`, without `?accepts_incomplete=true` **422** `AsyncRequired`; `200` for a known instance, `409` for differing parameters. Fallback path synchronous `201`/`200` |
 | `PATCH /v2/service_instances/:id` | Plan change. Checks `allowedParameters`, re-renders, writes only on a real change; `200` |
 | `DELETE /v2/service_instances/:id` | Deprovision. `410` for an unknown instance, `409` when bindings exist (fallback path only) |
 | `GET /v2/service_instances/:id` | **Always** through the fallback path, i.e. through the state store |
-| `GET /v2/service_instances/:id/last_operation` | Definition path only with `?service_id=`, otherwise hardcoded `succeeded` |
+| `GET /v2/service_instances/:id/last_operation` | State from the operator's CR. `service_id` may be omitted, the service then comes from the record. `410` for an unknown instance, `failed` when the record exists and the object is gone |
 | `PUT …/service_bindings/:bid` | Bind; `201`, `200` for a known binding |
-| `DELETE …/service_bindings/:bid` | Unbind |
+| `DELETE …/service_bindings/:bid` | Unbind; `200`, `410` for an unknown binding |
 | `GET …/service_bindings/:bid` | **Always** through the state store |
 | `GET …/service_bindings/:bid/last_operation` | hardcoded `succeeded` |
 
@@ -35,35 +35,6 @@ Reachable without authentication, deliberately:
 | `GET /schemas/service-definition.schema.json` | the definition schema, likewise |
 
 ## Deviations from OSB 2.17
-
-### Provision always answers synchronously
-
-OSB transmits `accepts_incomplete` as a **query parameter**. The broker models
-it as a field in the request body (`internal/broker/types.go:24`) and therefore
-never reads it:
-
-```go
-AcceptsIncomplete bool `json:"accepts_incomplete"`
-```
-
-The branch in `internal/handlers/service_instances.go:42` is thereby
-unreachable, and `StatusAccepted` does not occur once in the repository. The
-entire `last_operation` machinery exists but is never engaged.
-
-**Effect:** The broker reports "done" as soon as the CR is created — not when
-the service is ready. With CloudNativePG there are minutes in between. The
-platform binds against a secret the operator has not written yet.
-
-### Bindings on the definition path are not persisted
-
-`bindDefinition` calls the engine and returns the credentials. It never calls
-`state.PutBinding`. Three consequences:
-
-- `GET …/service_bindings/:bid` always goes through the state store and
-  therefore returns **404** for every service that runs through a definition.
-- A repeated bind answers `201` instead of `200`, because nothing is known.
-- The `409` check "instance still has bindings" in deprovision can never fire
-  for definition services.
 
 ### `last_operation` for bindings is a constant
 
