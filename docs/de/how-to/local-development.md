@@ -142,10 +142,20 @@ go build -o /tmp/osb-checker ./cmd/osb-checker/
 Der Rückgabewert ist die Zahl der Fehlschläge. Die Ausgabe ist für GitHub
 Actions annotiert.
 
-**Ein Vorbehalt, der beim Lesen der Ergebnisse zählt:** die Suite wählt den
-ersten Service aus dem Katalog, und das ist immer der Demo-Service `service-1`
-aus `internal/store`. Sie prüft damit den Fallback-Pfad, nicht die Engine. Siehe
-[reference/osb-api.md](../reference/osb-api.md).
+**Welchen Service die Suite prüft, entscheidet über den Aussagewert.** Ohne
+Vorgabe nimmt sie den ersten Service, der **kein** Demo-Angebot ist — also eine
+ServiceDefinition, und damit die Engine. Gezielt wählen geht so:
+
+```bash
+/tmp/osb-checker --url http://localhost:8080 --user dev --pass dev \
+  --service-id f48a9e21-cnpg-0000-0000-000000000001 \
+  --plan-id plan-small-0000-0000-000000000001
+```
+
+`--plan-id` darf entfallen, dann nimmt sie den ersten Plan des Service. Eine
+`--service-id`, die nicht im Katalog steht, ist ein Fehlschlag und kein stiller
+Rückfall — sonst prüfte die CI klaglos etwas anderes als gemeint. Welcher
+Service gewählt wurde, steht als erste `PASS`-Zeile im Bericht.
 
 ## Konventionen
 

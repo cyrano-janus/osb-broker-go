@@ -26,18 +26,34 @@ type Config struct {
 	IDPrefix string
 	Timeout  int64 // seconds; reserved for future per-check deadlines
 
-	// TLS options (Phase 4.5). CACert verifies the broker certificate;
+	// TLS options. CACert verifies the broker certificate;
 	// ClientCert/ClientKey authenticate the checker via mTLS.
 	CACert     string
 	ClientCert string
 	ClientKey  string
 	Insecure   bool
+
+	// ServiceID und PlanID waehlen aus, was der Lifecycle-Audit
+	// provisioniert. Leer heisst: automatisch waehlen, siehe pickService.
+	//
+	// Wer den Broker gezielt pruefen will, setzt sie: die OSB-IDs einer
+	// ServiceDefinition sind auf Dauer stabil, der Katalog ist es nicht.
+	ServiceID string
+	PlanID    string
 }
 
 const cnpgServiceID = "f48a9e21-cnpg-0000-0000-000000000001"
 const smallPlanID = "plan-small-0000-0000-000000000001"
-const legacyServiceID = "service-1"
-const legacyPlanID = "plan-free"
+
+// demoServiceIDs sind die fest verdrahteten Angebote aus internal/store, die
+// jedem Katalog vorangestellt werden. Sie werden vom Fallback-Broker bedient,
+// nicht von der Engine.
+//
+// Der Lifecycle-Audit muss sie ueberspringen: wer den ersten Katalogeintrag
+// nimmt, prueft immer sie und nie eine ServiceDefinition - und genau deshalb
+// ist lange niemandem aufgefallen, dass der Definitions-Pfad seine Bindings
+// nicht persistiert.
+var demoServiceIDs = map[string]bool{"service-1": true, "service-2": true}
 
 var failures int
 
@@ -199,9 +215,9 @@ func Run(cfg Config) int {
 
 	// Full lifecycle + fetch + update audit (mirrors the standalone
 	// osb-checker's provision/bind/update/fetch categories).
-	serviceID, planID := pickService(svcs)
+	serviceID, planID := pickService(cfg, svcs)
 	if serviceID == "" {
-		fmt.Println("SKIP [lifecycle-*]: no known service in catalog")
+		fmt.Println("SKIP [lifecycle-*]: kein pruefbarer Service im Katalog")
 	} else {
 		inst := runLifecycleAudit(c, serviceID, planID)
 		if inst != "" {
@@ -213,17 +229,72 @@ func Run(cfg Config) int {
 	return failures
 }
 
-// pickService selects a known service+plan for the lifecycle audit.
-func pickService(svcs []catalogService) (serviceID, planID string) {
-	for _, s := range svcs {
-		switch s.ID {
-		case cnpgServiceID:
-			return cnpgServiceID, smallPlanID
-		case legacyServiceID:
-			return legacyServiceID, legacyPlanID
+// pickService waehlt Service und Plan fuer den Lifecycle-Audit.
+//
+// Vorrang hat, was der Aufrufer per --service-id vorgibt; ein unbekannter Wert
+// ist ein Fehlschlag und kein stiller Rueckfall, sonst prueft die CI klaglos
+// etwas anderes als gemeint. Ohne Vorgabe wird der erste Service genommen, der
+// KEIN Demo-Angebot ist - also einer aus einer ServiceDefinition. Nur wenn es
+// keinen gibt, faellt die Wahl auf das Demo-Angebot; das ist der Fall, wenn der
+// Broker ohne DEFINITIONS_DIR laeuft.
+func pickService(cfg Config, svcs []catalogService) (serviceID, planID string) {
+	const check = "lifecycle-service-selection"
+
+	if cfg.ServiceID != "" {
+		for _, s := range svcs {
+			if s.ID != cfg.ServiceID {
+				continue
+			}
+			plan, err := resolvePlan(s, cfg.PlanID)
+			if err != nil {
+				fail(check, "service %q: %v", s.ID, err)
+				return "", ""
+			}
+			pass(check, "service %q (%s), plan %q - vorgegeben", s.ID, s.Name, plan)
+			return s.ID, plan
 		}
+		fail(check, "service %q steht nicht im Katalog", cfg.ServiceID)
+		return "", ""
+	}
+
+	for _, s := range svcs {
+		if demoServiceIDs[s.ID] || len(s.Plans) == 0 {
+			continue
+		}
+		plan, err := resolvePlan(s, "")
+		if err != nil {
+			continue
+		}
+		pass(check, "service %q (%s), plan %q - erste ServiceDefinition im Katalog", s.ID, s.Name, plan)
+		return s.ID, plan
+	}
+
+	for _, s := range svcs {
+		plan, err := resolvePlan(s, "")
+		if err != nil {
+			continue
+		}
+		pass(check, "service %q (%s), plan %q - nur Demo-Angebote im Katalog", s.ID, s.Name, plan)
+		return s.ID, plan
 	}
 	return "", ""
+}
+
+// resolvePlan liefert den zu pruefenden Plan: den vorgegebenen, wenn es ihn
+// gibt, sonst den ersten des Service.
+func resolvePlan(s catalogService, wanted string) (string, error) {
+	if wanted != "" {
+		for _, p := range s.Plans {
+			if p.ID == wanted {
+				return p.ID, nil
+			}
+		}
+		return "", fmt.Errorf("plan %q gehoert nicht dazu", wanted)
+	}
+	if len(s.Plans) == 0 {
+		return "", fmt.Errorf("kein Plan im Katalog")
+	}
+	return s.Plans[0].ID, nil
 }
 
 func checkAuthEnforcement(c *client) {

@@ -36,6 +36,10 @@ spec:
         name: free
         params:
           size: small
+      - id: def-plan-paid
+        name: paid
+        params:
+          size: large
   provision:
     apiVersion: test.example.com/v1
     kind: Database
@@ -84,9 +88,17 @@ func newDefinitionRouter(t *testing.T) (*gin.Engine, *definition.OperatorClient)
 var testBroker *broker.Broker
 
 func putJSON(router *gin.Engine, path string, body interface{}) *httptest.ResponseRecorder {
+	return sendJSON(router, "PUT", path, body)
+}
+
+func patchJSON(router *gin.Engine, path string, body interface{}) *httptest.ResponseRecorder {
+	return sendJSON(router, "PATCH", path, body)
+}
+
+func sendJSON(router *gin.Engine, method, path string, body interface{}) *httptest.ResponseRecorder {
 	b, _ := json.Marshal(body)
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", path, bytes.NewBuffer(b))
+	req, _ := http.NewRequest(method, path, bytes.NewBuffer(b))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 	return w

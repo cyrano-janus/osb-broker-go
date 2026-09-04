@@ -37,6 +37,24 @@ func (h *Handlers) provisionDefinitionWithRequest(c *gin.Context, instanceID str
 		return
 	}
 
+	// OSB 2.17: ein wiederholtes Provision derselben Instanz mit denselben
+	// Parametern ist 200, nicht 201 - die Plattform wiederholt Requests, und
+	// ein zweites 201 liest sie als "neu angelegt". Weichen Service oder Plan
+	// ab, ist es 409.
+	if known, err := h.broker.StoredInstance(c.Request.Context(), instanceID); err == nil && known != nil {
+		if known.ServiceID != req.ServiceID || known.PlanID != req.PlanID {
+			c.JSON(http.StatusConflict, gin.H{
+				"error":       "Conflict",
+				"description": "instance already exists with different service_id or plan_id",
+			})
+			return
+		}
+		c.JSON(http.StatusOK, broker.ProvisionResponse{
+			DashboardURL: "https://dashboard.example.com/instances/" + instanceID,
+		})
+		return
+	}
+
 	// Beide erlaubten Quellen auswerten: Korifi schickt space_guid
 	// ausschliesslich als Top-Level-Feld (FINDINGS #3).
 	namespace := targetNamespace(req.ResolvedContext())

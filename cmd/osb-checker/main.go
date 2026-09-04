@@ -18,6 +18,8 @@ func main() {
 	clientCert := flag.String("client-cert", "", "client certificate for mTLS")
 	clientKey := flag.String("client-key", "", "client private key for mTLS")
 	insecure := flag.Bool("insecure", false, "skip broker certificate verification (testing only)")
+	serviceID := flag.String("service-id", "", "OSB service_id to audit; empty = first non-demo service in the catalog")
+	planID := flag.String("plan-id", "", "OSB plan_id to audit; empty = first plan of the chosen service")
 	flag.Parse()
 
 	if *insecure {
@@ -31,6 +33,8 @@ func main() {
 		ClientCert: *clientCert,
 		ClientKey:  *clientKey,
 		Insecure:   *insecure,
+		ServiceID:  *serviceID,
+		PlanID:     *planID,
 	}
 	failures := checker.Run(cfg)
 	if failures > 0 {

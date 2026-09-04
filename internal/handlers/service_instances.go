@@ -109,6 +109,18 @@ func (h *Handlers) UpdateServiceInstance(c *gin.Context) {
 
 	// Phase 3: definition-based services update via engine (CR re-render).
 	if sd, _ := h.resolveDefinition(req.ServiceID); sd != nil {
+		// OSB 2.17: ein Update auf eine unbekannte Instanz ist 404. Ohne
+		// diese Pruefung rendert die Engine das Manifest und legt die Instanz
+		// an - ein Update, das provisioniert, und zwar im Rueckfall-Namespace
+		// `default` statt im Space, weil ein PATCH keinen context traegt.
+		if !h.instanceKnown(instanceID) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":       "NotFound",
+				"description": "instance not found",
+			})
+			return
+		}
+
 		// Der PATCH-Request traegt keinen Space; der Namespace kommt aus dem
 		// gespeicherten Datensatz (FINDINGS #16).
 		namespace := h.instanceNamespace(c.Request.Context(), instanceID)

@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 )
@@ -222,21 +223,34 @@ func (o *OperatorClient) ApplyManifestRefs(ctx context.Context, defaultAPIVersio
 	}
 	var applied []ObjectRef
 	for _, obj := range objs {
-		existing := &unstructured.Unstructured{}
-		existing.SetGroupVersionKind(obj.GroupVersionKind())
-		err := o.Client.Get(ctx, client.ObjectKeyFromObject(obj), existing)
-		switch {
-		case apierrors.IsNotFound(err):
-			if err := o.Client.Create(ctx, obj); err != nil && !apierrors.IsAlreadyExists(err) {
-				return applied, fmt.Errorf("create %s %q: %w", obj.GetKind(), obj.GetName(), err)
+		// Lesen und Schreiben liegen auseinander, und dazwischen fasst der
+		// Operator sein eigenes Objekt an - Status, Finalizer, Conditions.
+		// Ohne Retry scheitert deshalb jedes Apply, das kurz nach dem Anlegen
+		// kommt, an einem resourceVersion-Konflikt; der Broker antwortete
+		// darauf mit 500. RetryOnConflict liest neu und versucht es erneut,
+		// wie es der Zustandsspeicher fuer seine eigenen Objekte auch tut.
+		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			existing := &unstructured.Unstructured{}
+			existing.SetGroupVersionKind(obj.GroupVersionKind())
+			err := o.Client.Get(ctx, client.ObjectKeyFromObject(obj), existing)
+			switch {
+			case apierrors.IsNotFound(err):
+				if err := o.Client.Create(ctx, obj); err != nil && !apierrors.IsAlreadyExists(err) {
+					return fmt.Errorf("create %s %q: %w", obj.GetKind(), obj.GetName(), err)
+				}
+				return nil
+			case err != nil:
+				return fmt.Errorf("get %s %q: %w", obj.GetKind(), obj.GetName(), err)
+			default:
+				obj.SetResourceVersion(existing.GetResourceVersion())
+				// Der Fehler wird unverpackt zurueckgegeben, damit
+				// RetryOnConflict den Konflikt erkennt; ein %w-Wrapper
+				// verbirgt ihn vor apierrors.IsConflict.
+				return o.Client.Update(ctx, obj)
 			}
-		case err != nil:
-			return applied, fmt.Errorf("get %s %q: %w", obj.GetKind(), obj.GetName(), err)
-		default:
-			obj.SetResourceVersion(existing.GetResourceVersion())
-			if err := o.Client.Update(ctx, obj); err != nil {
-				return applied, fmt.Errorf("update %s %q: %w", obj.GetKind(), obj.GetName(), err)
-			}
+		})
+		if err != nil {
+			return applied, fmt.Errorf("apply %s %q: %w", obj.GetKind(), obj.GetName(), err)
 		}
 		applied = append(applied, ObjectRef{
 			APIVersion: obj.GetAPIVersion(),

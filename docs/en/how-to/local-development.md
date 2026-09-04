@@ -143,10 +143,20 @@ Over HTTPS with a client certificate:
 The exit code is the number of failures. The output is annotated for GitHub
 Actions.
 
-**One caveat that matters when reading the results:** the suite picks the first
-service from the catalogue, and that is always the demo service `service-1` from
-`internal/store`. It therefore exercises the fallback path, not the engine. See
-[reference/osb-api.md](../reference/osb-api.md).
+**Which service the suite audits decides what the result is worth.** Without a
+choice it takes the first service that is **not** a demo offering — that is, a
+ServiceDefinition, and therefore the engine. To choose deliberately:
+
+```bash
+/tmp/osb-checker --url http://localhost:8080 --user dev --pass dev \
+  --service-id f48a9e21-cnpg-0000-0000-000000000001 \
+  --plan-id plan-small-0000-0000-000000000001
+```
+
+`--plan-id` may be omitted, in which case the service's first plan is used. A
+`--service-id` that is not in the catalogue is a failure, not a silent fallback —
+otherwise CI would happily audit something other than intended. Which service
+was chosen appears as the first `PASS` line of the report.
 
 ## Conventions
 
