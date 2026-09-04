@@ -312,7 +312,7 @@ definitions:
                 storage: {{ .plan.storageSize }}
 
         readiness:
-          statusJSONPath: 'status.conditions.#(type=="Ready").status'
+          statusJSONPath: 'status.conditions.#(type=="AllReplicasReady").status'
           expectedValue: "True"
           timeoutSeconds: 600
 

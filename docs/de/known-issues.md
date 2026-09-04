@@ -78,9 +78,17 @@ Status *vorgeschlagen*. Der Zustandsspeicher ist davon nicht betroffen.
 
 ## Definitionen und Deployment
 
-**Die RabbitMQ-Definition prüft eine Condition, die es nicht gibt.**
-`definitions/rabbitmq-cluster.yaml` nennt `type=="Ready"`; der Operator
-veröffentlicht `AllReplicasReady` und `ClusterAvailable`. *FINDINGS #22.*
+**Die Readiness-Pfade von fünf Definitionen sind ungeprüft.**
+`minio-objectstorage`, `redis-standalone`, `valkey-cluster`, `redpanda-cluster`
+und `seaweedfs-s3` nennen alle `status.conditions.#(type=="Ready").status`, ohne
+dass je ein CR des jeweiligen Operators dagegen gehalten wurde — die Operatoren
+sind in der Entwicklungsplattform nicht installiert. Belegt sind nur
+`cnpg-postgresql` und `rabbitmq-cluster`.
+
+Trifft ein Pfad daneben, meldet `last_operation` seit der Diagnose in
+`EvaluateReadiness` den Grund samt der Condition-Namen, die der Operator
+tatsächlich führt. Der Provisioning-Vorgang läuft trotzdem in das Zeitlimit der
+Plattform; der Unterschied ist, dass man danach weiß, warum.
 
 **`values-kind.yaml` ist von `definitions/` abgedriftet.** Die Datei dupliziert
 alle Definitionen als eingebettete YAML-Strings. Die eingebettete
@@ -99,11 +107,11 @@ Services bekämen beim Provision einen 403.
 trifft auf einen leeren `issuerRef.name` und damit auf ein `{{ required }}`.
 Beabsichtigt, aber unerwartet.
 
-**Die Zweitmeinung in der CI blockiert noch nicht.** Der standalone-Checker
-laeuft im Job `conformance` mit `continue-on-error: true`, weil er ueber die
-oben genannten Blocker stolpert — Bind und `GET binding` antworten 404. Sein
-Bericht steht in der Job-Zusammenfassung und als Artefakt. Sobald die Blocker
-weg sind, faellt `continue-on-error` weg.
+**Die Zweitmeinung in der CI blockiert nicht.** Der standalone-Checker laeuft
+im Job `conformance` mit `continue-on-error: true`. Sein Bericht steht in der
+Job-Zusammenfassung und als Artefakt. Er ist derzeit durchgehend gruen; das
+`continue-on-error` zu entfernen ist eine offene Entscheidung, keine offene
+Aufgabe.
 
 **`config.logRequests` wird von keinem Template gelesen** und hat keine
 entsprechende Umgebungsvariable.
@@ -153,13 +161,14 @@ Zielplattform näher wäre als Korifi. Einordnung in
 Die Punkte hängen zusammen; in dieser Reihenfolge abgearbeitet macht jeder den
 nächsten sichtbar oder billiger.
 
-1. **Async** — `accepts_incomplete` aus der Query lesen, `202` antworten,
-   `last_operation` gegen die echte Readiness beantworten. Der teuerste offene
-   Punkt, und der einzige, der eine Zielplattform sofort blockiert.
-2. **Die RabbitMQ-Condition** — sie wird durch den Async-Fix erst sichtbar, weil
-   heute niemand auf Readiness wartet. Gehört in dieselbe Runde.
-3. **Doppelpfad und Konformitätssuite** — solange die Suite den Fallback-Pfad
-   prüft, misst jede weitere Arbeit ins Leere.
-4. **Binding-Persistenz** — hängt strukturell am Doppelpfad und fällt mit ihm.
-5. **Benutzerparameter und `allowedParameters`** — zusammen, weil beide denselben
-   Weg durch die Engine betreffen.
+1. **Doppelpfad** — solange ein Request beim kleinsten Fehler stumm auf einen
+   zweiten Broker mit eigenem Katalog fällt, misst jede weitere Arbeit ins
+   Leere. Der Demo-Katalog verschwindet mit ihm.
+2. **`last_operation` für Bindings** — hängt strukturell am Doppelpfad und
+   fällt mit ihm.
+3. **Benutzerparameter und `allowedParameters`** — zusammen, weil beide
+   denselben Weg durch die Engine betreffen.
+4. **Fehlerklassifikation** — typisierte Fehler statt `strings.Contains`; sie
+   steuern das Retry-Verhalten der Plattform.
+5. **`readiness.timeoutSeconds` durchsetzen** — bis dahin meldet ein hängender
+   Operator `in progress`, bis die Plattform selbst aufgibt.

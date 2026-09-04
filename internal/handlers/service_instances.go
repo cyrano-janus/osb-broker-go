@@ -201,7 +201,7 @@ func (h *Handlers) GetLastOperation(c *gin.Context) {
 				return
 			}
 
-			state, err := h.engine.Engine.LastOperation(c.Request.Context(), sd, namespace, instanceID)
+			state, reason, err := h.engine.Engine.LastOperation(c.Request.Context(), sd, namespace, instanceID)
 			if err != nil {
 				// Der Datensatz existiert, das Objekt nicht: der Vorgang ist
 				// gescheitert, nicht "noch unterwegs". Ohne diesen Zweig
@@ -217,7 +217,7 @@ func (h *Handlers) GetLastOperation(c *gin.Context) {
 			h.observeLastOperation(state)
 			c.JSON(http.StatusOK, broker.LastOperationResponse{
 				State:       state,
-				Description: "Readiness evaluated from operator CR status",
+				Description: reason,
 				Operation:   operation,
 			})
 			return

@@ -75,9 +75,17 @@ engine is recorded as [ADR 0003](adr/0003-replace-http-layer.md) with status
 
 ## Definitions and deployment
 
-**The RabbitMQ definition checks a condition that does not exist.**
-`definitions/rabbitmq-cluster.yaml` names `type=="Ready"`; the operator
-publishes `AllReplicasReady` and `ClusterAvailable`. *FINDINGS #22.*
+**The readiness paths of five definitions are unverified.**
+`minio-objectstorage`, `redis-standalone`, `valkey-cluster`, `redpanda-cluster`
+and `seaweedfs-s3` all name `status.conditions.#(type=="Ready").status` without
+ever having been held against a CR of the respective operator — those operators
+are not installed in the development platform. Only `cnpg-postgresql` and
+`rabbitmq-cluster` are backed by evidence.
+
+When a path misses, `last_operation` reports the reason together with the
+condition names the operator actually publishes, thanks to the diagnostic in
+`EvaluateReadiness`. The provisioning operation still runs into the platform's
+timeout; the difference is that afterwards you know why.
 
 **`values-kind.yaml` has drifted away from `definitions/`.** The file duplicates
 all definitions as embedded YAML strings. The embedded RabbitMQ definition is
@@ -96,11 +104,10 @@ services would get a 403 on provision.
 `tls.certManager.enabled: true` meets an empty `issuerRef.name` and therefore a
 `{{ required }}`. Intended, but surprising.
 
-**The counter-check in CI does not block yet.** The standalone checker runs in
-the `conformance` job with `continue-on-error: true`, because it trips over the
-blockers listed above — bind and `GET binding` answer 404. Its report is in the
-job summary and as an artifact. Once the blockers are gone, `continue-on-error`
-goes with them.
+**The counter-check in CI does not block.** The standalone checker runs in the
+`conformance` job with `continue-on-error: true`. Its report is in the job
+summary and as an artifact. It is currently green throughout; removing the
+`continue-on-error` is an open decision, not an open task.
 
 **`config.logRequests` is read by no template** and has no corresponding
 environment variable.
@@ -150,14 +157,14 @@ closer to the target platform than Korifi. Classification in
 The points are connected; worked through in this order each one makes the next
 visible or cheaper.
 
-1. **Async** — read `accepts_incomplete` from the query, answer `202`, answer
-   `last_operation` from the real readiness state. The most expensive open point
-   and the only one that blocks a target platform immediately.
-2. **The RabbitMQ condition** — the async fix is what makes it visible, because
-   today nobody waits for readiness. It belongs in the same round.
-3. **Dual path and conformance suite** — as long as the suite exercises the
-   fallback path, all further work is measured against nothing.
-4. **Binding persistence** — structurally attached to the dual path and falls
-   with it.
-5. **User parameters and `allowedParameters`** — together, because both concern
+1. **Dual path** — as long as a request silently falls through to a second
+   broker with its own catalogue on the slightest error, all further work is
+   measured against nothing. The demo catalogue goes with it.
+2. **`last_operation` for bindings** — structurally attached to the dual path
+   and falls with it.
+3. **User parameters and `allowedParameters`** — together, because both concern
    the same route through the engine.
+4. **Error classification** — typed errors instead of `strings.Contains`; they
+   steer the platform's retry behaviour.
+5. **Enforce `readiness.timeoutSeconds`** — until then a stuck operator reports
+   `in progress` until the platform itself gives up.

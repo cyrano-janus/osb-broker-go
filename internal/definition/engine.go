@@ -208,20 +208,20 @@ func (e *Engine) DeprovisionInstance(ctx context.Context, sd *ServiceDefinition,
 }
 
 // LastOperation maps CR readiness to OSB operation state:
-// succeeded / in progress.
-func (e *Engine) LastOperation(ctx context.Context, sd *ServiceDefinition, namespace, instanceID string) (string, error) {
+// succeeded / in progress, mitsamt dem Grund, den die Plattform anzeigt.
+func (e *Engine) LastOperation(ctx context.Context, sd *ServiceDefinition, namespace, instanceID string) (string, string, error) {
 	cr, err := e.op.GetCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, namespace, SanitizeInstanceName(instanceID))
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	done, err := EvaluateReadiness(sd, cr)
+	done, reason, err := EvaluateReadiness(sd, cr)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if done {
-		return "succeeded", nil
+		return "succeeded", "der Dienst ist bereit", nil
 	}
-	return "in progress", nil
+	return "in progress", reason, nil
 }
 
 // BindCredentials renders the secret name from the definition, reads it and

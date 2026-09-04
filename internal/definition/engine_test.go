@@ -88,9 +88,10 @@ func TestEngine_LastOperation_MapsReadiness(t *testing.T) {
 	require.NoError(t, e.ProvisionInstance(ctx, "f48a9e21-cnpg-0000-0000-000000000001", "inst-ro", "default", "plan-small-0000-0000-000000000001", nil))
 
 	// Noch nicht ready (keine Conditions im Fake-CR)
-	state, err := e.LastOperation(ctx, sd, "default", "inst-ro")
+	state, reason, err := e.LastOperation(ctx, sd, "default", "inst-ro")
 	require.NoError(t, err)
 	assert.Equal(t, "in progress", state)
+	assert.NotEmpty(t, reason, "wer wartet, soll erfahren, worauf")
 
 	// Ready-Condition setzen
 	cr, err := oc.GetCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, "default", "osb-inst-ro")
@@ -100,7 +101,7 @@ func TestEngine_LastOperation_MapsReadiness(t *testing.T) {
 		"status", "conditions"))
 	require.NoError(t, oc.Client.Update(ctx, cr))
 
-	state, err = e.LastOperation(ctx, sd, "default", "inst-ro")
+	state, _, err = e.LastOperation(ctx, sd, "default", "inst-ro")
 	require.NoError(t, err)
 	assert.Equal(t, "succeeded", state)
 }

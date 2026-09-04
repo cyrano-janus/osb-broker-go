@@ -161,11 +161,20 @@ expectedValue: "True"
 
 Ein führender Punkt wird abgeschnitten, ein nicht auffindbarer Pfad bedeutet
 **noch nicht bereit** — nie *Fehler*. Das ist gewollt, weil ein Operator die
-Condition erst anlegt, wenn er sie kennt. Die Kehrseite: eine Condition, die es
-gar nicht gibt, sieht genauso aus wie eine, die noch nicht da ist, und der
-Broker meldet ewig `in progress`. Genau das passiert bei
-`rabbitmq-cluster`, dessen Operator `AllReplicasReady` und `ClusterAvailable`
-veröffentlicht statt `Ready`.
+Condition erst anlegt, wenn er sie kennt.
+
+Damit ein Tippfehler trotzdem nicht als ewiges `in progress` endet,
+unterscheidet die Auswertung zwei Fälle und schreibt den Grund in die
+`description` von `last_operation`:
+
+| Lage im CR | `description` |
+|---|---|
+| kein `status` | *der Operator hat noch keinen Status geschrieben* |
+| `status` da, Pfad findet nichts | *der Pfad … findet im Status nichts* — **mitsamt der Condition-Namen, die wirklich da sind** |
+| Pfad findet etwas Anderes | *… steht auf `"False"`, erwartet `"True"`* |
+
+Der Zustand bleibt in allen drei Fällen `in progress`; ein Operator darf sich
+Zeit lassen. Sichtbar wird der Unterschied in `cf service <name>`.
 
 **Den Pfad ermittelt man am lebenden Objekt**, nicht aus der Dokumentation des
 Operators — siehe

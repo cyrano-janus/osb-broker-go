@@ -160,11 +160,20 @@ expectedValue: "True"
 
 A leading dot is stripped, and a path that cannot be found means **not ready
 yet** — never *error*. That is intentional, because an operator only creates a
-condition once it knows about it. The flip side: a condition that does not exist
-at all looks exactly like one that has not appeared yet, and the broker reports
-`in progress` forever. That is exactly what happens with `rabbitmq-cluster`,
-whose operator publishes `AllReplicasReady` and `ClusterAvailable` instead of
-`Ready`.
+condition once it knows about it.
+
+So that a typo does not end as an eternal `in progress` anyway, the evaluation
+tells two cases apart and writes the reason into the `description` of
+`last_operation`:
+
+| State of the CR | `description` |
+|---|---|
+| no `status` | *the operator has not written a status yet* |
+| `status` present, path finds nothing | *the path … finds nothing in the status* — **together with the condition names that are actually there** |
+| path finds something else | *… is `"False"`, expected `"True"`* |
+
+The state stays `in progress` in all three cases; an operator is allowed to take
+its time. The difference becomes visible in `cf service <name>`.
 
 **The path is determined on the live object**, not from the operator's
 documentation — see [how-to/add-a-service.md](how-to/add-a-service.md).
