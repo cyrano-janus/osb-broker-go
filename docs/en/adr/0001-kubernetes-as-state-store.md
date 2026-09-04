@@ -18,32 +18,26 @@ memory that amounts to a few kilobytes per instance.
 
 ## Decision
 
-**State lives in Kubernetes objects, not in a database.**
+**State lives in Kubernetes objects, not in a database — one object per
+record.**
 
-This was implemented in two stages:
+The resource kinds are `OSBServiceInstance` and `OSBServiceBinding`, group
+`broker.osb.io`, version `v1alpha1`. A provision creates one object, a
+deprovision removes it; no call touches the state of other instances.
 
-1. **First as a ConfigMap.** A single object carrying the entire state as JSON.
-   Simple, and sufficient for a proof.
-2. **Since phase 5 as dedicated resource kinds** — one `OSBServiceInstance` or
-   `OSBServiceBinding` per record, group `broker.osb.io`, version `v1alpha1`.
+Four requirements follow from that and are the reason for this shape:
 
-The second stage was not a matter of taste. The ConfigMap had three concrete
-defects:
-
-- **The 1 MiB limit** of ConfigMaps is enough for roughly 514 instances. Beyond
-  that every further write fails — and it fails for the *entire* state at once.
-- **Every call rewrote the complete state.** That does not scale with the number
-  of instances, it scales against it.
-- **Writes were lost silently.** There was no mutex, and `save` read the
-  `resourceVersion` freshly instead of taking it from the `load`. Two
-  overlapping provisions overwrote each other without a conflict. CI never
-  noticed, because `STORE_BACKEND=memory` was set there — the ConfigMap store
-  was **never** exercised.
-
-On top of that the ConfigMap required an RBAC rule Kubernetes does not grant in
-that form: `create` cannot be restricted through `resourceNames`, because on
-creation the object name is in the request body and no name exists at
-authorization time to check against.
+- **No size limit.** State grows with the number of instances, not towards a
+  fixed ceiling.
+- **No rewriting of the entire state per call.** A provision writes exactly one
+  object.
+- **Conflict handling instead of silent overwriting.** Writes go through
+  `RetryOnConflict` and replace only `.Spec`; `resourceVersion` and third-party
+  annotations stay in place.
+- **RBAC that can grant `create` at all.** Rights apply per resource kind, not
+  per object name — Kubernetes cannot restrict `create` through `resourceNames`,
+  because on creation the object name is in the request body and no name exists
+  at authorization time to check against.
 
 ## Detail decisions
 
@@ -75,27 +69,35 @@ on a `helm upgrade`. They are installed with `kubectl apply -f deploy/crds/`.
 
 **Good:**
 
-- No size limit any more, no rewriting of the entire state per call.
-- Write conflicts are resolved cleanly through `RetryOnConflict`.
 - The state is visible with `kubectl get osbi,osbb` — an operational advantage
   no database offers.
 - Granular RBAC per resource kind instead of one rule on a single object.
+- A broken record affects one record, not the whole holding.
 
 **Price:**
 
 - Two CRDs must be installed before the first start, otherwise every provision
   fails.
-- The migration needed a tool (`cmd/osb-state-migrate`), and that tool had to
-  **redeclare** the old structures: the earlier types had no JSON tags while the
-  embedded context did. Read with today's types, the result would silently be an
-  empty record.
-- The in-memory store remains as a second implementation. Both have to pass the
-  same contract suite (`internal/broker/statestore_contract_test.go`).
+- There are two implementations of the interface — the CRD-backed one and the
+  in-memory one for tests. Both have to pass the same contract suite
+  (`internal/broker/statestore_contract_test.go`).
+- State in a different format cannot simply be read in; `cmd/osb-state-migrate`
+  exists for that.
 
 ## Rejected alternatives
 
+**A single shared object for the entire state** — a ConfigMap holding JSON — is
+the most obvious route and fails in four places at once: the 1 MiB limit is
+enough for roughly 514 instances and makes *every* write fail beyond that; every
+call rewrites the whole state and therefore scales against the number of
+instances; two overlapping provisions overwrite each other without a conflict as
+soon as the `resourceVersion` is fetched anew between read and write; and RBAC
+cannot restrict `create` to an object name, so the right applies to the whole
+resource kind anyway.
+
 | Option | Why not |
 |---|---|
+| One ConfigMap for the entire state | size limit, whole-state write per call, no usable conflict handling, no meaningful RBAC |
 | External database (PostgreSQL, MySQL) | contradicts the "no external store" goal; a second operational object |
 | SQLite on a PVC | no server needed, but a storage dependency and no `kubectl` visibility |
 | Many small ConfigMaps or secrets | solves the size limit, but without a query layer and without resource-kind RBAC |

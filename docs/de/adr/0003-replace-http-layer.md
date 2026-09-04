@@ -4,15 +4,12 @@
 
 **Status:** **vorgeschlagen** — nicht entschieden · **Betrifft:** `internal/handlers`, `internal/broker/broker.go`, `internal/store`
 
-> Dieses Dokument hält eine Empfehlung fest, keine getroffene Entscheidung. Es
-> steht hier, damit die Begründung nachlesbar ist, wenn die Entscheidung ansteht.
+> Dieses Dokument hält einen Vorschlag fest, keine getroffene Entscheidung.
 
 ## Kontext
 
-Aus einer systematischen Lesung des Codes und aus zwei Lifecycle-Durchläufen
-gegen echte Operatoren sind mehrere Befunde entstanden, die auf eine gemeinsame
-Ursache zurückgehen: **es gibt zwei vollständige Broker-Implementierungen im
-selben Prozess.**
+Mehrere der offenen Befunde gehen auf eine gemeinsame Ursache zurück: **es gibt
+zwei vollständige Broker-Implementierungen im selben Prozess.**
 
 Jeder Handler verzweigt einzeln über `resolveDefinition`
 (`internal/handlers/definition_instances.go:17`). Liefert es eine Definition,
@@ -23,10 +20,10 @@ eigenen Instanz- und Binding-Maps und einem Fake-Katalog aus `internal/store`.
 Daraus folgen unmittelbar:
 
 - Der Demo-Katalog erscheint in jedem Produktivkatalog.
-- Die eigene Konformitätssuite prüft den Legacy-Pfad, weil sie den ersten
+- Die eigene Konformitätssuite prüft den Fallback-Pfad, weil sie den ersten
   Service aus dem Katalog nimmt — deshalb ist die fehlende Binding-Persistenz
   nie aufgefallen.
-- `GET instance` und `GET binding` laufen **immer** über den Legacy-Pfad, auch
+- `GET instance` und `GET binding` laufen **immer** über den Fallback-Pfad, auch
   für Definitions-Services.
 - Async ist nie angebunden: `accepts_incomplete` wird an der falschen Stelle
   gelesen, und der `last_operation`-Apparat läuft leer.
@@ -37,19 +34,18 @@ Auswirkung je Zielplattform in [target-platforms.md](../target-platforms.md).
 **Vier dieser Punkte sind Blocker für produktives Cloud Foundry und TAS**, und
 alle vier liegen in derselben Schicht.
 
-## Was sich seit der Formulierung geändert hat
+## Abgrenzung
 
-Die ursprüngliche Empfehlung lautete „HTTP- **und** State-Schicht ersetzen".
-Die State-Hälfte ist in Phase 5 umgesetzt: der ConfigMap-Store ist weg, an
-seiner Stelle stehen eigene Ressourcenarten mit `RetryOnConflict` — siehe
-[ADR 0001](0001-kubernetes-as-state-store.md). Was offen bleibt, ist die
-HTTP-Schicht und der Legacy-Broker dahinter.
+Der Zustandsspeicher ist von diesem Vorschlag **nicht** betroffen. Er liegt in
+eigenen Ressourcenarten mit `RetryOnConflict` und trägt
+([ADR 0001](0001-kubernetes-as-state-store.md)). Zur Disposition steht allein
+die HTTP-Schicht und der Fallback-Broker dahinter.
 
 ## Vorschlag
 
 **Die HTTP-Schicht ersetzen, die Engine behalten.** Konkret:
 
-- **Ein Pfad statt zwei.** Der Legacy-Broker und der Demo-Katalog entfallen
+- **Ein Pfad statt zwei.** Der Fallback-Broker und der Demo-Katalog entfallen
   ersatzlos. Ein Service, der keiner Definition entspricht, ist ein Fehler und
   keine stille Rückfallebene.
 - **Echtes Async** über einen persistierten Operations-Datensatz:
@@ -67,21 +63,20 @@ Alternative. Die offenen Befunde einzeln zu beheben, ist **innerhalb** der
 Doppelpfad-Struktur bereits ein Durchstich durch sechs Dateien — man zahlte fast
 den Preis des Umbaus und behielte die Struktur, die das Problem erzeugt.
 
-Die Gegenprobe zur Engine-Hälfte ist gelaufen: der RabbitMQ-Durchlauf brachte
-einen Operator mit anderer CRD-Gruppe, anderen Condition-Typen und anderem
-Credential-Layout — und brauchte **keine einzige** Änderung an
-`internal/definition`. Das war das offene Argument gegen eine Entscheidung auf
-Basis eines einzigen Services. Es ist ausgeräumt.
+Dass die Engine den Umbau trägt, ist belegt: zwei Operatoren mit
+unterschiedlichen CRD-Gruppen, Condition-Typen und Credential-Layouts laufen
+über sie, ohne dass `internal/definition` etwas je Service wüsste. Der Umbau
+fasst sie deshalb nicht an.
 
 ## Umfang
 
-Stand dieses Dokuments, 6.560 Zeilen Produktivcode:
+Von 6.560 Zeilen Produktivcode:
 
 | Teil | Zeilen | Urteil |
 |---|---|---|
 | `internal/definition` | 1.493 | behalten |
-| `internal/broker/crdstate.go` und Umfeld | ~700 | behalten, Phase 5 |
-| `internal/config`, `server`, `auth` | 1.011 | behalten, Phase 4.5 |
+| `internal/broker/crdstate.go` und Umfeld | ~700 | behalten |
+| `internal/config`, `server`, `auth` | 1.011 | behalten |
 | `internal/apis/v1alpha1` | 309 | behalten |
 | `cmd/osb-checker` | 658 | behalten |
 | Logging, Metriken, Docs-Endpunkte | ~290 | behalten |
@@ -96,9 +91,9 @@ Rund 1.100 Zeilen zu ersetzen, gut 4.400 bleiben.
 - Die Konformitätssuite prüft danach die Engine, weil es nur noch sie gibt.
   Zu erwarten ist, dass dabei weitere Abweichungen sichtbar werden, die heute
   hinter dem Demo-Service verborgen sind.
-- `internal/auth`, `internal/server` und `internal/config` sind bewusst
-  framework-unabhängig geschrieben und überleben den Wechsel unverändert. Das
-  war beim Bau von Phase 4.5 schon so gedacht.
+- `internal/auth`, `internal/server` und `internal/config` sprechen `net/http`
+  statt gin und überleben den Wechsel unverändert. Genau dafür sind sie so
+  geschnitten.
 - Der Umbau ist ein Bruch nach innen, nicht nach außen: die OSB-API bleibt, was
   sie ist — siehe [ADR 0006](0006-platform-independence.md).
 

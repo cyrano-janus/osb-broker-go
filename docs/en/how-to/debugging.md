@@ -28,8 +28,8 @@ verify the certificate verifies nothing at all.
 
 ## The state
 
-The broker creates one CR per record. That is the point compared to the earlier
-ConfigMap: the state is visible with `kubectl`.
+The broker creates one CR per record. The state is therefore visible with
+`kubectl`.
 
 ```bash
 kubectl get osbi,osbb -A                       # short names for instances and bindings
@@ -53,9 +53,8 @@ kubectl get secret <binding-object-name>-credentials -n osb-broker \
   -o jsonpath='{.data.credentials\.json}' | base64 -d | jq
 ```
 
-**A binding without a record is currently the normal case** when the service
-runs through a definition: the definition path does not persist bindings. `GET
-binding` then answers 404. See
+**For services that run through a definition there is no binding record**: the
+definition path does not persist bindings, and `GET binding` answers 404. See
 [reference/osb-api.md](../reference/osb-api.md).
 
 ## The objects in the cluster

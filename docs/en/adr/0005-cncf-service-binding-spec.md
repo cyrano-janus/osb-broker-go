@@ -6,16 +6,15 @@
 
 ## Context
 
-Until phase 6 the broker determined the name of the credential secret from a
-name template in the definition: `{{ .safeName }}-app` for CloudNativePG,
-`{{ .safeName }}-default-user` for RabbitMQ, and so on. That is guessed, not
-known — the broker reconstructs a naming scheme that every operator invents for
-itself and can change at any time.
+Deriving the credential secret's name from a name template — `{{ .safeName }}-app`
+for CloudNativePG, `{{ .safeName }}-default-user` for RabbitMQ — means guessing
+rather than knowing: the broker reconstructs a scheme that every operator
+invents for itself and can change at any time.
 
-Second, the broker passed through **all** keys of the secret. With the RabbitMQ
-operator that put `default_user.conf` — a configuration file — and
-`connection_string` into the binding. Neither belongs there, and the application
-has to guess which keys it may use.
+And a binding that passes through **all** keys of the secret contains whatever
+the operator happens to write into it. With the RabbitMQ operator that is
+`default_user.conf` — a configuration file — and `connection_string`. Neither
+belongs in a binding, and the application has to guess which keys it may use.
 
 ## Decision
 
@@ -31,10 +30,10 @@ reconstructing it.
 
 **The path is deliberately not configurable.** The comment in the code puts it
 briefly: were it configurable, it would be a convention again and not a
-standard. Falling back into an own convention was exactly the problem.
+standard.
 
 An empty or missing field falls back to `credentialsFromSecret` — for operator
-versions that do not implement the specification yet. A value that exists but is
+versions that do not implement the specification. A value that exists but is
 not a string, on the other hand, is a hard error and is not treated as "absent".
 
 ### 2. `mapping` defines the target shape, it does not extend it
@@ -85,14 +84,13 @@ requires a type on every binding secret.
   therefore off by default.
 - Two routes to the same goal remain side by side as long as operators do not
   implement the specification across the board.
-- A definition without `mapping` still behaves as before and passes everything
-  through. That is intentional, but it means the improvement has to be applied
-  per definition.
+- Without `mapping` a definition passes everything through. That is intentional,
+  but it means the target shape has to be set per definition.
 
 ## Rejected alternatives
 
 | Option | Why not |
 |---|---|
-| Keep maintaining an own convention | exactly the problem: it breaks with every new operator |
+| Keep maintaining an own convention | breaks with every new operator |
 | CEL expressions for the mapping | more powerful than templates, but a second expression language in the schema; the templates have sufficed so far |
 | Only `credentialKeys` as a filter | it filters but does not shape — a URI could not be composed with it |

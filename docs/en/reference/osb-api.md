@@ -15,10 +15,10 @@ All `/v2` routes sit behind authentication and the `X-Broker-API-Version` check.
 | Method and path | Behaviour |
 |---|---|
 | `GET /v2/catalog` | Union of the static demo catalogue and `engine.Catalog()` |
-| `PUT /v2/service_instances/:id` | Provision. Definition path or legacy path; `201`, `200` for a known instance |
+| `PUT /v2/service_instances/:id` | Provision. Definition path or fallback path; `201`, `200` for a known instance |
 | `PATCH /v2/service_instances/:id` | Plan change. Checks `allowedParameters`, re-renders, writes only on a real change; `200` |
-| `DELETE /v2/service_instances/:id` | Deprovision. `410` for an unknown instance, `409` when bindings exist (legacy path only) |
-| `GET /v2/service_instances/:id` | **Always** through the legacy path, i.e. through the state store |
+| `DELETE /v2/service_instances/:id` | Deprovision. `410` for an unknown instance, `409` when bindings exist (fallback path only) |
+| `GET /v2/service_instances/:id` | **Always** through the fallback path, i.e. through the state store |
 | `GET /v2/service_instances/:id/last_operation` | Definition path only with `?service_id=`, otherwise hardcoded `succeeded` |
 | `PUT …/service_bindings/:bid` | Bind; `201`, `200` for a known binding |
 | `DELETE …/service_bindings/:bid` | Unbind |
@@ -107,7 +107,7 @@ it.
 
 This has a second, more unpleasant effect: the project's own conformance suite
 `cmd/osb-checker` takes the **first** match from the catalogue in `pickService` —
-and that is always `service-1`. The suite therefore exercises the legacy path,
+and that is always `service-1`. The suite therefore exercises the fallback path,
 not the engine. This is why the missing binding persistence went unnoticed.
 
 ### `dashboard_url` is a constant

@@ -28,10 +28,10 @@ Wer sie kennt, spart sich das Rätselraten:
 | `internal/definition/catalog_test.go` | jede Datei in `definitions/` parst |
 | `internal/handlers/docs_sync_test.go` | `docs/openapi.yaml` und das Schema sind byte-identisch mit den eingebetteten Kopien |
 | `internal/apis/v1alpha1/crd_schema_test.go` | jedes Go-Feld der State-Typen steht im CRD-Manifest |
-| `internal/docs/sync_test.go` | `docs/de` und `docs/en` sind strukturgleich, keine toten Verweise |
+| `internal/docs/sync_test.go` | `docs/de` und `docs/en` sind strukturgleich, keine toten Verweise, und kein Dokument erzählt seinen eigenen Werdegang |
 
-Sie sind kein Schikane-Werk. Jeder von ihnen existiert, weil genau der Drift,
-den er verhindert, schon einmal passiert ist.
+Jeder von ihnen sichert eine Kopplung, die sich sonst unbemerkt löst — und die
+niemand beim Lesen nachprüft.
 
 **Wer `docs/openapi.yaml` oder das Schema ändert, muss die Kopie mitziehen** —
 kopieren, nicht eine der beiden Fassungen bearbeiten:
@@ -45,9 +45,8 @@ cp schemas/service-definition.schema.json internal/handlers/docs/service-definit
 
 - **Kommentare, Commit-Nachrichten und neue Testnamen: deutsch.**
 - **Bezeichner, Feldnamen, Fehlermeldungen der OSB-Ebene: englisch.**
-- Der ältere Bestand ist durchgängig englisch. Das wird **nicht** rückwirkend
-  umgestellt — ein solcher Commit macht jede `git blame` unbrauchbar und bringt
-  keinen Nutzen.
+- Der Bestand ist gemischt. Er wird **nicht** rückwirkend vereinheitlicht — ein
+  solcher Commit macht jede `git blame` unbrauchbar und bringt keinen Nutzen.
 - Die Dokumentation liegt zweisprachig vor. **Deutsch ist die führende
   Fassung**: zuerst dort schreiben, dann die englische nachziehen. Der
   Strukturwächter meldet, wenn eine Seite fehlt.

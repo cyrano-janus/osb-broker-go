@@ -18,6 +18,7 @@ Gliederung und keine toten Verweise haben.
 | Adding a service · Einen Service anbinden | [how-to/add-a-service](en/how-to/add-a-service.md) | [how-to/add-a-service](de/how-to/add-a-service.md) |
 | Developing locally · Lokal entwickeln | [how-to/local-development](en/how-to/local-development.md) | [how-to/local-development](de/how-to/local-development.md) |
 | Troubleshooting · Fehlersuche | [how-to/debugging](en/how-to/debugging.md) | [how-to/debugging](de/how-to/debugging.md) |
+| Korifi certificate trust · Korifi-Trust einrichten | [how-to/korifi-trust](en/how-to/korifi-trust.md) | [how-to/korifi-trust](de/how-to/korifi-trust.md) |
 | API scope and deviations · API-Umfang und Abweichungen | [reference/osb-api](en/reference/osb-api.md) | [reference/osb-api](de/reference/osb-api.md) |
 | Configuration · Konfiguration | [reference/configuration](en/reference/configuration.md) | [reference/configuration](de/reference/configuration.md) |
 | Known issues · Bekannte Probleme | [known-issues](en/known-issues.md) | [known-issues](de/known-issues.md) |
@@ -54,4 +55,3 @@ einkompiliert und ohne Authentifizierung abrufbar.
 | Why a line reads this way · Warum eine Zeile so lautet | comment on the line · Kommentar an der Zeile |
 | Measurement log with all findings · Messprotokoll mit allen Befunden | `korifi-platform/FINDINGS.md` |
 | Development platform · Entwicklungsplattform | `korifi-platform/README.md` |
-| Korifi-side trust setup · Korifi-seitige Trust-Einrichtung | [`tls-korifi.md`](tls-korifi.md) |

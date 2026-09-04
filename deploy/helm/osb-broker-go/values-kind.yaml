@@ -21,7 +21,7 @@ auth:
 # CA-ClusterIssuer existiert; dessen Root-CA muss in den Trust-Stores der
 # Korifi-Pods liegen, sonst lehnt Korifi den Broker beim Registrieren ab
 # (experimental.managedServices.trustInsecureBrokers steht per Default auf
-# false). Siehe docs/tls-korifi.md.
+# false). Siehe docs/de/how-to/korifi-trust.md.
 tls:
   enabled: true
   certManager:

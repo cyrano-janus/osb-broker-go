@@ -21,10 +21,10 @@ sondern in einer YAML-Datei — siehe
   │                                                          │
   │        resolveDefinition(service_id)                     │
   │             ├── trifft zu ──▶ Engine-Pfad                │
-  │             └── trifft nicht zu ──▶ Legacy-Pfad          │
+  │             └── trifft nicht zu ──▶ Fallback-Pfad        │
   ├──────────────────────┬──────────────────────────────────┤
   │ internal/definition  │ internal/broker                   │
-  │ DIE ENGINE           │ Legacy-Broker + StateStore        │
+  │ DIE ENGINE           │ Fallback-Broker + StateStore      │
   │ YAML ─▶ CR           │ internal/store: Demo-Katalog      │
   └──────────┬───────────┴───────────┬──────────────────────┘
              │                       │
@@ -53,26 +53,26 @@ func (h *Handlers) resolveDefinition(serviceID string) (*definition.ServiceDefin
 Liefert er eine Definition, läuft der Request durch die Engine. Liefert er
 `nil` — auch im Fehlerfall —, fällt er **stumm** auf einen zweiten, vollständig
 eigenen Broker in `internal/broker/broker.go` zurück. Beide Pfade existieren
-nebeneinander, jeder Handler verzweigt einzeln. Das ist die zentrale
-strukturelle Altlast des Repos; sie ist in
-[known-issues.md](known-issues.md) und in
-[ADR 0003](adr/0003-replace-http-layer.md) beschrieben.
+nebeneinander, jeder Handler verzweigt einzeln. Der Code nennt den zweiten Pfad
+`legacy path`; dieses Dokument nennt ihn nach seiner Funktion Fallback-Pfad.
+Was daran hängt, steht in [known-issues.md](known-issues.md) und in
+[ADR 0003](adr/0003-replace-http-layer.md).
 
 ## Pakete und Größen
 
-Stand dieses Dokuments: **6.560 Zeilen Produktivcode, 6.497 Zeilen Tests** —
-das Verhältnis ist ungefähr eins zu eins.
+**6.560 Zeilen Produktivcode, 6.497 Zeilen Tests** — das Verhältnis ist
+ungefähr eins zu eins.
 
 | Paket | Zeilen | Aufgabe |
 |---|---|---|
 | `internal/definition` | 1.493 | **die Engine**: ServiceDefinition laden, Template rendern, CRs anwenden, Readiness auswerten, Credentials formen |
-| `internal/broker` | 1.284 | Legacy-Broker (`broker.go`, 414) **und** der CRD-State-Store (`crdstate.go`, 486) |
+| `internal/broker` | 1.284 | Fallback-Broker (`broker.go`, 414) **und** der CRD-State-Store (`crdstate.go`, 486) |
 | `internal/handlers` | 1.253 | gin-Router, OSB-Endpunkte, Auth-Middleware, Logging, Metriken |
 | `internal/config` | 411 | Umgebungsvariablen zu einer validierten Struktur, Fail-Fast |
 | `internal/apis/v1alpha1` | 309 | Go-Typen der State-CRDs |
 | `internal/server` | 301 | `http.Server`, TLS, Zertifikats-Hot-Reload, Signalbehandlung |
 | `internal/auth` | 299 | Authenticator-Kette, unabhängig von gin |
-| `internal/migrate` | 208 | einmalige Übernahme aus der abgelösten State-ConfigMap |
+| `internal/migrate` | 208 | übernimmt Zustand aus einer ConfigMap im Format `state.json` |
 | `internal/store` | 131 | statischer Demo-Katalog |
 | `main.go` | 135 | Verdrahtung, sonst nichts |
 | `cmd/osb-checker` | 658 | Konformitätssuite, CI-Gate |
@@ -82,9 +82,9 @@ das Verhältnis ist ungefähr eins zu eins.
 
 ### `internal/server` — der Listener
 
-Ersetzt seit Phase 4.5 das frühere `router.Run(":"+port)`. Echter
-`http.Server` mit gesetzten Timeouts, Graceful Shutdown auf SIGTERM, und ein
-`CertReloader`, der Zertifikat, Schlüssel und Client-CA turnusmäßig neu liest.
+Ein `http.Server` mit gesetzten Timeouts, Graceful Shutdown auf SIGTERM und
+einem `CertReloader`, der Zertifikat, Schlüssel und Client-CA turnusmäßig neu
+liest.
 
 **Warum Polling und kein inotify:** Kubernetes blendet ein Secret über einen
 atomar getauschten `..data`-Symlink ein. Ein inotify-Watch auf dem Blattpfad
@@ -165,10 +165,10 @@ Grund, warum ein neuer Service ohne Code auskommt.
    Deprovision später weiß, was es zu löschen gibt.
 
 **Deprovision** arbeitet diese Buchführung in drei Stufen ab: erst die
-`AppliedRefs` (Multi-Doc, jede mit eigener Art), dann die älteren
-`AppliedObjects` (nur Namen, Art aus der Definition), zuletzt der Rückfall auf
-ein einzelnes CR unter `safeName`. Die Stufen existieren, weil ältere
-Datensätze die neueren Felder nicht haben.
+`AppliedRefs` (Multi-Doc, jede mit eigener Art), dann `AppliedObjects` (nur
+Namen, Art aus der Definition), zuletzt der Rückfall auf ein einzelnes CR unter
+`safeName`. Die Stufen fangen Datensätze ab, die nicht alle drei Felder
+tragen.
 
 **Update** rendert mit den Parametern des neuen Plans neu und vergleicht dann,
 bevor es schreibt. Der Grund steht im Code: auch ein Schreibvorgang, der nichts
@@ -187,12 +187,12 @@ nie durchgesetzt.
 Das Paket trägt zwei völlig verschiedene Aufgaben, und das ist der Kern der
 Verwirrung beim ersten Lesen:
 
-- **`crdstate.go` (486 Zeilen) ist der Zustandsspeicher** und aktuell. Je
+- **`crdstate.go` (486 Zeilen) ist der Zustandsspeicher.** Je
   Datensatz ein `OSBServiceInstance` beziehungsweise `OSBServiceBinding`,
   Schreibvorgänge mit `RetryOnConflict`, Credentials in einem eigenen Secret mit
   `OwnerReference`. Begründung in
   [ADR 0001](adr/0001-kubernetes-as-state-store.md).
-- **`broker.go` (414 Zeilen) ist der Legacy-Broker** — eine zweite, vollständige
+- **`broker.go` (414 Zeilen) ist der Fallback-Broker** — eine zweite, vollständige
   OSB-Implementierung mit eigenem Katalog aus `internal/store`. Sie bedient
   alles, was `resolveDefinition` nicht erkennt, und ihre Demo-Services
   `service-1` und `service-2` erscheinen in jedem Katalog.
@@ -205,25 +205,24 @@ den falschen Datensatz liefert.
 
 ## Wo die Grenze verläuft
 
-Die Empfehlung aus dem Architekturbefund lautet: **Engine behalten, HTTP-Schicht
-ersetzen.** Was seit ihrer Formulierung passiert ist, gehört dazu — die
-State-Hälfte der Empfehlung ist bereits umgesetzt:
+Der Vorschlag lautet: **Engine behalten, HTTP-Schicht ersetzen.** Die Grenze
+läuft zwischen den Schichten, nicht quer durch sie:
 
 | Teil | Zeilen | Urteil |
 |---|---|---|
 | `internal/definition` | 1.493 | trägt |
-| `internal/broker/crdstate.go` und Umfeld | ~700 | trägt, seit Phase 5 neu |
-| `internal/config`, `server`, `auth` | 1.011 | trägt, seit Phase 4.5 neu |
+| `internal/broker/crdstate.go` und Umfeld | ~700 | trägt |
+| `internal/config`, `server`, `auth` | 1.011 | trägt |
 | `internal/apis/v1alpha1` | 309 | trägt |
 | `cmd/osb-checker` | 658 | trägt |
 | Logging, Metriken, Docs-Endpunkte | ~290 | trägt, entkoppelte Querschnitte |
 | **Doppelpfad in den Handlern** | ~580 | zu ersetzen |
-| **`broker.go` (Legacy-Broker)** | 414 | zu ersetzen |
+| **`broker.go` (Fallback-Broker)** | 414 | zu ersetzen |
 | **`store.go` (Demo-Katalog)** | 131 | zu ersetzen |
 
-Der RabbitMQ-Durchlauf hat die Engine-Hälfte belegt: ein Operator mit anderer
-CRD-Gruppe, anderen Condition-Typen und anderem Credential-Layout brauchte
-**keine einzige** Änderung an `internal/definition`. Was fehlt, ist ein Pfad
-statt zwei, echtes Async über einen persistierten Operations-Datensatz und
-typisierte Fehler statt `strings.Contains`. Die Vorlage dazu ist
+Dass die Engine trägt, ist belegt: zwei Operatoren mit unterschiedlichen
+CRD-Gruppen, Condition-Typen und Credential-Layouts laufen über sie, ohne dass
+`internal/definition` etwas je Service wüsste. Zu ersetzen wären ein Pfad statt
+zwei, echtes Async über einen persistierten Operations-Datensatz und typisierte
+Fehler statt `strings.Contains`. Der Vorschlag dazu ist
 [ADR 0003](adr/0003-replace-http-layer.md), Status `vorgeschlagen`.

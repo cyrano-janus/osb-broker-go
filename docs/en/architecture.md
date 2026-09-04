@@ -20,10 +20,10 @@ YAML file — see [service-definitions.md](service-definitions.md).
   │                                                          │
   │        resolveDefinition(service_id)                     │
   │             ├── matches ──▶ engine path                  │
-  │             └── no match ──▶ legacy path                 │
+  │             └── no match ──▶ fallback path               │
   ├──────────────────────┬──────────────────────────────────┤
   │ internal/definition  │ internal/broker                   │
-  │ THE ENGINE           │ legacy broker + state store       │
+  │ THE ENGINE           │ fallback broker + state store     │
   │ YAML ─▶ CR           │ internal/store: demo catalogue    │
   └──────────┬───────────┴───────────┬──────────────────────┘
              │                       │
@@ -52,26 +52,25 @@ func (h *Handlers) resolveDefinition(serviceID string) (*definition.ServiceDefin
 If it returns a definition, the request goes through the engine. If it returns
 `nil` — including on error — the request falls back **silently** to a second,
 entirely separate broker in `internal/broker/broker.go`. Both paths exist side
-by side and every handler branches on its own. This is the central structural
-legacy of the repository; it is described in
-[known-issues.md](known-issues.md) and in
+by side and every handler branches on its own. The code calls the second one the
+`legacy path`; this document names it after its function, the fallback path.
+What hangs on it is in [known-issues.md](known-issues.md) and in
 [ADR 0003](adr/0003-replace-http-layer.md).
 
 ## Packages and sizes
 
-As of this document: **6,560 lines of production code, 6,497 lines of tests** —
-roughly one to one.
+**6,560 lines of production code, 6,497 lines of tests** — roughly one to one.
 
 | Package | Lines | Responsibility |
 |---|---|---|
 | `internal/definition` | 1,493 | **the engine**: load a ServiceDefinition, render the template, apply CRs, evaluate readiness, shape credentials |
-| `internal/broker` | 1,284 | the legacy broker (`broker.go`, 414) **and** the CRD state store (`crdstate.go`, 486) |
+| `internal/broker` | 1,284 | the fallback broker (`broker.go`, 414) **and** the CRD state store (`crdstate.go`, 486) |
 | `internal/handlers` | 1,253 | gin router, OSB endpoints, auth middleware, logging, metrics |
 | `internal/config` | 411 | environment variables into one validated struct, fail fast |
 | `internal/apis/v1alpha1` | 309 | Go types for the state CRDs |
 | `internal/server` | 301 | `http.Server`, TLS, certificate hot reload, signal handling |
 | `internal/auth` | 299 | authenticator chain, independent of gin |
-| `internal/migrate` | 208 | one-shot import from the retired state ConfigMap |
+| `internal/migrate` | 208 | imports state from a ConfigMap in the `state.json` format |
 | `internal/store` | 131 | static demo catalogue |
 | `main.go` | 135 | wiring, nothing else |
 | `cmd/osb-checker` | 658 | conformance suite, CI gate |
@@ -81,8 +80,7 @@ roughly one to one.
 
 ### `internal/server` — the listener
 
-Replaces the earlier `router.Run(":"+port)` since phase 4.5. A real
-`http.Server` with timeouts set, graceful shutdown on SIGTERM, and a
+An `http.Server` with timeouts set, graceful shutdown on SIGTERM, and a
 `CertReloader` that periodically re-reads certificate, key and client CA.
 
 **Why polling and not inotify:** Kubernetes projects a secret through an
@@ -161,10 +159,9 @@ reason lives that a new service needs no code.
    to know what to delete.
 
 **Deprovision** works through that bookkeeping in three tiers: first the
-`AppliedRefs` (multi-doc, each with its own kind), then the older
-`AppliedObjects` (names only, kind from the definition), finally the fallback to
-a single CR under `safeName`. The tiers exist because older records do not carry
-the newer fields.
+`AppliedRefs` (multi-doc, each with its own kind), then `AppliedObjects` (names
+only, kind from the definition), finally the fallback to a single CR under
+`safeName`. The tiers catch records that do not carry all three fields.
 
 **Update** re-renders with the new plan's parameters and then compares before
 writing. The reason is in the code: even a write that changes nothing bumps
@@ -182,11 +179,11 @@ just `status`, a leading dot is stripped, and a path that is not found means
 The package carries two entirely different responsibilities, and that is the
 core of the confusion on a first read:
 
-- **`crdstate.go` (486 lines) is the state store** and is current. One
+- **`crdstate.go` (486 lines) is the state store.** One
   `OSBServiceInstance` or `OSBServiceBinding` per record, writes via
   `RetryOnConflict`, credentials in a separate secret with an `OwnerReference`.
   Reasoning in [ADR 0001](adr/0001-kubernetes-as-state-store.md).
-- **`broker.go` (414 lines) is the legacy broker** — a second, complete OSB
+- **`broker.go` (414 lines) is the fallback broker** — a second, complete OSB
   implementation with its own catalogue from `internal/store`. It serves
   everything `resolveDefinition` does not recognise, and its demo services
   `service-1` and `service-2` appear in every catalogue.
@@ -199,25 +196,24 @@ cannot hand back the wrong record.
 
 ## Where the line runs
 
-The recommendation from the architecture review reads: **keep the engine,
-replace the HTTP layer.** What has happened since it was written belongs with
-it — the state half of the recommendation is already done:
+The proposal reads: **keep the engine, replace the HTTP layer.** The line runs
+between the layers, not across them:
 
 | Part | Lines | Verdict |
 |---|---|---|
 | `internal/definition` | 1,493 | carries |
-| `internal/broker/crdstate.go` and around it | ~700 | carries, new in phase 5 |
-| `internal/config`, `server`, `auth` | 1,011 | carries, new in phase 4.5 |
+| `internal/broker/crdstate.go` and around it | ~700 | carries |
+| `internal/config`, `server`, `auth` | 1,011 | carries |
 | `internal/apis/v1alpha1` | 309 | carries |
 | `cmd/osb-checker` | 658 | carries |
 | logging, metrics, docs endpoints | ~290 | carries, decoupled cross-cutting concerns |
 | **dual path in the handlers** | ~580 | to be replaced |
-| **`broker.go` (legacy broker)** | 414 | to be replaced |
+| **`broker.go` (fallback broker)** | 414 | to be replaced |
 | **`store.go` (demo catalogue)** | 131 | to be replaced |
 
-The RabbitMQ run proved the engine half: an operator with a different CRD group,
-different condition types and a different credential layout required **not a
-single** change to `internal/definition`. What is missing is one path instead of
-two, real async through a persisted operation record, and typed errors instead
-of `strings.Contains`. The proposal for that is
+That the engine carries is demonstrated: two operators with different CRD
+groups, condition types and credential layouts run through it without
+`internal/definition` knowing anything per service. What would be replaced is
+one path instead of two, real async through a persisted operation record, and
+typed errors instead of `strings.Contains`. The proposal for that is
 [ADR 0003](adr/0003-replace-http-layer.md), status *proposed*.

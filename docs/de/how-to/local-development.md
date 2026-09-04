@@ -44,7 +44,7 @@ go test ./internal/handlers/ -count=1
 go test ./internal/docs/            # der Waechter ueber diese Dokumentation
 ```
 
-## Die vier Wächter, die mitreden
+## Die Wächter, die mitreden
 
 Diese Tests scheitern bei Änderungen, die man nicht als Teständerung erkennt.
 Wer sie kennt, spart sich das Rätselraten:
@@ -55,7 +55,7 @@ Wer sie kennt, spart sich das Rätselraten:
 | `internal/definition/catalog_test.go` | jede Datei in `definitions/` parst, und drei benannte Definitionen sind vorhanden |
 | `internal/handlers/docs_sync_test.go` | `docs/openapi.yaml` und das Schema sind byte-identisch mit den eingebetteten Kopien unter `internal/handlers/docs/` |
 | `internal/apis/v1alpha1/crd_schema_test.go` | jedes Go-Feld der State-Typen steht im CRD-Manifest |
-| `internal/docs/sync_test.go` | `docs/de` und `docs/en` sind strukturgleich, keine toten Verweise |
+| `internal/docs/sync_test.go` | `docs/de` und `docs/en` sind strukturgleich, keine toten Verweise, und kein Dokument erzählt seinen eigenen Werdegang |
 
 **Wer `docs/openapi.yaml` ändert, muss die Kopie mitziehen** — kopieren, nicht
 eine der beiden bearbeiten:
@@ -144,13 +144,13 @@ Actions annotiert.
 
 **Ein Vorbehalt, der beim Lesen der Ergebnisse zählt:** die Suite wählt den
 ersten Service aus dem Katalog, und das ist immer der Demo-Service `service-1`
-aus `internal/store`. Sie prüft damit den Legacy-Pfad, nicht die Engine. Siehe
+aus `internal/store`. Sie prüft damit den Fallback-Pfad, nicht die Engine. Siehe
 [reference/osb-api.md](../reference/osb-api.md).
 
 ## Konventionen
 
 - **Sprache:** Kommentare, Commit-Nachrichten und neue Testnamen auf Deutsch.
-  Der ältere Bestand ist englisch; das wird nicht rückwirkend umgestellt.
+  Bezeichner und Feldnamen bleiben englisch.
 - **Begründungen gehören in die Datei, nicht in die Commit-Nachricht.** Jede
   nicht offensichtliche Zeile trägt ein *Warum* als Kommentar. Der Bestand macht
   das durchgängig — beim Lesen von `crdstate.go` oder `config.go` sieht man es.

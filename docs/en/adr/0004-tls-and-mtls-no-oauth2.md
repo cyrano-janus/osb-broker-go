@@ -7,12 +7,9 @@
 ## Context
 
 The broker reads production database credentials out of secrets and hands them
-to the platform. Until phase 4.5 it did so over **unencrypted HTTP** (`main.go`
-called `router.Run(":"+port)`), and the only authentication was HTTP basic auth.
-That was the most serious open weakness: anyone reading the traffic has the
-credentials of every instance.
-
-mTLS and OAuth2 had originally been parked as "optional".
+to the platform. Anyone reading the traffic therefore has the credentials of
+every instance. Unencrypted transport is not an option for this process, and
+basic auth alone is not accepted as proof everywhere.
 
 ## Decision
 
@@ -26,8 +23,8 @@ last hop to the broker would stay unencrypted, and the broker would depend on an
 environment that puts something in front of it. It is supposed to be operable
 without such preconditions.
 
-Instead of `router.Run` there is a real `http.Server` with timeouts set and
-graceful shutdown on SIGTERM.
+The process runs an `http.Server` with timeouts set and graceful shutdown on
+SIGTERM.
 
 ### Certificate rotation by polling, not by inotify
 

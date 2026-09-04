@@ -32,7 +32,7 @@ proven end to end:
 | Definition | State |
 |---|---|
 | `cnpg-postgresql` | verified end to end, the reference for the simple shape |
-| `rabbitmq-cluster` | verified end to end, the reference for everything phase 6 added |
+| `rabbitmq-cluster` | verified end to end, the reference for the complete shape |
 | `redis-standalone` | the secret is created by the operator's administrator, not by the operator |
 | `minio-objectstorage` | marked DEPRECATED |
 | `valkey-cluster` | the operator creates no credential secret |
@@ -260,7 +260,7 @@ Effect: `cf create-service cnpg-postgresql large mydb` creates a `Cluster` named
 ## Example 2: every feature
 
 `definitions/rabbitmq-cluster.yaml` differs only in the `bind` block, and that
-block shows everything phase 6 brought:
+block shows every feature the schema knows:
 
 ```yaml
   bind:

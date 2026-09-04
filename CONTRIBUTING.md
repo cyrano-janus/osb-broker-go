@@ -28,10 +28,10 @@ saves the guesswork:
 | `internal/definition/catalog_test.go` | every file under `definitions/` parses |
 | `internal/handlers/docs_sync_test.go` | `docs/openapi.yaml` and the schema are byte-identical to the embedded copies |
 | `internal/apis/v1alpha1/crd_schema_test.go` | every Go field of the state types appears in the CRD manifest |
-| `internal/docs/sync_test.go` | `docs/de` and `docs/en` are structurally identical, no dead links |
+| `internal/docs/sync_test.go` | `docs/de` and `docs/en` are structurally identical, no dead links, and no document narrates its own history |
 
-They are not busywork. Each of them exists because exactly the drift it prevents
-has happened before.
+Each of them secures a coupling that would otherwise come loose unnoticed — and
+that nobody verifies while reading.
 
 **Whoever changes `docs/openapi.yaml` or the schema has to carry the copy
 along** — copy it, do not edit one of the two:
@@ -45,8 +45,8 @@ cp schemas/service-definition.schema.json internal/handlers/docs/service-definit
 
 - **Comments, commit messages and new test names: German.**
 - **Identifiers, field names, OSB-level error messages: English.**
-- The older body of code is entirely English. It is **not** converted
-  retroactively — such a commit ruins every `git blame` and buys nothing.
+- The existing code is mixed. It is **not** unified retroactively — such a commit
+  ruins every `git blame` and buys nothing.
 - The documentation exists in both languages. **German is the leading version**:
   write there first, then bring the English one along. The structure guard
   reports when one side is missing.

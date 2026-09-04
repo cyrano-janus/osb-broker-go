@@ -31,7 +31,7 @@ durchgängig erprobt:
 | Definition | Zustand |
 |---|---|
 | `cnpg-postgresql` | Ende zu Ende verifiziert, die Referenz für die einfache Form |
-| `rabbitmq-cluster` | Ende zu Ende verifiziert, die Referenz für alle Merkmale aus Phase 6 |
+| `rabbitmq-cluster` | Ende zu Ende verifiziert, die Referenz für die vollständige Form |
 | `redis-standalone` | Secret wird vom Betreiber von Hand angelegt, nicht vom Operator |
 | `minio-objectstorage` | als DEPRECATED geführt |
 | `valkey-cluster` | Operator erzeugt kein Credential-Secret |
@@ -264,7 +264,7 @@ durch — bei CNPG sind das `username`, `password`, `host`, `port`, `dbname`,
 ## Beispiel 2: alle Merkmale
 
 `definitions/rabbitmq-cluster.yaml` unterscheidet sich nur im `bind`-Block, und
-der zeigt alles, was Phase 6 gebracht hat:
+der zeigt jedes Merkmal, das das Schema kennt:
 
 ```yaml
   bind:

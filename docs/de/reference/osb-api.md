@@ -16,10 +16,10 @@ Alle `/v2`-Routen liegen hinter der Authentifizierung und der
 | Methode und Pfad | Verhalten |
 |---|---|
 | `GET /v2/catalog` | Vereinigung aus dem statischen Demo-Katalog und `engine.Catalog()` |
-| `PUT /v2/service_instances/:id` | Provision. Definitions-Pfad oder Legacy-Pfad; `201`, bei bekannter Instanz `200` |
+| `PUT /v2/service_instances/:id` | Provision. Definitions-Pfad oder Fallback-Pfad; `201`, bei bekannter Instanz `200` |
 | `PATCH /v2/service_instances/:id` | Plan-Wechsel. Prüft `allowedParameters`, rendert neu, schreibt nur bei echter Änderung; `200` |
-| `DELETE /v2/service_instances/:id` | Deprovision. `410` bei unbekannter Instanz, `409` bei bestehenden Bindings (nur Legacy-Pfad) |
-| `GET /v2/service_instances/:id` | **Immer** über den Legacy-Pfad, also über den State Store |
+| `DELETE /v2/service_instances/:id` | Deprovision. `410` bei unbekannter Instanz, `409` bei bestehenden Bindings (nur Fallback-Pfad) |
+| `GET /v2/service_instances/:id` | **Immer** über den Fallback-Pfad, also über den State Store |
 | `GET /v2/service_instances/:id/last_operation` | Definitions-Pfad nur mit `?service_id=`, sonst hart `succeeded` |
 | `PUT …/service_bindings/:bid` | Bind; `201`, bei bekanntem Binding `200` |
 | `DELETE …/service_bindings/:bid` | Unbind |
@@ -109,7 +109,7 @@ dagegen gibt es nicht.
 
 Das hat einen zweiten, unangenehmeren Effekt: die eigene Konformitätssuite
 `cmd/osb-checker` nimmt in `pickService` den **ersten** Treffer aus dem Katalog —
-und das ist immer `service-1`. Die Suite prüft damit den Legacy-Pfad, nicht die
+und das ist immer `service-1`. Die Suite prüft damit den Fallback-Pfad, nicht die
 Engine. Deshalb ist die fehlende Binding-Persistenz nie aufgefallen.
 
 ### `dashboard_url` ist eine Konstante

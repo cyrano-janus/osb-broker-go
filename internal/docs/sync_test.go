@@ -256,3 +256,71 @@ func TestDocsSync_JedesDokumentVerweistAufDieGegensprache(t *testing.T) {
 		}
 	}
 }
+
+// Die Dokumentation soll wie eine einmal getroffene Festlegung lesen, nicht wie
+// das Protokoll ihrer Entstehung. Ein neuer Leser muss sonst erst lernen, zu
+// unterscheiden, was gilt und was einmal galt - und genau das ist die Arbeit,
+// die ihm die Doku abnehmen soll. Die Historie steht vollstaendig in `git log`
+// und in korifi-platform/FINDINGS.md.
+//
+// Diese Liste verbietet die Wendungen, mit denen sich Chronologie
+// einschleicht. Sie ist bewusst eng: nur Formulierungen, die ohne Ausnahme
+// einen zeitlichen Verlauf erzaehlen. Ein Argument geht dabei nie verloren -
+// aus "erst A, dann B" wird "B, weil A diese Probleme haette".
+var werdegangsWendungen = []string{
+	// Phasenarchaeologie
+	"seit Phase", "bis Phase", "vor Phase", "ab Phase", "in Phase",
+	"Phase 4.5", "Phase 5", "Phase 6",
+	"since phase", "until phase", "from phase", "in phase", "pre-phase",
+	"phase 4.5", "phase 5", "phase 6",
+	// Versionserzaehlung
+	"v1:", "v2:", "Status quo v1", "v1 status quo",
+	"erste Fassung des Projekts", "first version of the project",
+	// Etappen
+	"in zwei Stufen", "in two stages",
+	"Was sich seit", "What has changed since",
+	"Die urspruengliche Empfehlung", "Die ursprüngliche Empfehlung",
+	"The original recommendation",
+	// Zeitmarker ohne Informationswert
+	"ursprünglich", "urspruenglich", "originally",
+	"zunächst", "zunaechst", "initially",
+	"früher", "frueher", "the earlier", "used to",
+	"wie vorher", "as before",
+	// Meta-Verweise auf die Doku selbst
+	"Stand dieses Dokuments", "As of this document",
+	"Dokumentationsstand", "documentation pass",
+	// Verdikte ueber die Vergangenheit
+	"Altlast",
+}
+
+func TestDocsSync_KeineWerdegangsSprache(t *testing.T) {
+	var files []string
+	for _, name := range []string{"README.md", "README.de.md", "CONTRIBUTING.md", "CONTRIBUTING.de.md"} {
+		if _, err := os.Stat(filepath.Join(repoRoot, name)); err == nil {
+			files = append(files, name)
+		}
+	}
+	for _, tree := range []string{deDir, enDir} {
+		if _, err := os.Stat(filepath.Join(repoRoot, tree)); err != nil {
+			continue
+		}
+		for _, rel := range markdownFiles(t, tree) {
+			files = append(files, filepath.Join(tree, rel))
+		}
+	}
+
+	for _, f := range files {
+		// Code-Bloecke und Inline-Code sind ausgenommen: dort steht, was im
+		// Repo wirklich so heisst, nicht die Erzaehlung darueber.
+		lines := strings.Split(stripCode(read(t, f)), "\n")
+		for i, line := range lines {
+			for _, phrase := range werdegangsWendungen {
+				if strings.Contains(line, phrase) {
+					assert.Fail(t, "Werdegang statt Festlegung",
+						"%s:%d enthaelt %q\n  %s\n  Umformen: nicht erzaehlen, wie es dazu kam, sondern was gilt und warum.",
+						f, i+1, phrase, strings.TrimSpace(line))
+				}
+			}
+		}
+	}
+}

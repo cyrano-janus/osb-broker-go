@@ -6,22 +6,17 @@
 
 ## Context
 
-The first version of the project had one broker **per service type**: a
-repository for PostgreSQL, one for Redis, and so on. Each of them was 90 per
-cent the same code — OSB endpoints, state handling, authentication — and 10 per
-cent operator-specific.
+One broker **per service type** — one for PostgreSQL, one for Redis, and so on —
+is around 90 per cent the same code: OSB endpoints, state handling,
+authentication. The remaining ten per cent are operator-specific.
 
 That does not scale. With N services you get N codebases, N deployments, N
 security updates and N places where an OSB subtlety can be implemented wrongly.
 
 ## Decision
 
-**One broker engine, N YAML definitions.**
-
-```
-v1:  one broker per service type          →  N codebases, N deployments
-v2:  one engine + N ServiceDefinitions    →  1 codebase, configuration instead of code
-```
+**One broker engine, N YAML definitions — one codebase, configuration instead
+of code.**
 
 A service is described entirely by a ServiceDefinition: the catalogue offering
 with its plans, the template for the Kubernetes objects to create, the criterion
@@ -51,10 +46,9 @@ follows the three-part pattern, with just YAML".
 
 - A new service is a file, not a deployment.
 - A mistake in the OSB implementation is fixed once and takes effect everywhere.
-- The RabbitMQ run proved the genericity: an operator with a different CRD
-  group, different condition types and a different credential layout required
-  **not a single** change to `internal/definition`. That was the open objection
-  against deciding on the evidence of one service, and it has been answered.
+- The genericity is demonstrated: two operators with different CRD groups,
+  condition types and credential layouts run through the same engine, without
+  `internal/definition` knowing anything about either of them.
 
 **Price:**
 
@@ -67,13 +61,13 @@ follows the three-part pattern, with just YAML".
   deprovision — all of that exists only because no service-specific code is
   allowed to absorb the special cases.
 - **Dependence on conventions.** Where an operator puts its credential secret
-  was initially guessed. The answer to that is
+  can only be guessed from a naming scheme. The answer to that is
   [ADR 0005](0005-cncf-service-binding-spec.md).
 
 ## Rejected alternatives
 
 | Option | Why not |
 |---|---|
-| One broker per service (the v1 status quo) | N codebases, see context |
+| One broker per service type | N codebases, see context |
 | A Go plugin interface | code per service again, only with more ceremony |
 | Crossplane compositions as the substrate | solves a similar problem, but would add a second large dependency and a second templating language |

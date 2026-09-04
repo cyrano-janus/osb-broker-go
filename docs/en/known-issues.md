@@ -75,7 +75,7 @@ the points above. *FINDINGS #13.*
 **The project's own conformance suite tests the wrong path.** `pickService` in
 `cmd/osb-checker/checks/checks.go` takes the first service from the catalogue,
 and that is always the demo service `service-1`. The suite therefore measures
-the legacy path, not the engine — which is why the missing binding persistence
+the fallback path, not the engine — which is why the missing binding persistence
 went unnoticed. *FINDINGS #20.*
 
 **The HTTP status is guessed from error text.**
@@ -83,10 +83,9 @@ went unnoticed. *FINDINGS #20.*
 with "not found" in its text becomes `410`, including "service not found".
 *FINDINGS #18.*
 
-**What follows from this:** the recommendation to replace the HTTP layer and
-keep the engine is recorded as
-[ADR 0003](adr/0003-replace-http-layer.md) with status *proposed*. The state
-half of the same recommendation was already carried out in phase 5.
+**What follows from this:** the proposal to replace the HTTP layer and keep the
+engine is recorded as [ADR 0003](adr/0003-replace-http-layer.md) with status
+*proposed*. The state store is not affected by it.
 
 ## Definitions and deployment
 
@@ -95,9 +94,9 @@ half of the same recommendation was already carried out in phase 5.
 publishes `AllReplicasReady` and `ClusterAvailable`. *FINDINGS #22.*
 
 **`values-kind.yaml` has drifted away from `definitions/`.** The file duplicates
-all definitions as embedded YAML strings. The embedded RabbitMQ definition has
-**none** of the phase 6 features — no `provisionedService`, no `mapping`, no
-`type` — so deploying with it would silently fall back to pre-phase-6 behaviour.
+all definitions as embedded YAML strings. The embedded RabbitMQ definition is
+missing `provisionedService`, `mapping` and `type` — deploying with it silently
+yields unshaped bindings.
 On top of that three keys appear twice (`cnpg-postgresql.yaml`,
 `minio-objectstorage.yaml`, `redis-standalone.yaml`), and the Valkey definition
 names a different CRD group than the file under `definitions/`. **Nothing tests
@@ -114,9 +113,8 @@ services would get a 403 on provision.
 **`config.logRequests` is read by no template** and has no corresponding
 environment variable.
 
-**Four different image versions in the repository.** `deploy/k8s/broker.yaml`
-says `v14`, `Chart.yaml` has `appVersion: v9`, `values-kind.yaml` pins `v9`. The
-README said `v4` until this documentation pass.
+**The image version is pinned inconsistently.** `deploy/k8s/broker.yaml` says
+`v14`, `Chart.yaml` has `appVersion: v9`, `values-kind.yaml` pins `v9`.
 
 **The module path is a placeholder.** `go.mod` says
 `github.com/example/osb-broker`, while `schemas/service-definition.schema.json`
@@ -139,14 +137,6 @@ None of it does harm, all of it costs reading time:
 | `internal/definition/engine.go`, `internal/handlers/*` | `var _ = …` as import keepers |
 | `internal/handlers/engine.go` | `NewEngineHolder` takes a namespace and does not use it |
 | `.github/workflows/ci.yml` | `actions/setup-go` appears twice in the `conformance` job |
-
-## Bilingual code
-
-The existing code is mixed: everything before phase 4.5 is English, everything
-from phase 4.5 on is German — down to test names and error messages. Some German
-comments transliterate umlauts as `ae`, `oe`, `ue`, others do not. This will not
-be unified retroactively; for new code the convention in
-[CONTRIBUTING.md](../../CONTRIBUTING.md) applies.
 
 ## The development platform
 
@@ -174,7 +164,7 @@ visible or cheaper.
 2. **The RabbitMQ condition** — the async fix is what makes it visible, because
    today nobody waits for readiness. It belongs in the same round.
 3. **Dual path and conformance suite** — as long as the suite exercises the
-   legacy path, all further work is measured against nothing.
+   fallback path, all further work is measured against nothing.
 4. **Binding persistence** — structurally attached to the dual path and falls
    with it.
 5. **User parameters and `allowedParameters`** — together, because both concern

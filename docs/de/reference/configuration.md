@@ -3,13 +3,13 @@
 > [English](../../en/reference/configuration.md) · Führende Fassung: deutsch
 
 Der Broker liest seine Konfiguration ausschließlich aus Umgebungsvariablen.
-`internal/config` wandelt sie in **eine** validierte Struktur um und bricht beim
-Start ab, wenn etwas nicht stimmt. Das ist der Ersatz für das frühere, über den
-Code verstreute `os.Getenv`.
+`internal/config` liest sie an einer Stelle, wandelt sie in **eine** validierte
+Struktur um und bricht beim Start ab, wenn etwas nicht stimmt.
 
-**Fail-Fast statt stiller Rückfall.** Ein unbekannter Wert in `STORE_BACKEND` war
-früher ein Tippfehler, der still auf den In-Memory-Speicher zurückfiel — der
-Broker lief, verlor aber jeden Zustand beim Neustart. Heute startet er nicht.
+**Fail-Fast statt stiller Rückfall.** Ein unbekannter Wert in `STORE_BACKEND`
+ist ein Startfehler. Ein stiller Rückfall auf den In-Memory-Speicher wäre die
+gefährlichere Antwort: der Broker liefe und verlöre jeden Zustand beim
+Neustart.
 
 ## Umgebungsvariablen
 
@@ -20,8 +20,8 @@ Broker lief, verlor aber jeden Zustand beim Neustart. Heute startet er nicht.
 | `PORT` | `8080` | Lauschport. Mit TLS setzt das Chart `8443`. |
 | `STORE_BACKEND` | `memory` | `crd` oder `memory`. `k8s` ist ein Alias für `crd` und erzeugt eine Warnung. Alles andere ist ein **Startfehler**. |
 | `POD_NAMESPACE` | leer | Namespace, in dem die State-CRs liegen. Bei `STORE_BACKEND=crd` Pflicht; das Chart füllt sie per `fieldRef`. |
-| `DEFINITIONS_DIR` | leer | Verzeichnis mit den ServiceDefinitions. Leer heißt: keine Definitionen, nur der Legacy-Katalog. |
-| `METRICS_ENABLED` | an | **Nur der exakte Wert `0` schaltet ab.** Kein `ParseBool` — `false` ließ die Metriken vor Einführung dieses Pakets an und muss das weiter tun. |
+| `DEFINITIONS_DIR` | leer | Verzeichnis mit den ServiceDefinitions. Leer heißt: keine Definitionen, nur der Demo-Katalog. |
+| `METRICS_ENABLED` | an | **Nur der exakte Wert `0` schaltet ab.** Kein `ParseBool`: `false` lässt die Metriken an. |
 
 ### Authentifizierung
 
@@ -148,9 +148,9 @@ beim `helm upgrade` nie. Begründung in
 | `values-kind.yaml` | lokale Entwicklung; enthält die Definitionen eingebettet |
 | `values-ci.yaml` | das TLS/mTLS-Gate der CI |
 
-**`values-kind.yaml` ist von `definitions/` abgedriftet.** Die dort eingebettete
-RabbitMQ-Definition hat keines der Merkmale aus Phase 6, und drei Schlüssel
-kommen doppelt vor. Nichts prüft diese Datei. Siehe
+**`values-kind.yaml` ist von `definitions/` abgedriftet.** Der dort eingebetteten
+RabbitMQ-Definition fehlen `provisionedService`, `mapping` und `type`, und drei
+Schlüssel kommen doppelt vor. Nichts prüft diese Datei. Siehe
 [known-issues.md](../known-issues.md).
 
 ## Nicht konfigurierbar

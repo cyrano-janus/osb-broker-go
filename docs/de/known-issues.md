@@ -80,7 +80,7 @@ der obigen Punkte. *FINDINGS #13.*
 **Die eigene Konformitätssuite prüft den falschen Pfad.** `pickService` in
 `cmd/osb-checker/checks/checks.go` nimmt den ersten Service aus dem Katalog, und
 das ist immer der Demo-Service `service-1`. Die Suite misst damit den
-Legacy-Pfad, nicht die Engine — deshalb ist die fehlende Binding-Persistenz nie
+Fallback-Pfad, nicht die Engine — deshalb ist die fehlende Binding-Persistenz nie
 aufgefallen. *FINDINGS #20.*
 
 **Der HTTP-Status wird aus Fehlertexten geraten.**
@@ -88,10 +88,9 @@ aufgefallen. *FINDINGS #20.*
 DELETE-Fehler mit „not found" im Text wird `410`, auch „service not found".
 *FINDINGS #18.*
 
-**Was daraus folgt:** die Empfehlung, die HTTP-Schicht zu ersetzen und die
-Engine zu behalten, steht als [ADR 0003](adr/0003-replace-http-layer.md)
-im Status *vorgeschlagen*. Die State-Hälfte derselben Empfehlung ist in Phase 5
-bereits umgesetzt.
+**Was daraus folgt:** der Vorschlag, die HTTP-Schicht zu ersetzen und die
+Engine zu behalten, steht als [ADR 0003](adr/0003-replace-http-layer.md) im
+Status *vorgeschlagen*. Der Zustandsspeicher ist davon nicht betroffen.
 
 ## Definitionen und Deployment
 
@@ -101,9 +100,8 @@ veröffentlicht `AllReplicasReady` und `ClusterAvailable`. *FINDINGS #22.*
 
 **`values-kind.yaml` ist von `definitions/` abgedriftet.** Die Datei dupliziert
 alle Definitionen als eingebettete YAML-Strings. Die eingebettete
-RabbitMQ-Definition hat **keines** der Merkmale aus Phase 6 — kein
-`provisionedService`, kein `mapping`, kein `type` —, ein Deployment damit fiele
-stillschweigend auf das Verhalten vor Phase 6 zurück. Außerdem kommen drei
+RabbitMQ-Definition fehlen `provisionedService`, `mapping` und `type` — ein
+Deployment damit liefert stillschweigend ungeformte Bindings. Außerdem kommen drei
 Schlüssel doppelt vor (`cnpg-postgresql.yaml`, `minio-objectstorage.yaml`,
 `redis-standalone.yaml`), und die Valkey-Definition nennt eine andere CRD-Gruppe
 als die Datei unter `definitions/`. **Nichts prüft diese Datei.**
@@ -120,9 +118,8 @@ Beabsichtigt, aber unerwartet.
 **`config.logRequests` wird von keinem Template gelesen** und hat keine
 entsprechende Umgebungsvariable.
 
-**Vier verschiedene Image-Versionen im Repo.** `deploy/k8s/broker.yaml` nennt
-`v14`, `Chart.yaml` hat `appVersion: v9`, `values-kind.yaml` pinnt `v9`. Die
-README nannte bis zu diesem Dokumentationsstand `v4`.
+**Die Image-Version ist uneinheitlich gepinnt.** `deploy/k8s/broker.yaml` nennt
+`v14`, `Chart.yaml` hat `appVersion: v9`, `values-kind.yaml` pinnt `v9`.
 
 **Der Modulpfad ist ein Platzhalter.** `go.mod` sagt
 `github.com/example/osb-broker`, während `schemas/service-definition.schema.json`
@@ -145,14 +142,6 @@ Nichts davon schadet, alles davon kostet Lesezeit:
 | `internal/definition/engine.go`, `internal/handlers/*` | `var _ = …` als Import-Halter |
 | `internal/handlers/engine.go` | `NewEngineHolder` nimmt einen Namespace entgegen und verwendet ihn nicht |
 | `.github/workflows/ci.yml` | `actions/setup-go` steht im Job `conformance` doppelt |
-
-## Zweisprachiger Code
-
-Der Bestand ist gemischt: alles vor Phase 4.5 ist englisch, alles ab Phase 4.5
-deutsch — bis in Testnamen und Fehlermeldungen hinein. Ein Teil der deutschen
-Kommentare umschreibt Umlaute als `ae`, `oe`, `ue`, ein anderer nicht. Das wird
-nicht rückwirkend vereinheitlicht; für neuen Code gilt die Konvention aus
-[CONTRIBUTING.de.md](../../CONTRIBUTING.de.md).
 
 ## Die Entwicklungsplattform
 
@@ -179,7 +168,7 @@ nächsten sichtbar oder billiger.
    Punkt, und der einzige, der eine Zielplattform sofort blockiert.
 2. **Die RabbitMQ-Condition** — sie wird durch den Async-Fix erst sichtbar, weil
    heute niemand auf Readiness wartet. Gehört in dieselbe Runde.
-3. **Doppelpfad und Konformitätssuite** — solange die Suite den Legacy-Pfad
+3. **Doppelpfad und Konformitätssuite** — solange die Suite den Fallback-Pfad
    prüft, misst jede weitere Arbeit ins Leere.
 4. **Binding-Persistenz** — hängt strukturell am Doppelpfad und fällt mit ihm.
 5. **Benutzerparameter und `allowedParameters`** — zusammen, weil beide denselben

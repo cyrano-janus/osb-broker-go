@@ -19,18 +19,16 @@ service, no external database.
 | **Target platform** | external marketplaces with an OSB integration |
 | **Development platform** | Korifi on kind — a test rig, not a target system |
 
-This is at the top because it determines how everything below should be read:
-all evidence in this document was recorded against the **development
-platform**. Several known deviations from OSB 2.17 are harmless there and are
-blockers on a target system. What that means in detail is in
+The broker is verified against Korifi v0.18.0 on kind, that is, against the
+development platform; against production Cloud Foundry, TAS or an external
+marketplace there is no run. Several known deviations from OSB 2.17 are harmless
+on the development platform and are blockers on a target system. The evidence in
+detail, and what follows from it:
 [docs/en/target-platforms.md](docs/en/target-platforms.md).
 
 ## The approach
 
-```
-v1:  one broker per service type            →  N codebases, N deployments
-v2:  one engine + N ServiceDefinitions      →  1 codebase, configuration instead of code
-```
+One engine, N ServiceDefinitions: one codebase, configuration instead of code.
 
 ```
   Cloud Foundry / TAS / OSB client
@@ -85,55 +83,6 @@ kubectl apply -f deploy/crds/
 
 In detail in
 [docs/en/how-to/local-development.md](docs/en/how-to/local-development.md).
-
-## State of verification
-
-**All of the evidence below was recorded against Korifi v0.18.0 on kind**, that
-is, against the development platform. It shows that the described flow really
-ran there — not that it runs on a target platform. Against production Cloud
-Foundry, TAS or an external marketplace there has been **no** run so far.
-
-### Lifecycle (2026-08-24)
-
-| Evidence | Result |
-|---|---|
-| OSB 2.17 lifecycle over HTTP | integration test covers catalog → provision → last_operation → bind → unbind → deprovision |
-| Live against Korifi on kind | registration, marketplace, `cf create-service` |
-| Generic engine end to end | `cf create-service cnpg-postgresql large my-real-pg` created a real CloudNativePG cluster (3 instances, 10Gi); `psql` in the pod answered, credentials from the operator secret |
-| Restart persistence | instances and bindings survive kill and rescheduling |
-
-### Service Binding Specification (2026-09-02)
-
-Against the real RabbitMQ cluster operator, whose CRD documents the provisioned
-service duck type:
-
-| Evidence | Result |
-|---|---|
-| Secret name from `status.binding.name` | the operator reported `osb-<id>-default-user` and the broker used it without a name template |
-| Target shape via `mapping` | the binding contains exactly `host, password, port, provider, type, uri, username` — `default_user.conf` and `connection_string` stay out |
-| Spec-conformant secret | type `servicebinding.io/rabbitmq`, labels for instance and binding, `OwnerReference` on the `RabbitmqCluster` |
-| Cleanup on unbind | `cf delete-service-key` removes the projected secret |
-
-### State store (2026-09-02)
-
-| Evidence | Result |
-|---|---|
-| Conformance against the CRD store | 24 of 24 in the kind cluster against real RBAC, deployed through the Helm chart |
-| Visibility | `kubectl get osbi` and `osbb` show instance and binding with service, plan and ready |
-| Credentials separated | not in the binding CR but in a secret with an `OwnerReference` on it |
-| Restart persistence | instance, binding and credentials survive deleting the pod |
-| Context complete | `platform`, `spaceGuid` and `organizationGuid` are mapped |
-
-### TLS and mTLS (2026-09-02)
-
-| Evidence | Result |
-|---|---|
-| Conformance over HTTPS with a client certificate | 24 of 24 — and 24 of 24 with the client certificate alone, without basic auth |
-| Certificate rotation without a restart | TLS secret swapped in the running pod: the served serial number changes, `restartCount` stays 0 |
-| Registration over `https://` | `CFServiceBroker` becomes ready with `trustInsecureServiceBrokers=false` — the platform verified the certificate |
-| Full lifecycle over HTTPS | `cf create-service` through `cf delete-service` including real credentials |
-| mTLS authorization | a client certificate signed by the same CA but not on the allowlist gets a 401 |
-| Probes stay open | `/healthz` reachable without a client certificate |
 
 ## Documentation
 

@@ -18,34 +18,27 @@ Lebenszyklus — für ein Gedächtnis, das aus wenigen Kilobyte je Instanz beste
 
 ## Entscheidung
 
-**Der Zustand liegt in Kubernetes-Objekten, nicht in einer Datenbank.**
+**Der Zustand liegt in Kubernetes-Objekten, nicht in einer Datenbank — und zwar
+je Datensatz in einem eigenen Objekt.**
 
-Umgesetzt wurde das in zwei Stufen:
+Die Ressourcenarten sind `OSBServiceInstance` und `OSBServiceBinding`, Gruppe
+`broker.osb.io`, Version `v1alpha1`. Ein Provision legt ein Objekt an, ein
+Deprovision entfernt es; kein Aufruf fasst den Zustand anderer Instanzen an.
 
-1. **Zuerst als ConfigMap.** Ein einzelnes Objekt, das den gesamten Zustand als
-   JSON trug. Einfach und für einen Beweis ausreichend.
-2. **Seit Phase 5 als eigene Ressourcenarten** — je Datensatz ein
-   `OSBServiceInstance` beziehungsweise ein `OSBServiceBinding`, Gruppe
-   `broker.osb.io`, Version `v1alpha1`.
+Vier Anforderungen ergeben sich daraus und sind der Grund für den Zuschnitt:
 
-Die zweite Stufe war kein Geschmacksurteil. Die ConfigMap hatte drei konkrete
-Mängel:
-
-- **Das 1-MiB-Limit** von ConfigMaps reicht für etwa 514 Instanzen. Danach
-  scheitert jeder weitere Schreibvorgang, und zwar der *gesamte* Zustand auf
-  einmal.
-- **Jeder Aufruf schrieb den kompletten Zustand neu.** Das skaliert nicht mit
-  der Zahl der Instanzen, sondern gegen sie.
-- **Schreibvorgänge gingen still verloren.** Es gab keinen Mutex, und `save`
-  las die `resourceVersion` frisch, statt sie aus dem `load` zu übernehmen. Zwei
-  überlappende Provisions überschrieben sich konfliktfrei. In der CI fiel das
-  nie auf, weil dort `STORE_BACKEND=memory` gesetzt war — der ConfigMap-Store
-  wurde dort **nie** ausgeführt.
-
-Zusätzlich verlangte die ConfigMap eine RBAC-Regel, die Kubernetes so nicht
-gewährt: `create` lässt sich nicht über `resourceNames` einschränken, weil beim
-Anlegen der Objektname im Request-Body steht und zum Autorisierungszeitpunkt
-noch kein Name existiert, gegen den geprüft werden könnte.
+- **Kein Größenlimit.** Der Zustand wächst mit der Zahl der Instanzen, nicht
+  gegen eine feste Obergrenze.
+- **Kein Schreiben des Gesamtzustands je Aufruf.** Ein Provision schreibt genau
+  ein Objekt.
+- **Konfliktbehandlung statt stillem Überschreiben.** Schreibvorgänge laufen
+  über `RetryOnConflict` und ersetzen nur `.Spec`; `resourceVersion` und fremde
+  Annotationen bleiben stehen.
+- **RBAC, das `create` überhaupt gewähren kann.** Rechte gelten je
+  Ressourcenart, nicht je Objektname — `create` lässt sich in Kubernetes nicht
+  über `resourceNames` einschränken, weil beim Anlegen der Objektname im
+  Request-Body steht und zum Autorisierungszeitpunkt kein Name existiert, gegen
+  den geprüft werden könnte.
 
 ## Detailentscheidungen
 
@@ -78,28 +71,35 @@ mit `kubectl apply -f deploy/crds/` installiert.
 
 **Gut:**
 
-- Kein Größenlimit mehr, kein Schreiben des Gesamtzustands je Aufruf.
-- Schreibkonflikte werden über `RetryOnConflict` sauber aufgelöst.
 - Der Zustand ist mit `kubectl get osbi,osbb` sichtbar — ein Betriebsvorteil,
   den keine Datenbank bietet.
 - Granulares RBAC je Ressourcenart statt einer Regel auf ein einzelnes Objekt.
+- Ein defekter Datensatz betrifft einen Datensatz, nicht den ganzen Bestand.
 
 **Preis:**
 
 - Zwei CRDs müssen vor dem ersten Start installiert sein, sonst scheitert jedes
   Provision.
-- Der Umstieg brauchte ein Migrationswerkzeug (`cmd/osb-state-migrate`), und das
-  musste die alten Strukturen **neu deklarieren**: die früheren Typen hatten
-  keine JSON-Tags, während der eingebettete Context welche hatte. Mit den
-  heutigen Typen gelesen käme lautlos ein leerer Datensatz heraus.
-- Der In-Memory-Speicher bleibt als zweite Implementierung bestehen. Beide
-  müssen dieselbe Vertragssuite bestehen
+- Es gibt zwei Implementierungen der Schnittstelle — die CRD-gestützte und die
+  im Speicher für Tests. Beide müssen dieselbe Vertragssuite bestehen
   (`internal/broker/statestore_contract_test.go`).
+- Zustand in einem anderen Format lässt sich nicht einfach einlesen; dafür gibt
+  es `cmd/osb-state-migrate`.
 
 ## Verworfene Alternativen
 
+**Ein einzelnes geteiltes Objekt für den gesamten Zustand** — eine ConfigMap mit
+JSON — ist der naheliegendste Weg und scheitert an vier Stellen zugleich: das
+1-MiB-Limit reicht für rund 514 Instanzen und lässt danach *jeden* Schreibvorgang
+scheitern; jeder Aufruf schreibt den Gesamtzustand neu und skaliert damit gegen
+die Zahl der Instanzen; zwei überlappende Provisions überschreiben sich
+konfliktfrei, sobald zwischen Lesen und Schreiben die `resourceVersion` neu
+geholt wird; und `create` lässt sich per RBAC nicht auf einen Objektnamen
+einschränken, das Recht gilt also ohnehin für die ganze Ressourcenart.
+
 | Option | Warum nicht |
 |---|---|
+| Eine ConfigMap für den gesamten Zustand | Größenlimit, Schreiben des Gesamtzustands je Aufruf, keine brauchbare Konfliktbehandlung, kein sinnvolles RBAC |
 | Externe Datenbank (PostgreSQL, MySQL) | widerspricht dem Ziel „kein externer Store"; zweiter Betriebsgegenstand |
 | SQLite auf einem PVC | kein Server nötig, aber eine Storage-Abhängigkeit und kein `kubectl`-Einblick |
 | Viele kleine ConfigMaps oder Secrets | löst das Größenlimit, aber ohne Query-Ebene und ohne Ressourcenart-RBAC |

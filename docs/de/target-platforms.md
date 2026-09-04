@@ -2,7 +2,7 @@
 
 > [English](../en/target-platforms.md) · Führende Fassung: deutsch
 
-Dieses Dokument steht am Anfang, weil es die Lesart aller übrigen bestimmt.
+Der Broker wird für die folgenden Systeme gebaut.
 
 | Rolle | System | Bedeutung |
 |---|---|---|
@@ -11,13 +11,11 @@ Dieses Dokument steht am Anfang, weil es die Lesart aller übrigen bestimmt.
 | **Zielplattform** | externe Marketplaces mit OSB-Anbindung | dito |
 | **Entwicklungsplattform** | Korifi auf kind | Testgerät, kein Zielsystem |
 
-**Warum das ausdrücklich dasteht.** Jeder Nachweis in diesem Repo ist gegen
-Korifi auf kind aufgenommen, und die Beispiele im Quickstart sprechen von
-`cf api https://localhost`. Wer das liest, ohne den Unterschied zu kennen, hält
-Korifi für das Ziel und leitet daraus falsche Prioritäten ab: mehrere
-Abweichungen von OSB 2.17 bleiben auf Korifi folgenlos und sind auf produktivem
-Cloud Foundry oder TAS Blocker. Der Maßstab für „fertig" ist das Zielsystem,
-nicht die Entwicklungsplattform.
+**Die Unterscheidung ist nicht kosmetisch.** Mehrere Abweichungen von OSB 2.17
+bleiben auf Korifi folgenlos und sind auf produktivem Cloud Foundry oder TAS
+Blocker. Der Maßstab für „fertig" ist deshalb das Zielsystem, nicht die
+Entwicklungsplattform — und alles, was dieses Repo an Nachweisen führt, ist auf
+der Entwicklungsplattform aufgenommen.
 
 ## Was auf allen Plattformen gleich ist
 
@@ -52,11 +50,10 @@ Grund, warum ein Erfolg auf Korifi noch keiner auf TAS ist.
 | Mandanten | ein kind-Cluster, ein Nutzer | echte Orgs und Spaces, echte Rechtetrennung |
 | Last | ein Entwickler, ein Service auf einmal | viele gleichzeitige Operationen |
 
-**Zwei Punkte, die auf dem Zielsystem erst noch beantwortet werden müssen** und
-heute niemand beantworten kann, weil es keinen Durchlauf gab: wie das
-Zertifikatsvertrauen konkret hergestellt wird, und ob der Broker als
-Kubernetes-Deployment neben der Plattform läuft oder als CF-App auf ihr. Beides
-ändert nichts am Code, aber alles an der Betriebsanleitung.
+**Zwei Punkte sind je Zielsystem zu klären** und lassen sich nur dort
+beantworten: wie das Zertifikatsvertrauen hergestellt wird, und ob der Broker
+als Kubernetes-Deployment neben der Plattform läuft oder als CF-App auf ihr.
+Beides ändert nichts am Code, aber alles an der Betriebsanleitung.
 
 ## Externe Marketplaces
 
@@ -72,19 +69,39 @@ großzügig ignoriert, hier möglicherweise Pflicht — etwa ein echter
 suite `cmd/osb-checker` das einzige Werkzeug, das diesen Fall überhaupt prüft;
 sie ersetzt hier die Plattform.
 
-## Verifikationsstand, ehrlich
+## Verifikationsstand
 
-**Verifiziert ist ausschließlich Korifi v0.18.0 auf kind.** Es gibt
+**Verifiziert ist Korifi v0.18.0 auf kind.** Was dort nachgewiesen ist:
+
+| Nachweis | Ergebnis |
+|---|---|
+| OSB-2.17-Lebenszyklus über HTTP | Integrationstest deckt catalog → provision → last_operation → bind → unbind → deprovision ab |
+| Registrierung, Marketplace, `cf create-service` | gegen Korifi auf kind |
+| Generic Engine Ende zu Ende | `cf create-service cnpg-postgresql large` erzeugt einen echten CloudNativePG-Cluster (3 Instanzen, 10Gi); `psql` im Pod antwortet, Credentials aus dem Operator-Secret |
+| Neustart-Persistenz | Instanzen und Bindings überleben Kill und Rescheduling |
+| Secret-Name aus `status.binding.name` | der RabbitMQ-Operator meldet `osb-<id>-default-user`, der Broker nutzt ihn ohne Namenstemplate |
+| Zielform per `mapping` | das Binding enthält genau `host, password, port, provider, type, uri, username`; `default_user.conf` und `connection_string` bleiben draußen |
+| Spec-konformes Secret | Typ `servicebinding.io/rabbitmq`, Labels für Instanz und Binding, `OwnerReference` auf den `RabbitmqCluster` |
+| Aufräumen beim Unbind | `cf delete-service-key` entfernt das projizierte Secret |
+| Konformität gegen den CRD-Store | 24 von 24 im kind-Cluster gegen echtes RBAC, über das Helm-Chart ausgerollt |
+| Sichtbarkeit des Zustands | `kubectl get osbi` und `osbb` zeigen Instanz und Binding mit Service, Plan und Ready |
+| Credentials getrennt | nicht im Binding-CR, sondern in einem Secret mit `OwnerReference` darauf |
+| Kontext vollständig | `platform`, `spaceGuid` und `organizationGuid` werden abgebildet |
+| Konformität über HTTPS mit Client-Zertifikat | 24 von 24 — und 24 von 24 auch mit dem Client-Zertifikat allein, ohne Basic Auth |
+| Zertifikatsrotation ohne Neustart | TLS-Secret im laufenden Pod getauscht: die ausgelieferte Seriennummer wechselt, `restartCount` bleibt 0 |
+| Registrierung über `https://` | `CFServiceBroker` wird ready bei `trustInsecureServiceBrokers=false` — die Plattform prüft das Zertifikat |
+| Voller Lebenszyklus über HTTPS | `cf create-service` bis `cf delete-service` einschließlich echter Credentials |
+| mTLS-Autorisierung | ein von derselben CA signiertes, aber nicht gelistetes Client-Zertifikat bekommt 401 |
+| Probes bleiben offen | `/healthz` ohne Client-Zertifikat erreichbar |
+
+Nicht nachgewiesen ist alles Übrige. Es gibt
 
 - keinen Durchlauf gegen produktives Cloud Foundry,
 - keinen gegen Tanzu TAS,
 - keinen gegen einen externen Marketplace,
 - keinen unter Last oder mit echter Mandantentrennung.
 
-Das ist keine Lücke der Dokumentation, sondern der Stand der Arbeit. Er gehört
-hierher, weil die Nachweistabellen in der [README](../../README.de.md) sonst
-mehr versprechen, als sie belegen: sie belegen, dass der beschriebene Ablauf
-*auf der Entwicklungsplattform* wirklich lief.
+Das ist der Stand der Arbeit, nicht eine Lücke der Beschreibung.
 
 ## Woran sich die Reife misst
 
@@ -106,8 +123,8 @@ nicht. Die Langfassung je Punkt steht in
 
 Die vier mit **Blocker** markierten Punkte sind der Grund, warum der in
 [ADR 0003](adr/0003-replace-http-layer.md) vorgeschlagene Umbau
-zur Entscheidung steht: sie liegen alle in der HTTP- und State-Schicht, keiner
-in der Engine.
+zur Entscheidung steht: sie liegen alle in der HTTP-Schicht, keiner in der
+Engine und keiner im Zustandsspeicher.
 
 ## Was mit Korifi passiert
 

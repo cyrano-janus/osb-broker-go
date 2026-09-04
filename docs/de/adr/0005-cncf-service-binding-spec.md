@@ -6,16 +6,16 @@
 
 ## Kontext
 
-Bis Phase 6 ermittelte der Broker den Namen des Credential-Secrets über ein
-Namenstemplate in der Definition: `{{ .safeName }}-app` bei CloudNativePG,
-`{{ .safeName }}-default-user` bei RabbitMQ, und so weiter. Das ist geraten,
-nicht gewusst — der Broker baut ein Namensschema nach, das sich jeder Operator
-selbst ausdenkt und jederzeit ändern kann.
+Den Namen des Credential-Secrets aus einem Namenstemplate abzuleiten —
+`{{ .safeName }}-app` bei CloudNativePG, `{{ .safeName }}-default-user` bei
+RabbitMQ — heißt raten statt wissen: der Broker baut ein Schema nach, das sich
+jeder Operator selbst ausdenkt und jederzeit ändern kann.
 
-Zweitens reichte der Broker **alle** Schlüssel des Secrets durch. Beim
-RabbitMQ-Operator landeten dadurch `default_user.conf` — eine
-Konfigurationsdatei — und `connection_string` im Binding. Beides hat dort nichts
-verloren, und die Anwendung muss raten, welche Schlüssel sie verwenden darf.
+Und ein Binding, das **alle** Schlüssel des Secrets durchreicht, enthält, was
+der Operator zufällig hineinschreibt. Beim RabbitMQ-Operator sind das
+`default_user.conf` — eine Konfigurationsdatei — und `connection_string`. Beides
+hat in einem Binding nichts verloren, und die Anwendung muss raten, welche
+Schlüssel sie verwenden darf.
 
 ## Entscheidung
 
@@ -29,11 +29,10 @@ Type der Spezifikation. Der Operator gibt die Auskunft, statt dass der Broker si
 rekonstruiert.
 
 **Der Pfad ist absichtlich nicht konfigurierbar.** Der Kommentar im Code sagt
-es kurz: wäre er es, wäre es wieder eine Konvention und kein Standard. Genau der
-Rückfall in eine eigene Konvention war das Problem.
+es kurz: wäre er es, wäre es wieder eine Konvention und kein Standard.
 
 Ein leeres oder fehlendes Feld fällt auf `credentialsFromSecret` zurück — für
-Operator-Versionen, die die Spezifikation noch nicht erfüllen. Ein Wert, der
+Operator-Versionen, die die Spezifikation nicht erfüllen. Ein Wert, der
 existiert, aber keine Zeichenkette ist, ist dagegen ein harter Fehler und wird
 nicht als „nicht vorhanden" behandelt.
 
@@ -85,14 +84,13 @@ jedem Binding-Secret einen Typ.
   deshalb standardmäßig aus.
 - Zwei Wege zum selben Ziel bleiben nebeneinander bestehen, solange Operatoren
   die Spezifikation nicht flächendeckend erfüllen.
-- Eine Definition ohne `mapping` verhält sich weiter wie vorher und reicht alles
-  durch. Das ist Absicht, aber es heißt, dass die Verbesserung je Definition
-  nachgezogen werden muss.
+- Ohne `mapping` reicht eine Definition alles durch. Das ist Absicht, heißt aber,
+  dass die Zielform je Definition festgelegt werden muss.
 
 ## Verworfene Alternativen
 
 | Option | Warum nicht |
 |---|---|
-| Eigene Konvention weiterpflegen | genau das Problem: bricht bei jedem neuen Operator |
+| Eigene Konvention weiterpflegen | bricht bei jedem neuen Operator |
 | CEL-Ausdrücke für die Zuordnung | mächtiger als Templates, aber eine zweite Ausdruckssprache im Schema; die Templates reichen bisher |
 | Nur `credentialKeys` als Filter | filtert, formt aber nicht — eine URI ließe sich damit nicht zusammensetzen |

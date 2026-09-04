@@ -7,12 +7,9 @@
 ## Kontext
 
 Der Broker liest produktive Datenbankzugangsdaten aus Secrets und gibt sie an
-die Plattform weiter. Bis Phase 4.5 tat er das über **unverschlüsseltes HTTP**
-(`main.go` rief `router.Run(":"+port)`), und die einzige Authentifizierung war
-HTTP Basic Auth. Das war die gravierendste offene Schwachstelle: wer den
-Datenverkehr mitliest, hat die Zugangsdaten jeder Instanz.
-
-mTLS und OAuth2 waren ursprünglich als „optional" geparkt.
+die Plattform weiter. Wer den Datenverkehr mitliest, hat damit die Zugangsdaten
+jeder Instanz. Unverschlüsselter Transport ist für diesen Prozess also keine
+Option, und Basic Auth allein reicht als Nachweis nicht überall aus.
 
 ## Entscheidung
 
@@ -26,8 +23,8 @@ lösen: der letzte Sprung zum Broker bliebe unverschlüsselt, und der Broker wä
 auf eine Umgebung angewiesen, die ihm etwas vorschaltet. Er soll ohne solche
 Voraussetzungen betreibbar sein.
 
-Statt `router.Run` steht ein echter `http.Server` mit gesetzten Zeitschranken
-und Graceful Shutdown auf SIGTERM.
+Der Prozess betreibt einen `http.Server` mit gesetzten Zeitschranken und
+Graceful Shutdown auf SIGTERM.
 
 ### Zertifikatsrotation durch Polling, nicht durch inotify
 

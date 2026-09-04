@@ -28,8 +28,8 @@ Zertifikat nicht prüft, prüft gar nichts.
 
 ## Der Zustand
 
-Der Broker legt je Datensatz ein CR an. Das ist der Punkt gegenüber der früheren
-ConfigMap: der Zustand ist mit `kubectl` sichtbar.
+Der Broker legt je Datensatz ein CR an. Der Zustand ist damit mit `kubectl`
+sichtbar.
 
 ```bash
 kubectl get osbi,osbb -A                       # Kurznamen fuer Instanzen und Bindings
@@ -53,9 +53,9 @@ kubectl get secret <binding-objektname>-credentials -n osb-broker \
   -o jsonpath='{.data.credentials\.json}' | base64 -d | jq
 ```
 
-**Ein Binding ohne Datensatz ist derzeit der Normalfall**, wenn der Service über
-eine Definition läuft: der Definitions-Pfad persistiert Bindings nicht. `GET
-binding` antwortet dann 404. Siehe
+**Für Services, die über eine Definition laufen, gibt es keinen
+Binding-Datensatz**: der Definitions-Pfad persistiert Bindings nicht, und
+`GET binding` antwortet 404. Siehe
 [reference/osb-api.md](../reference/osb-api.md).
 
 ## Die Objekte im Cluster

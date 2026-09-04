@@ -6,10 +6,10 @@
 
 ## Kontext
 
-Die erste Fassung des Projekts hatte einen Broker **je Service-Typ**: ein
-Repository für PostgreSQL, eines für Redis, und so fort. Jeder davon war zu 90
-Prozent derselbe Code — OSB-Endpunkte, Zustandsverwaltung, Authentifizierung —
-und zu 10 Prozent operator-spezifisch.
+Ein Broker **je Service-Typ** — einer für PostgreSQL, einer für Redis, und so
+fort — besteht zu rund 90 Prozent aus demselben Code: OSB-Endpunkte,
+Zustandsverwaltung, Authentifizierung. Operator-spezifisch sind die restlichen
+zehn Prozent.
 
 Das skaliert nicht. Bei N Services entstehen N Codebasen, N Deployments, N
 Sicherheitsaktualisierungen und N Stellen, an denen eine OSB-Feinheit falsch
@@ -17,12 +17,8 @@ umgesetzt sein kann.
 
 ## Entscheidung
 
-**Eine Broker-Engine, N YAML-Definitionen.**
-
-```
-v1:  ein Broker je Service-Typ           →  N Codebasen, N Deployments
-v2:  eine Engine + N ServiceDefinitions  →  1 Codebasis, Konfiguration statt Code
-```
+**Eine Broker-Engine, N YAML-Definitionen — eine Codebasis, Konfiguration statt
+Code.**
 
 Ein Service wird vollständig durch eine ServiceDefinition beschrieben: das
 Katalogangebot mit seinen Plänen, das Template für die anzulegenden Kubernetes-
@@ -52,10 +48,9 @@ erzeugt. Das Versprechen lautet nicht „jeder Operator mit nur YAML", sondern
 
 - Ein neuer Service ist eine Datei, kein Deployment.
 - Ein Fehler in der OSB-Umsetzung wird einmal behoben und wirkt überall.
-- Der RabbitMQ-Durchlauf hat die Generizität belegt: ein Operator mit anderer
-  CRD-Gruppe, anderen Condition-Typen und anderem Credential-Layout brauchte
-  **keine einzige** Änderung an `internal/definition`. Das war die offene Frage
-  gegenüber einem Beweis mit nur einem Service, und sie ist beantwortet.
+- Die Generizität ist belegt: zwei Operatoren mit unterschiedlichen
+  CRD-Gruppen, Condition-Typen und Credential-Layouts laufen über dieselbe
+  Engine, ohne dass `internal/definition` je Service etwas davon wüsste.
 
 **Preis:**
 
@@ -67,13 +62,14 @@ erzeugt. Das Versprechen lautet nicht „jeder Operator mit nur YAML", sondern
   Zahlnormalisierung beim Vergleich, No-Op-Erkennung, drei Stufen beim
   Deprovision — all das existiert nur, weil kein Service-spezifischer Code die
   Sonderfälle abfangen darf.
-- **Konventionsabhängigkeit.** Wo ein Operator sein Credential-Secret ablegt, war
-  zunächst geraten. Die Antwort darauf ist [ADR 0005](0005-cncf-service-binding-spec.md).
+- **Konventionsabhängigkeit.** Wo ein Operator sein Credential-Secret ablegt,
+  lässt sich aus einem Namensschema nur raten. Die Antwort darauf ist
+  [ADR 0005](0005-cncf-service-binding-spec.md).
 
 ## Verworfene Alternativen
 
 | Option | Warum nicht |
 |---|---|
-| Ein Broker je Service (Status quo v1) | N Codebasen, siehe Kontext |
+| Ein Broker je Service-Typ | N Codebasen, siehe Kontext |
 | Plugin-Schnittstelle in Go | wieder Code je Service, nur mit mehr Zeremonie |
 | Crossplane-Compositions als Unterbau | löst ein ähnliches Problem, brächte aber eine zweite große Abhängigkeit und eine zweite Sprache für Templates |

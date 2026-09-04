@@ -9,7 +9,7 @@
 // Der Verzweigungspunkt des gesamten Pakets ist resolveDefinition: liefert es
 // eine ServiceDefinition, laeuft der Request durch internal/definition;
 // liefert es nil - auch im Fehlerfall -, faellt er stumm auf den zweiten,
-// vollstaendigen Broker in internal/broker/broker.go zurueck. Dieser Doppelpfad
-// ist die zentrale Altlast des Repos und in docs/de/architecture.md sowie
-// docs/de/adr/0003-replace-http-layer.md beschrieben.
+// vollstaendigen Broker in internal/broker/broker.go zurueck. Was an diesem
+// Doppelpfad haengt, steht in docs/de/architecture.md und in
+// docs/de/adr/0003-replace-http-layer.md.
 package handlers

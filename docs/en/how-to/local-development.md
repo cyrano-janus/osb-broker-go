@@ -44,7 +44,7 @@ go test ./internal/handlers/ -count=1
 go test ./internal/docs/            # the guard over this documentation
 ```
 
-## The four guards that have a say
+## The guards that have a say
 
 These tests fail on changes that do not look like test changes. Knowing them
 saves the guesswork:
@@ -55,7 +55,7 @@ saves the guesswork:
 | `internal/definition/catalog_test.go` | every file under `definitions/` parses, and three named definitions are present |
 | `internal/handlers/docs_sync_test.go` | `docs/openapi.yaml` and the schema are byte-identical to the embedded copies under `internal/handlers/docs/` |
 | `internal/apis/v1alpha1/crd_schema_test.go` | every Go field of the state types appears in the CRD manifest |
-| `internal/docs/sync_test.go` | `docs/de` and `docs/en` are structurally identical, no dead links |
+| `internal/docs/sync_test.go` | `docs/de` and `docs/en` are structurally identical, no dead links, and no document narrates its own history |
 
 **Whoever changes `docs/openapi.yaml` has to carry the copy along** — copy it, do
 not edit one of the two:
@@ -145,13 +145,13 @@ Actions.
 
 **One caveat that matters when reading the results:** the suite picks the first
 service from the catalogue, and that is always the demo service `service-1` from
-`internal/store`. It therefore exercises the legacy path, not the engine. See
+`internal/store`. It therefore exercises the fallback path, not the engine. See
 [reference/osb-api.md](../reference/osb-api.md).
 
 ## Conventions
 
-- **Language:** comments, commit messages and new test names in German. The
-  older body of code is English; it is not converted retroactively.
+- **Language:** comments, commit messages and new test names in German.
+  Identifiers and field names stay English.
 - **Reasons belong in the file, not in the commit message.** Every non-obvious
   line carries a *why* as a comment. The existing code does this consistently —
   reading `crdstate.go` or `config.go` shows it.

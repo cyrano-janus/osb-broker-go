@@ -8,7 +8,7 @@
 // docs/de/adr/0001-kubernetes-as-state-store.md.
 //
 // Zweitens, in broker.go, einen zweiten vollstaendigen OSB-Broker mit eigenem
-// Katalog aus internal/store. Er bedient alles, was internal/handlers nicht
-// einer ServiceDefinition zuordnen kann. Er ist Altlast, kein Baustein: siehe
-// docs/de/adr/0003-replace-http-layer.md.
+// Katalog aus internal/store. Er bedient als Fallback alles, was
+// internal/handlers keiner ServiceDefinition zuordnen kann. Was daran haengt,
+// steht in docs/de/adr/0003-replace-http-layer.md.
 package broker

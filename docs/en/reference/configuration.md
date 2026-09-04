@@ -3,13 +3,12 @@
 > [Deutsch](../../de/reference/configuration.md) · Leading version: German
 
 The broker reads its configuration exclusively from environment variables.
-`internal/config` turns them into **one** validated struct and aborts at start-up
-if something is wrong. That is the replacement for the earlier `os.Getenv` calls
-scattered across the code.
+`internal/config` reads them in one place, turns them into **one** validated
+struct and aborts at start-up if something is wrong.
 
 **Fail fast instead of a silent fallback.** An unknown value in `STORE_BACKEND`
-used to be a typo that silently fell back to the in-memory store — the broker
-ran but lost all state on restart. Today it does not start.
+is a start-up error. A silent fallback to the in-memory store would be the more
+dangerous answer: the broker would run and lose all state on restart.
 
 ## Environment variables
 
@@ -20,8 +19,8 @@ ran but lost all state on restart. Today it does not start.
 | `PORT` | `8080` | Listening port. With TLS the chart sets `8443`. |
 | `STORE_BACKEND` | `memory` | `crd` or `memory`. `k8s` is an alias for `crd` and produces a warning. Anything else is a **start-up error**. |
 | `POD_NAMESPACE` | empty | Namespace holding the state CRs. Required with `STORE_BACKEND=crd`; the chart fills it via `fieldRef`. |
-| `DEFINITIONS_DIR` | empty | Directory holding the ServiceDefinitions. Empty means no definitions, only the legacy catalogue. |
-| `METRICS_ENABLED` | on | **Only the exact value `0` turns it off.** No `ParseBool` — `false` left metrics on before this package existed and has to keep doing so. |
+| `DEFINITIONS_DIR` | empty | Directory holding the ServiceDefinitions. Empty means no definitions, only the demo catalogue. |
+| `METRICS_ENABLED` | on | **Only the exact value `0` turns it off.** No `ParseBool`: `false` leaves metrics on. |
 
 ### Authentication
 
@@ -148,8 +147,8 @@ Reasoning in [ADR 0001](../adr/0001-kubernetes-as-state-store.md).
 | `values-ci.yaml` | the TLS/mTLS gate in CI |
 
 **`values-kind.yaml` has drifted away from `definitions/`.** The RabbitMQ
-definition embedded there has none of the phase 6 features, and three keys occur
-twice. Nothing tests this file. See [known-issues.md](../known-issues.md).
+definition embedded there is missing `provisionedService`, `mapping` and `type`,
+and three keys occur twice. Nothing tests this file. See [known-issues.md](../known-issues.md).
 
 ## Not configurable
 
