@@ -45,38 +45,16 @@ func (h *Handlers) definitionServices() []map[string]interface{} {
 	return out
 }
 
-// mergeCatalog appends definition-based services to the broker catalog.
-func (h *Handlers) mergedCatalog() (map[string]interface{}, error) {
-	base, err := h.broker.GetCatalog()
-	if err != nil {
-		return nil, err
-	}
-	result := map[string]interface{}{"services": base.Services}
-	defs := h.definitionServices()
-	if len(defs) > 0 {
-		all := make([]interface{}, 0, len(base.Services)+len(defs))
-		for _, s := range base.Services {
-			all = append(all, s)
-		}
-		for _, d := range defs {
-			all = append(all, d)
-		}
-		result["services"] = all
-	}
-	return result, nil
-}
-
-// GetCatalog handles GET /v2/catalog — merges static and definition-based
-// services.
+// GetCatalog handles GET /v2/catalog.
+//
+// Der Katalog ist genau das, was die Engine aus den ServiceDefinitions kennt.
+// Frueher wurde ihm ein statischer Demo-Katalog aus internal/store
+// vorangestellt - service-1 und service-2 standen damit in jedem
+// Produktivkatalog, und es gab keinen Schalter dagegen.
 func (h *Handlers) GetCatalog(c *gin.Context) {
-	catalog, err := h.mergedCatalog()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":       "InternalServerError",
-			"description": err.Error(),
-		})
-		return
+	services := h.definitionServices()
+	if services == nil {
+		services = []map[string]interface{}{}
 	}
-
-	c.JSON(http.StatusOK, catalog)
+	c.JSON(http.StatusOK, gin.H{"services": services})
 }

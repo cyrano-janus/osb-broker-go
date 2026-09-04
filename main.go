@@ -17,7 +17,6 @@ import (
 	"github.com/example/osb-broker/internal/config"
 	"github.com/example/osb-broker/internal/handlers"
 	"github.com/example/osb-broker/internal/server"
-	"github.com/example/osb-broker/internal/store"
 	k8sconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
@@ -36,9 +35,6 @@ func main() {
 	// of cutting them off.
 	ctx, stop := server.SignalContext()
 	defer stop()
-
-	// Initialize in-memory catalog store
-	serviceStore := store.NewInMemoryStore()
 
 	// State store selection (Phase 5): "crd" haelt jeden Datensatz als
 	// eigenes Custom Resource; "memory" ist fuer lokale Laeufe und Tests.
@@ -61,7 +57,7 @@ func main() {
 	}
 
 	// Initialize broker
-	b := broker.New(serviceStore, stateStore)
+	b := broker.New(stateStore)
 
 	// Generic Engine (Phase 2): load ServiceDefinitions and wire them into
 	// the handler layer. DEFINITIONS_DIR empty = definition-based services

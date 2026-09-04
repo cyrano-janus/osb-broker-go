@@ -125,11 +125,11 @@ Intermediate states are committed, not accumulated.
 
 ## What to read before a larger rebuild
 
-- [docs/en/architecture.md](docs/en/architecture.md) — where the line runs
-  between what carries and what is to be replaced.
+- [docs/en/architecture.md](docs/en/architecture.md) — how a request finds its
+  way through, and where the line between the layers runs.
 - [docs/en/known-issues.md](docs/en/known-issues.md) — what is known to be open,
   so nothing gets discovered twice.
 - [docs/en/adr/0003-replace-http-layer.md](docs/en/adr/0003-replace-http-layer.md)
-  — the proposed, undecided rebuild.
+  — why there is one path and no fallback.
 - [docs/en/target-platforms.md](docs/en/target-platforms.md) — what "done" is
   measured against.

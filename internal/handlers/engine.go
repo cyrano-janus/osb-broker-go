@@ -7,7 +7,6 @@ import (
 
 	"github.com/example/osb-broker/internal/broker"
 	"github.com/example/osb-broker/internal/definition"
-	"github.com/example/osb-broker/internal/store"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
@@ -49,6 +48,5 @@ func NewEngineHolder(dir, brokerNamespace string, stateStore broker.StateStore) 
 	return &EngineHolder{Engine: engine, Op: op}, nil
 }
 
-var _ = store.NewInMemoryStore // reference to keep import stable if wiring changes
 var _ = context.Background
 var _ = os.Getenv

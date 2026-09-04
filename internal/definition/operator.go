@@ -3,7 +3,6 @@ package definition
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
@@ -17,9 +16,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 )
-
-// ErrNotFound mirrors broker.ErrNotFound semantics without an import cycle.
-var ErrNotFound = errors.New("not found")
 
 // OperatorClient performs the generic CR lifecycle against arbitrary
 // operator APIs (Phase 2.3/2.4/2.5): apply, delete, readiness lookup and
@@ -101,7 +97,7 @@ func (o *OperatorClient) GetCR(ctx context.Context, apiVersion, kind, namespace,
 	err = o.Client.Get(ctx, client.ObjectKeyFromObject(u), u)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			return nil, fmt.Errorf("%w: %s %q", ErrNotFound, kind, name)
+			return nil, fmt.Errorf("%w: %s %q", ErrResourceGone, kind, name)
 		}
 		return nil, fmt.Errorf("get %s %q: %w", kind, name, err)
 	}
@@ -133,7 +129,7 @@ func (o *OperatorClient) GetCRStatus(ctx context.Context, apiVersion, kind, name
 	err = o.Client.Get(ctx, client.ObjectKeyFromObject(u), u)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			return nil, fmt.Errorf("%w: %s %q", ErrNotFound, kind, name)
+			return nil, fmt.Errorf("%w: %s %q", ErrResourceGone, kind, name)
 		}
 		return nil, fmt.Errorf("get %s %q: %w", kind, name, err)
 	}
@@ -151,7 +147,7 @@ func (o *OperatorClient) ReadSecret(ctx context.Context, namespace, name string)
 	err := o.Client.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, s)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			return nil, fmt.Errorf("%w: secret %q", ErrNotFound, name)
+			return nil, fmt.Errorf("%w: secret %q", ErrResourceGone, name)
 		}
 		return nil, fmt.Errorf("get secret %q: %w", name, err)
 	}

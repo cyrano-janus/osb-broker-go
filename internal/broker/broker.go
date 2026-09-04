@@ -3,286 +3,56 @@ package broker
 import (
 	"context"
 	"fmt"
-	"sync"
-	"time"
-
-	"github.com/example/osb-broker/internal/store"
 )
 
-// Broker implements the Open Service Broker API
+// Broker ist der Zugang zum Zustandsspeicher - und nur das.
+//
+// Frueher stand hier eine zweite, vollstaendige Broker-Implementierung:
+// eigener Katalog aus internal/store, eigene Instanz- und Binding-Maps,
+// eigene Provision-, Bind- und last_operation-Logik. Jeder Handler verzweigte
+// einzeln zwischen ihr und der Engine, und wenn die Aufloesung der Definition
+// fehlschlug - auch aus einem anderen Grund als "kenne ich nicht" -, fiel der
+// Request stumm hierher. Zwei Folgen, die lange niemand sah: der Demo-Katalog
+// erschien in jedem Produktivkatalog, und die eigene Konformitaetssuite prueft
+// den Demo-Service statt der Engine.
+//
+// Es gibt jetzt einen Pfad. Was hier bleibt, ist die Buchfuehrung: welche
+// Instanzen und Bindings der Broker kennt. Die Dienste selbst stellt die
+// Engine her.
 type Broker struct {
-	store      store.ServiceStore
-	state      StateStore
-	instances  map[string]*Instance
-	bindings   map[string]*Binding
-	operations map[string]*Operation
-	mu         sync.RWMutex
-
-	// LastBindWasIdempotent reports whether the most recent Bind call
-	// returned an existing binding (true) or created a new one (false).
-	// The HTTP layer uses it to answer 200 (fetch semantics) vs 201 (created)
-	// per OSB spec.
-	LastBindWasIdempotent bool
-
-	// LastProvisionWasIdempotent reports whether the most recent Provision
-	// call returned an existing identical instance. The HTTP layer uses it
-	// to answer 200 vs 201 per OSB spec.
-	LastProvisionWasIdempotent bool
+	state StateStore
 }
 
-// Instance represents a service instance
-type Instance struct {
-	ID           string
-	ServiceID    string
-	PlanID       string
-	Context      Context
-	Parameters   map[string]interface{}
-	DashboardURL string
-	Ready        bool
-	// Namespace ist der Namespace, in dem die Operator-Ressourcen dieser
-	// Instanz liegen - abgeleitet aus der Space-GUID beim Provision.
-	//
-	// Er muss gespeichert werden, weil er aus spaeteren Requests grundsaetzlich
-	// nicht herleitbar ist: ein OSB-Deprovision oder last_operation traegt
-	// weder context noch space_guid. Vorher setzten drei Codepfade hart
-	// "default" ein und suchten damit am falschen Ort (FINDINGS #7/#16).
-	Namespace string
-	// AppliedObjects lists the K8s object names created for this instance
-	// (multi-doc, 4.6). Persisted via the StateStore so deprovision can
-	// remove every object even after a restart. Empty = single-doc legacy.
-	AppliedObjects []string
-	// AppliedRefs carries the same objects including their apiVersion/kind,
-	// which a multi-doc template may vary per document.
-	AppliedRefs []AppliedObjectRef
-}
-
-// AppliedObjectRef identifies one K8s object created for an instance.
-type AppliedObjectRef struct {
-	APIVersion string
-	Kind       string
-	Namespace  string
-	Name       string
-}
-
-// Binding represents a service binding
-type Binding struct {
-	ID              string
-	InstanceID      string
-	ServiceID       string
-	PlanID          string
-	AppGUID         string
-	Context         Context
-	Parameters      map[string]interface{}
-	Credentials     map[string]interface{}
-	SyslogDrainURL  string
-	RouteServiceURL string
-	VolumeMounts    []interface{}
-	Ready           bool
-}
-
-// New creates a new broker instance. catalog provides the service catalog;
-// state persists instances/bindings across restarts (Phase 1.1).
-func New(catalog store.ServiceStore, state StateStore) *Broker {
+// New erzeugt den Zustandszugang. Ohne StateStore wird der In-Memory-Speicher
+// genommen, damit Tests ohne Cluster laufen.
+func New(state StateStore) *Broker {
 	if state == nil {
 		state = NewInMemoryStateStore()
 	}
-	return &Broker{
-		store:      catalog,
-		state:      state,
-		instances:  make(map[string]*Instance),
-		bindings:   make(map[string]*Binding),
-		operations: make(map[string]*Operation),
-	}
+	return &Broker{state: state}
 }
 
-// GetCatalog returns the service catalog
-func (b *Broker) GetCatalog() (*Catalog, error) {
-	return b.store.GetCatalog()
-}
-
-// Provision creates or updates a service instance
-func (b *Broker) Provision(ctx context.Context, instanceID string, req *ProvisionRequest) (*ProvisionResponse, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	// Validate service and plan exist
-	catalog, err := b.store.GetCatalog()
-	if err != nil {
-		return nil, err
-	}
-
-	service, _, err := findServiceAndPlan(catalog, req.ServiceID, req.PlanID)
-	if err != nil {
-		return nil, err
-	}
-
-	// Check if instance already exists (persistent store: idempotency must
-	// survive restarts)
-	existing, err := b.state.GetInstance(ctx, instanceID)
-	if err == nil {
-		// Check for conflicts
-		if existing.ServiceID != req.ServiceID || existing.PlanID != req.PlanID {
-			return nil, fmt.Errorf("instance already exists with different service/plan")
-		}
-		// Return success for idempotent provision
-		b.LastProvisionWasIdempotent = true
-		return &ProvisionResponse{}, nil
-	}
-	b.LastProvisionWasIdempotent = false
-
-	// Create new instance
-	instance := &Instance{
-		ID:         instanceID,
-		ServiceID:  req.ServiceID,
-		PlanID:     req.PlanID,
-		Context:    req.Context,
-		Parameters: req.Parameters,
-		Ready:      true,
-	}
-
-	// Generate dashboard URL if available
-	if service.Metadata != nil && service.Metadata.DisplayName != "" {
-		instance.DashboardURL = fmt.Sprintf("https://dashboard.example.com/instances/%s", instanceID)
-	}
-
-	b.instances[instanceID] = instance
-	if err := b.state.PutInstance(ctx, instance); err != nil {
-		return nil, fmt.Errorf("persist instance: %w", err)
-	}
-
-	response := &ProvisionResponse{}
-	if instance.DashboardURL != "" {
-		response.DashboardURL = instance.DashboardURL
-	}
-
-	return response, nil
-}
-
-// Deprovision removes a service instance
-func (b *Broker) Deprovision(ctx context.Context, instanceID string, req *DeprovisionRequest) (*DeprovisionResponse, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	_, err := b.state.GetInstance(ctx, instanceID)
-	if err != nil {
-		return nil, fmt.Errorf("instance not found")
-	}
-
-	// Check for existing bindings (from the persistent store, so restarts
-	// don't orphan bindings)
-	bindings, listErr := b.state.ListBindingsByInstance(ctx, instanceID)
-	if listErr != nil {
-		return nil, fmt.Errorf("list bindings: %w", listErr)
-	}
-	for _, binding := range bindings {
-		if binding.Ready {
-			return nil, fmt.Errorf("instance has existing bindings")
-		}
-	}
-
-	delete(b.instances, instanceID)
-	if err := b.state.DeleteInstance(ctx, instanceID); err != nil {
-		return nil, fmt.Errorf("delete persisted instance: %w", err)
-	}
-
-	return &DeprovisionResponse{}, nil
-}
-
-// Bind creates a binding between an app and a service instance
-func (b *Broker) Bind(ctx context.Context, instanceID, bindingID string, req *BindRequest) (*BindResponse, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	_, err := b.state.GetInstance(ctx, instanceID)
-	if err != nil {
-		return nil, fmt.Errorf("instance not found")
-	}
-
-	// Check if binding already exists (persistent: idempotent across restarts)
-	existing, bindErr := b.state.GetBinding(ctx, bindingID)
-	if bindErr == nil {
-		if existing.InstanceID == instanceID && existing.Ready {
-			// Return existing binding credentials (idempotent)
-			b.LastBindWasIdempotent = true
-			return &BindResponse{
-				Credentials:     existing.Credentials,
-				SyslogDrainURL:  existing.SyslogDrainURL,
-				RouteServiceURL: existing.RouteServiceURL,
-				VolumeMounts:    existing.VolumeMounts,
-			}, nil
-		}
-	}
-	b.LastBindWasIdempotent = false
-
-	// Create new binding
-	binding := &Binding{
-		ID:         bindingID,
-		InstanceID: instanceID,
-		ServiceID:  req.ServiceID,
-		PlanID:     req.PlanID,
-		AppGUID:    req.AppGUID,
-		Context:    req.Context,
-		Parameters: req.Parameters,
-		Ready:      true,
-	}
-
-	// Generate credentials
-	binding.Credentials = generateCredentials(instanceID, bindingID)
-
-	b.bindings[bindingID] = binding
-	if err := b.state.PutBinding(ctx, binding); err != nil {
-		return nil, fmt.Errorf("persist binding: %w", err)
-	}
-
-	return &BindResponse{
-		Credentials: binding.Credentials,
-	}, nil
-}
-
-// Unbind removes a binding
-func (b *Broker) Unbind(ctx context.Context, instanceID, bindingID string, req *UnbindRequest) (*UnbindResponse, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	binding, err := b.state.GetBinding(ctx, bindingID)
-	if err != nil {
-		return nil, fmt.Errorf("binding not found")
-	}
-
-	if binding.InstanceID != instanceID {
-		return nil, fmt.Errorf("binding does not belong to instance")
-	}
-
-	delete(b.bindings, bindingID)
-	if err := b.state.DeleteBinding(ctx, bindingID); err != nil {
-		return nil, fmt.Errorf("delete persisted binding: %w", err)
-	}
-
-	return &UnbindResponse{}, nil
-}
-
-// GetInstance retrieves instance details
-// StoredInstance gibt den gespeicherten Datensatz zurueck, nicht die
-// OSB-Antwort.
-//
-// Die Handler brauchen daraus den Namespace: aus einem Deprovision-,
-// last_operation- oder Bind-Request ist er nicht herleitbar (FINDINGS #7).
-// GetInstance liefert nur die nach aussen sichtbaren Felder.
+// StoredInstance liefert den gespeicherten Instanz-Datensatz.
 func (b *Broker) StoredInstance(ctx context.Context, instanceID string) (*Instance, error) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
 	return b.state.GetInstance(ctx, instanceID)
 }
 
-func (b *Broker) GetInstance(ctx context.Context, instanceID string) (*GetInstanceResponse, error) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
+// RecordInstance schreibt einen Instanz-Datensatz.
+func (b *Broker) RecordInstance(ctx context.Context, i *Instance) error {
+	return b.state.PutInstance(ctx, i)
+}
 
+// ForgetInstance entfernt einen Instanz-Datensatz.
+func (b *Broker) ForgetInstance(ctx context.Context, instanceID string) error {
+	return b.state.DeleteInstance(ctx, instanceID)
+}
+
+// GetInstance liefert die OSB-Antwort auf GET /v2/service_instances/:id.
+func (b *Broker) GetInstance(ctx context.Context, instanceID string) (*GetInstanceResponse, error) {
 	instance, err := b.state.GetInstance(ctx, instanceID)
 	if err != nil {
-		return nil, fmt.Errorf("instance not found")
+		return nil, fmt.Errorf("%w: instance %q", ErrNotFound, instanceID)
 	}
-
 	return &GetInstanceResponse{
 		ServiceID:    instance.ServiceID,
 		PlanID:       instance.PlanID,
@@ -291,147 +61,40 @@ func (b *Broker) GetInstance(ctx context.Context, instanceID string) (*GetInstan
 	}, nil
 }
 
-// GetBinding retrieves binding details
-// StoredBinding liefert den gespeicherten Binding-Datensatz oder einen
-// Fehler. Gegenstueck zu StoredInstance, gebraucht vom Definitions-Pfad.
+// StoredBinding liefert den gespeicherten Binding-Datensatz.
 func (b *Broker) StoredBinding(ctx context.Context, bindingID string) (*Binding, error) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
 	return b.state.GetBinding(ctx, bindingID)
-}
-
-// ForgetBinding entfernt einen Binding-Datensatz aus dem Zustandsspeicher.
-func (b *Broker) ForgetBinding(ctx context.Context, bindingID string) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.state.DeleteBinding(ctx, bindingID)
 }
 
 // RecordBinding schreibt einen Binding-Datensatz in den Zustandsspeicher.
 func (b *Broker) RecordBinding(ctx context.Context, bd *Binding) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
 	return b.state.PutBinding(ctx, bd)
 }
 
-func (b *Broker) GetBinding(ctx context.Context, instanceID, bindingID string) (*GetBindingResponse, error) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
+// ForgetBinding entfernt einen Binding-Datensatz aus dem Zustandsspeicher.
+func (b *Broker) ForgetBinding(ctx context.Context, bindingID string) error {
+	return b.state.DeleteBinding(ctx, bindingID)
+}
 
+// BindingsOfInstance liefert alle Bindings einer Instanz. Gebraucht, damit ein
+// Deprovision eine Instanz mit bestehenden Bindings ablehnen kann.
+func (b *Broker) BindingsOfInstance(ctx context.Context, instanceID string) ([]*Binding, error) {
+	return b.state.ListBindingsByInstance(ctx, instanceID)
+}
+
+// GetBinding liefert die OSB-Antwort auf GET …/service_bindings/:id.
+func (b *Broker) GetBinding(ctx context.Context, instanceID, bindingID string) (*GetBindingResponse, error) {
 	binding, err := b.state.GetBinding(ctx, bindingID)
 	if err != nil {
-		return nil, fmt.Errorf("binding not found")
+		return nil, fmt.Errorf("%w: binding %q", ErrNotFound, bindingID)
 	}
-
 	if binding.InstanceID != instanceID {
-		return nil, fmt.Errorf("binding does not belong to instance")
+		return nil, fmt.Errorf("%w: binding %q does not belong to instance %q", ErrNotFound, bindingID, instanceID)
 	}
-
 	return &GetBindingResponse{
 		Credentials:     binding.Credentials,
 		SyslogDrainURL:  binding.SyslogDrainURL,
 		RouteServiceURL: binding.RouteServiceURL,
 		VolumeMounts:    binding.VolumeMounts,
 	}, nil
-}
-
-// UpdateInstance updates a service instance
-func (b *Broker) UpdateInstance(ctx context.Context, instanceID string, req *UpdateInstanceRequest) (*UpdateInstanceResponse, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	instance, err := b.state.GetInstance(ctx, instanceID)
-	if err != nil {
-		return nil, fmt.Errorf("instance not found")
-	}
-
-	// Update plan if changed
-	if req.PlanID != "" {
-		instance.PlanID = req.PlanID
-	}
-
-	// Update parameters if provided
-	if req.Parameters != nil {
-		instance.Parameters = req.Parameters
-	}
-
-	if err := b.state.PutInstance(ctx, instance); err != nil {
-		return nil, fmt.Errorf("persist instance update: %w", err)
-	}
-
-	return &UpdateInstanceResponse{}, nil
-}
-
-// GetLastOperation returns the state of the last operation
-func (b *Broker) GetLastOperation(instanceID string, operation string) (*LastOperationResponse, error) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	// For this reference implementation, all operations are synchronous
-	// Return succeeded state
-	return &LastOperationResponse{
-		State:       string(OperationStateSucceeded),
-		Description: "Operation completed successfully",
-		Operation:   operation,
-	}, nil
-}
-
-// GetLastBindingOperation returns the state of the last binding operation
-func (b *Broker) GetLastBindingOperation(instanceID, bindingID, operation string) (*LastOperationResponse, error) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	// For this reference implementation, all operations are synchronous
-	return &LastOperationResponse{
-		State:       string(OperationStateSucceeded),
-		Description: "Operation completed successfully",
-		Operation:   operation,
-	}, nil
-}
-
-// Helper functions
-
-func findServiceAndPlan(catalog *Catalog, serviceID, planID string) (*Service, *ServicePlan, error) {
-	for _, service := range catalog.Services {
-		if service.ID == serviceID {
-			for _, plan := range service.Plans {
-				if plan.ID == planID {
-					return &service, &plan, nil
-				}
-			}
-			return nil, nil, fmt.Errorf("plan not found")
-		}
-	}
-	return nil, nil, fmt.Errorf("service not found")
-}
-
-func generateCredentials(instanceID, bindingID string) map[string]interface{} {
-	// Truncate safely: OSB allows arbitrary binding/instance IDs, and a
-	// short ID must not panic the broker.
-	trunc := func(s string) string {
-		if len(s) > 8 {
-			return s[:8]
-		}
-		return s
-	}
-	return map[string]interface{}{
-		"uri":      fmt.Sprintf("https://service.example.com/instances/%s", instanceID),
-		"username": fmt.Sprintf("user_%s", trunc(bindingID)),
-		"password": fmt.Sprintf("pass_%s_%s", trunc(instanceID), trunc(bindingID)),
-		"host":     "service.example.com",
-		"port":     5432,
-		"database": fmt.Sprintf("db_%s", trunc(instanceID)),
-	}
-}
-
-// Operation management for async operations (future enhancement)
-func (b *Broker) createOperation(instanceID, opType string) string {
-	opID := fmt.Sprintf("op_%s_%d", instanceID, time.Now().UnixNano())
-	b.operations[opID] = &Operation{
-		ID:          opID,
-		State:       OperationStateInProgress,
-		Description: "Operation in progress",
-		Type:        opType,
-	}
-	return opID
 }

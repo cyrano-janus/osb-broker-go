@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/example/osb-broker/internal/broker"
-	"github.com/example/osb-broker/internal/store"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,7 +24,7 @@ func b64Origin(s string) string {
 
 func newLoggingTestRouter() (*gin.Engine, *gin.Engine) {
 	gin.SetMode(gin.TestMode)
-	b := broker.New(store.NewInMemoryStore(), nil)
+	b := broker.New(nil)
 	h := New(b)
 	return h.SetupRouter(), nil
 }
@@ -74,7 +73,7 @@ func TestOriginatingIdentity_InvalidBase64StillSucceeds(t *testing.T) {
 
 func TestStructuredLogOutput_ContainsCorrelationID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	b := broker.New(store.NewInMemoryStore(), nil)
+	b := broker.New(nil)
 	h := New(b)
 	logBuf := &testLogWriter{}
 	gin.DefaultWriter = logBuf

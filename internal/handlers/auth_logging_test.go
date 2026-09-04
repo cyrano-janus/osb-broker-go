@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/example/osb-broker/internal/broker"
-	"github.com/example/osb-broker/internal/store"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,7 +18,7 @@ func lastLogEntry(t *testing.T, headers map[string]string) (map[string]interface
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
-	h := New(broker.New(store.NewInMemoryStore(), nil))
+	h := New(broker.New(nil))
 	h.SetBasicAuthCredentials("broker-user", "broker-secret")
 
 	logBuf := &testLogWriter{}

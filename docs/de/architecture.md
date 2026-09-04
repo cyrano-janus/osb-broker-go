@@ -19,13 +19,13 @@ sondern in einer YAML-Datei — siehe
   ├─────────────────────────────────────────────────────────┤
   │ internal/handlers  gin-Router, OSB-Endpunkte             │
   │                                                          │
-  │        resolveDefinition(service_id)                     │
-  │             ├── trifft zu ──▶ Engine-Pfad                │
-  │             └── trifft nicht zu ──▶ Fallback-Pfad        │
+  │        definitionFor(service_id)                         │
+  │             ├── trifft zu ──▶ Engine                     │
+  │             └── trifft nicht zu ──▶ 400 BadRequest       │
   ├──────────────────────┬──────────────────────────────────┤
   │ internal/definition  │ internal/broker                   │
-  │ DIE ENGINE           │ Fallback-Broker + StateStore      │
-  │ YAML ─▶ CR           │ internal/store: Demo-Katalog      │
+  │ DIE ENGINE           │ Zustandsspeicher                  │
+  │ YAML ─▶ CR           │ wer existiert, wer gebunden ist   │
   └──────────┬───────────┴───────────┬──────────────────────┘
              │                       │
              ▼                       ▼
@@ -38,44 +38,45 @@ sondern in einer YAML-Datei — siehe
                     Kubernetes
 ```
 
-**Der Verzweigungspunkt ist das Erste, was man verstehen muss.** Er steht in
-`internal/handlers/definition_instances.go:17`:
+**Es gibt einen Pfad, und das ist das Erste, was man verstehen muss.** Jeder
+Handler löst über `definitionFor` die ServiceDefinition zur `service_id` auf
+(`internal/handlers/definition_instances.go`):
 
 ```go
-func (h *Handlers) resolveDefinition(serviceID string) (*definition.ServiceDefinition, error) {
-	if h.engine == nil || h.engine.Engine == nil { return nil, nil }
-	sd, err := h.engine.Engine.DefinitionByServiceID(serviceID)
-	if err != nil { return nil, nil } // not a definition service -> legacy path
-	return sd, nil
+func (h *Handlers) definitionFor(serviceID string) (*definition.ServiceDefinition, error) {
+	if serviceID == "" {
+		return nil, fmt.Errorf("%w: service_id is required", definition.ErrServiceUnknown)
+	}
+	if h.engine == nil || h.engine.Engine == nil {
+		return nil, fmt.Errorf("%w: no service definitions are loaded", definition.ErrServiceUnknown)
+	}
+	return h.engine.Engine.DefinitionByServiceID(serviceID)
 }
 ```
 
-Liefert er eine Definition, läuft der Request durch die Engine. Liefert er
-`nil` — auch im Fehlerfall —, fällt er **stumm** auf einen zweiten, vollständig
-eigenen Broker in `internal/broker/broker.go` zurück. Beide Pfade existieren
-nebeneinander, jeder Handler verzweigt einzeln. Der Code nennt den zweiten Pfad
-`legacy path`; dieses Dokument nennt ihn nach seiner Funktion Fallback-Pfad.
-Was daran hängt, steht in [known-issues.md](known-issues.md) und in
+Kennt die Engine den Service nicht, ist das `ErrServiceUnknown` und damit
+`400` — es gibt keine Rückfallebene, in die ein Request fallen könnte, und der
+Katalog ist genau das, was die Engine kennt. Warum das so entschieden wurde und
+was vorher an der Stelle stand, steht in
 [ADR 0003](adr/0003-replace-http-layer.md).
 
 ## Pakete und Größen
 
-**6.560 Zeilen Produktivcode, 6.497 Zeilen Tests** — das Verhältnis ist
+**6.419 Zeilen Produktivcode, 6.281 Zeilen Tests** — das Verhältnis ist
 ungefähr eins zu eins.
 
 | Paket | Zeilen | Aufgabe |
 |---|---|---|
-| `internal/definition` | 1.493 | **die Engine**: ServiceDefinition laden, Template rendern, CRs anwenden, Readiness auswerten, Credentials formen |
-| `internal/broker` | 1.284 | Fallback-Broker (`broker.go`, 414) **und** der CRD-State-Store (`crdstate.go`, 486) |
-| `internal/handlers` | 1.253 | gin-Router, OSB-Endpunkte, Auth-Middleware, Logging, Metriken |
+| `internal/definition` | 1.586 | **die Engine**: ServiceDefinition laden, Template rendern, CRs anwenden, Readiness auswerten, Credentials formen |
+| `internal/broker` | 1.026 | Zustandsspeicher: Zugang (`broker.go`, 100) und der CRD-State-Store (`crdstate.go`, 486) |
+| `internal/handlers` | 1.265 | gin-Router, OSB-Endpunkte, Auth-Middleware, Logging, Metriken |
 | `internal/config` | 411 | Umgebungsvariablen zu einer validierten Struktur, Fail-Fast |
 | `internal/apis/v1alpha1` | 309 | Go-Typen der State-CRDs |
 | `internal/server` | 301 | `http.Server`, TLS, Zertifikats-Hot-Reload, Signalbehandlung |
 | `internal/auth` | 299 | Authenticator-Kette, unabhängig von gin |
 | `internal/migrate` | 208 | übernimmt Zustand aus einer ConfigMap im Format `state.json` |
-| `internal/store` | 131 | statischer Demo-Katalog |
-| `main.go` | 135 | Verdrahtung, sonst nichts |
-| `cmd/osb-checker` | 658 | Konformitätssuite, CI-Gate |
+| `main.go` | 139 | Verdrahtung, sonst nichts |
+| `cmd/osb-checker` | 797 | Konformitätssuite, CI-Gate |
 | `cmd/osb-state-migrate` | 66 | Werkzeug um `internal/migrate` |
 
 ## Die Schichten im Einzelnen
@@ -184,18 +185,16 @@ nie durchgesetzt.
 
 ### `internal/broker` — zwei Dinge in einem Paket
 
-Das Paket trägt zwei völlig verschiedene Aufgaben, und das ist der Kern der
-Verwirrung beim ersten Lesen:
+Das Paket hat eine Aufgabe: die Buchführung. Welche Instanzen und Bindings der
+Broker kennt — nicht, wie die Dienste hergestellt werden.
 
 - **`crdstate.go` (486 Zeilen) ist der Zustandsspeicher.** Je
   Datensatz ein `OSBServiceInstance` beziehungsweise `OSBServiceBinding`,
   Schreibvorgänge mit `RetryOnConflict`, Credentials in einem eigenen Secret mit
   `OwnerReference`. Begründung in
   [ADR 0001](adr/0001-kubernetes-as-state-store.md).
-- **`broker.go` (414 Zeilen) ist der Fallback-Broker** — eine zweite, vollständige
-  OSB-Implementierung mit eigenem Katalog aus `internal/store`. Sie bedient
-  alles, was `resolveDefinition` nicht erkennt, und ihre Demo-Services
-  `service-1` und `service-2` erscheinen in jedem Katalog.
+- **`broker.go` (100 Zeilen) ist der Zugang dazu** — lesen, schreiben,
+  vergessen, und die zwei OSB-Antworten `GET instance` und `GET binding`.
 
 Objektnamen leitet der Store aus der OSB-ID ab, solange diese ein gültiges
 DNS-1123-Label bis 63 Zeichen ist — bei Cloud Foundry immer der Fall, weil dort
@@ -205,24 +204,21 @@ den falschen Datensatz liefert.
 
 ## Wo die Grenze verläuft
 
-Der Vorschlag lautet: **Engine behalten, HTTP-Schicht ersetzen.** Die Grenze
-läuft zwischen den Schichten, nicht quer durch sie:
+Die Entscheidung lautete: **Engine behalten, HTTP-Schicht ersetzen.** Die
+Grenze läuft zwischen den Schichten, nicht quer durch sie:
 
 | Teil | Zeilen | Urteil |
 |---|---|---|
-| `internal/definition` | 1.493 | trägt |
+| `internal/definition` | 1.586 | trägt |
 | `internal/broker/crdstate.go` und Umfeld | ~700 | trägt |
 | `internal/config`, `server`, `auth` | 1.011 | trägt |
 | `internal/apis/v1alpha1` | 309 | trägt |
-| `cmd/osb-checker` | 658 | trägt |
+| `cmd/osb-checker` | 797 | trägt |
 | Logging, Metriken, Docs-Endpunkte | ~290 | trägt, entkoppelte Querschnitte |
-| **Doppelpfad in den Handlern** | ~580 | zu ersetzen |
-| **`broker.go` (Fallback-Broker)** | 414 | zu ersetzen |
-| **`store.go` (Demo-Katalog)** | 131 | zu ersetzen |
 
 Dass die Engine trägt, ist belegt: zwei Operatoren mit unterschiedlichen
 CRD-Gruppen, Condition-Typen und Credential-Layouts laufen über sie, ohne dass
-`internal/definition` etwas je Service wüsste. Zu ersetzen wären ein Pfad statt
-zwei, echtes Async über einen persistierten Operations-Datensatz und typisierte
-Fehler statt `strings.Contains`. Der Vorschlag dazu ist
-[ADR 0003](adr/0003-replace-http-layer.md), Status `vorgeschlagen`.
+`internal/definition` etwas je Service wüsste. Ersetzt wurde die Schicht
+darüber: ein Pfad statt zwei, ein Katalog aus Definitionen statt aus Demo-Daten
+und typisierte Fehler statt `strings.Contains`. Die Entscheidung dazu ist
+[ADR 0003](adr/0003-replace-http-layer.md).

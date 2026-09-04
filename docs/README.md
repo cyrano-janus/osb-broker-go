@@ -29,7 +29,7 @@ Gliederung und keine toten Verweise haben.
 |---|---|---|---|---|
 | 0001 | Kubernetes as the only state store · Kubernetes als einziger Zustandsspeicher | accepted | [en](en/adr/0001-kubernetes-as-state-store.md) | [de](de/adr/0001-kubernetes-as-state-store.md) |
 | 0002 | Declarative ServiceDefinitions · Deklarative ServiceDefinitions | accepted | [en](en/adr/0002-declarative-service-definitions.md) | [de](de/adr/0002-declarative-service-definitions.md) |
-| 0003 | Replace the HTTP layer · HTTP-Schicht ersetzen | **proposed** | [en](en/adr/0003-replace-http-layer.md) | [de](de/adr/0003-replace-http-layer.md) |
+| 0003 | Replace the HTTP layer · HTTP-Schicht ersetzen | accepted | [en](en/adr/0003-replace-http-layer.md) | [de](de/adr/0003-replace-http-layer.md) |
 | 0004 | TLS and mTLS, no OAuth2 · TLS und mTLS, kein OAuth2 | accepted | [en](en/adr/0004-tls-and-mtls-no-oauth2.md) | [de](de/adr/0004-tls-and-mtls-no-oauth2.md) |
 | 0005 | CNCF Service Binding Specification | accepted | [en](en/adr/0005-cncf-service-binding-spec.md) | [de](de/adr/0005-cncf-service-binding-spec.md) |
 | 0006 | The OSB API is the only coupling · Die OSB-API ist die einzige Kopplung | accepted | [en](en/adr/0006-platform-independence.md) | [de](de/adr/0006-platform-independence.md) |

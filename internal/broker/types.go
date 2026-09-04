@@ -1,7 +1,5 @@
 package broker
 
-import "github.com/example/osb-broker/internal/store"
-
 // OSB API Version
 const APIVersion = "2.17"
 
@@ -160,8 +158,53 @@ type Operation struct {
 	Type        string // "provision", "update", "deprovision", "bind", "unbind"
 }
 
-// Type aliases from store package (to avoid import cycle)
-type Catalog = store.Catalog
-type Service = store.Service
-type ServicePlan = store.ServicePlan
-type ServiceMetadata = store.ServiceMetadata
+
+// Instance represents a service instance
+type Instance struct {
+	ID           string
+	ServiceID    string
+	PlanID       string
+	Context      Context
+	Parameters   map[string]interface{}
+	DashboardURL string
+	Ready        bool
+	// Namespace ist der Namespace, in dem die Operator-Ressourcen dieser
+	// Instanz liegen - abgeleitet aus der Space-GUID beim Provision.
+	//
+	// Er muss gespeichert werden, weil er aus spaeteren Requests grundsaetzlich
+	// nicht herleitbar ist: ein OSB-Deprovision oder last_operation traegt
+	// weder context noch space_guid. Vorher setzten drei Codepfade hart
+	// "default" ein und suchten damit am falschen Ort (FINDINGS #7/#16).
+	Namespace string
+	// AppliedObjects lists the K8s object names created for this instance
+	// (multi-doc, 4.6). Persisted via the StateStore so deprovision can
+	// remove every object even after a restart. Empty = single-doc legacy.
+	AppliedObjects []string
+	// AppliedRefs carries the same objects including their apiVersion/kind,
+	// which a multi-doc template may vary per document.
+	AppliedRefs []AppliedObjectRef
+}
+
+// AppliedObjectRef identifies one K8s object created for an instance.
+type AppliedObjectRef struct {
+	APIVersion string
+	Kind       string
+	Namespace  string
+	Name       string
+}
+
+// Binding represents a service binding
+type Binding struct {
+	ID              string
+	InstanceID      string
+	ServiceID       string
+	PlanID          string
+	AppGUID         string
+	Context         Context
+	Parameters      map[string]interface{}
+	Credentials     map[string]interface{}
+	SyslogDrainURL  string
+	RouteServiceURL string
+	VolumeMounts    []interface{}
+	Ready           bool
+}

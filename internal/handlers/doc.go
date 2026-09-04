@@ -6,10 +6,12 @@
 // frei; die Metrics-Middleware haengt ebenfalls davor, damit ein 401 gezaehlt
 // wird und nicht unsichtbar bleibt.
 //
-// Der Verzweigungspunkt des gesamten Pakets ist resolveDefinition: liefert es
-// eine ServiceDefinition, laeuft der Request durch internal/definition;
-// liefert es nil - auch im Fehlerfall -, faellt er stumm auf den zweiten,
-// vollstaendigen Broker in internal/broker/broker.go zurueck. Was an diesem
-// Doppelpfad haengt, steht in docs/de/architecture.md und in
-// docs/de/adr/0003-replace-http-layer.md.
+// Jeder Request loest ueber definitionFor seine ServiceDefinition auf. Kennt
+// die Engine den Service nicht, ist das ErrServiceUnknown und damit 400 - es
+// gibt keine Rueckfallebene. Frueher fiel ein Request an dieser Stelle stumm
+// auf einen zweiten, vollstaendigen Broker mit eigenem Katalog zurueck; was
+// daran hing, steht in docs/de/adr/0003-replace-http-layer.md.
+//
+// Fehler werden ueber ihren Wert auf Statuscodes abgebildet, nicht ueber ihren
+// Text - siehe errors.go und internal/definition/errors.go.
 package handlers

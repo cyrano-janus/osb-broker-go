@@ -46,14 +46,17 @@ type Config struct {
 const cnpgServiceID = "f48a9e21-cnpg-0000-0000-000000000001"
 const smallPlanID = "plan-small-0000-0000-000000000001"
 
-// demoServiceIDs sind die fest verdrahteten Angebote aus internal/store, die
-// jedem Katalog vorangestellt werden. Sie werden vom Fallback-Broker bedient,
-// nicht von der Engine.
+// demoServiceIDs sind Angebote, die ein Lifecycle-Audit nie pruefen darf: sie
+// beweisen nichts ueber den Broker, weil hinter ihnen kein Operator steht.
 //
-// Der Lifecycle-Audit muss sie ueberspringen: wer den ersten Katalogeintrag
-// nimmt, prueft immer sie und nie eine ServiceDefinition - und genau deshalb
-// ist lange niemandem aufgefallen, dass der Definitions-Pfad seine Bindings
-// nicht persistiert.
+// Wer den ersten Katalogeintrag nimmt, prueft immer sie und nie eine
+// ServiceDefinition - genau deshalb ist lange niemandem aufgefallen, dass der
+// Definitions-Pfad seine Bindings nicht persistiert.
+//
+// Dieser Broker stellt sie nicht mehr aus; sein Katalog besteht nur noch aus
+// ServiceDefinitions. Die Liste bleibt trotzdem, aus zwei Gruenden: der
+// Checker laeuft auch gegen fremde Broker, und der naechste Demo-Service soll
+// nicht wieder unbemerkt zum Prueffall werden.
 var demoServiceIDs = map[string]bool{"service-1": true, "service-2": true}
 
 var failures int

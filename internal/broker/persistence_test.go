@@ -5,7 +5,6 @@ import (
 
 	"testing"
 
-	"github.com/example/osb-broker/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -100,20 +99,19 @@ func TestInMemoryStore_ListBindingsByInstance(t *testing.T) {
 }
 
 func TestInMemoryStore_SurvivesBrokerRestart(t *testing.T) {
-	// The contract that matters for Phase 1.1: state outlives the broker
-	// process. Wire two brokers to the same store and verify visibility.
+	// Der Vertrag, auf den es ankommt: der Zustand ueberlebt den Prozess.
+	// Zwei Broker auf demselben Speicher, und der zweite sieht, was der erste
+	// geschrieben hat.
 	s := NewInMemoryStateStore()
-	catalog := store.NewInMemoryStore()
-	b1 := New(catalog, s)
-	_, err := b1.Provision(context.Background(), "inst-9", &ProvisionRequest{
-		ServiceID: "service-1",
-		PlanID:    "plan-free",
+	require.NoError(t, New(s).RecordInstance(context.Background(), &Instance{
+		ID:        "inst-9",
+		ServiceID: "def-svc-0001",
+		PlanID:    "def-plan-free",
 		Context:   Context{Platform: "cloudfoundry"},
-	})
-	require.NoError(t, err)
+	}))
 
-	b2 := New(catalog, s) // "restarted" broker
-	resp, err := b2.GetInstance(context.Background(), "inst-9")
+	resp, err := New(s).GetInstance(context.Background(), "inst-9")
+
 	require.NoError(t, err)
-	assert.Equal(t, "service-1", resp.ServiceID)
+	assert.Equal(t, "def-svc-0001", resp.ServiceID)
 }

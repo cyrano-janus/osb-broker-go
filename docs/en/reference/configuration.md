@@ -19,7 +19,7 @@ dangerous answer: the broker would run and lose all state on restart.
 | `PORT` | `8080` | Listening port. With TLS the chart sets `8443`. |
 | `STORE_BACKEND` | `memory` | `crd` or `memory`. `k8s` is an alias for `crd` and produces a warning. Anything else is a **start-up error**. |
 | `POD_NAMESPACE` | empty | Namespace holding the state CRs. Required with `STORE_BACKEND=crd`; the chart fills it via `fieldRef`. |
-| `DEFINITIONS_DIR` | empty | Directory holding the ServiceDefinitions. Empty means no definitions, only the demo catalogue. |
+| `DEFINITIONS_DIR` | empty | Directory holding the ServiceDefinitions. Empty means an empty catalogue; the broker offers nothing. |
 | `METRICS_ENABLED` | on | **Only the exact value `0` turns it off.** No `ParseBool`: `false` leaves metrics on. |
 
 ### Authentication

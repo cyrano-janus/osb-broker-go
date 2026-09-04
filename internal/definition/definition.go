@@ -85,7 +85,7 @@ func ValidatePlanParams(plan *Plan, parameters map[string]interface{}) error {
 	}
 	for key := range parameters {
 		if !allowed[key] {
-			return fmt.Errorf("%w: parameter %q is not allowed in plan %q", ErrNotFound, key, plan.Name)
+			return fmt.Errorf("%w: parameter %q is not allowed in plan %q", ErrParameterNotAllowed, key, plan.Name)
 		}
 	}
 	return nil
@@ -262,5 +262,5 @@ func (sd *ServiceDefinition) PlanByID(planID string) (*Plan, error) {
 			return &sd.Spec.Offering.Plans[i], nil
 		}
 	}
-	return nil, fmt.Errorf("%w: plan %q not found in service %q", ErrNotFound, planID, sd.Spec.Offering.Name)
+	return nil, fmt.Errorf("%w: plan %q not found in service %q", ErrPlanUnknown, planID, sd.Spec.Offering.Name)
 }

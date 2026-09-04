@@ -117,7 +117,7 @@ func (e *Engine) Catalog() []CatalogEntry {
 func (e *Engine) DefinitionByServiceID(serviceID string) (*ServiceDefinition, error) {
 	d, ok := e.byServiceID[serviceID]
 	if !ok {
-		return nil, fmt.Errorf("%w: service %q", ErrNotFound, serviceID)
+		return nil, fmt.Errorf("%w: service %q", ErrServiceUnknown, serviceID)
 	}
 	return d, nil
 }

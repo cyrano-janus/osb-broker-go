@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/example/osb-broker/internal/broker"
-	"github.com/example/osb-broker/internal/store"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,7 +14,7 @@ import (
 func newMetricsTestRouter(t *testing.T) (*gin.Engine, *Metrics) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
-	b := broker.New(store.NewInMemoryStore(), nil)
+	b := broker.New(nil)
 	h := New(b)
 	m := NewMetrics()
 	h.SetMetrics(m)
@@ -55,7 +54,7 @@ func TestMetrics_RequestsCounted(t *testing.T) {
 func TestMetrics_UnauthenticatedRequestsCounted(t *testing.T) {
 	// The middleware must run BEFORE auth so 401s are visible.
 	gin.SetMode(gin.TestMode)
-	b := broker.New(store.NewInMemoryStore(), nil)
+	b := broker.New(nil)
 	h := New(b)
 	m := NewMetrics()
 	h.SetMetrics(m)
@@ -96,7 +95,7 @@ func TestMetrics_RoutePatternLowCardinality(t *testing.T) {
 
 func TestMetrics_DisabledWhenNotSet(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	b := broker.New(store.NewInMemoryStore(), nil)
+	b := broker.New(nil)
 	h := New(b)
 	assert.False(t, h.metricsEnabled())
 	router := h.SetupRouter()

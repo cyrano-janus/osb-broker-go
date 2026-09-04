@@ -52,7 +52,7 @@ func (e *Engine) resolveSecretName(ctx context.Context, sd *ServiceDefinition, n
 	}
 	return "", fmt.Errorf(
 		"%w: %s does not expose .status.binding.name for instance %q; set spec.bind.credentialsFromSecret as a fallback",
-		ErrNotFound, sd.Spec.Provision.Kind, instanceID)
+		ErrResourceGone, sd.Spec.Provision.Kind, instanceID)
 }
 
 // provisionedServiceSecret liest .status.binding.name aus dem CR. Ein leeres

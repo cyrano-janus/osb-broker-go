@@ -16,7 +16,6 @@ import (
 
 	"github.com/example/osb-broker/internal/auth"
 	"github.com/example/osb-broker/internal/broker"
-	"github.com/example/osb-broker/internal/store"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -88,7 +87,7 @@ func newMTLSServer(t *testing.T, ca *mtlsCA) *httptest.Server {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
-	h := New(broker.New(store.NewInMemoryStore(), nil))
+	h := New(broker.New(nil))
 	h.SetAuthenticator(auth.NewChain(
 		auth.NewBasic("broker-user", "broker-secret", "osb-broker"),
 		auth.NewMTLS([]string{"osb-checker"}, nil, nil),

@@ -14,27 +14,13 @@ target platform or only the development platform?** What separates the two is in
 
 ## Functional gaps
 
-### Blockers for production Cloud Foundry and TAS
-
-**`last_operation` for bindings is a constant.** `GetLastBindingOperation`
-returns `succeeded` regardless of anything, including for unknown IDs.
-
-**Two demo services in the production catalogue.** `internal/store` provides a
-hardcoded catalogue with `service-1` and `service-2` that is prepended to every
-`GET /v2/catalog`. There is no switch against it. *FINDINGS #9.*
-
-### Functionally missing, not a breach
+None of the open points currently blocks a target platform.
 
 **User parameters do not reach the template.** `Engine.ProvisionInstance`
 accepts `parameters` and does not use them; `RenderProvision` only sets
 `InstanceID`, `SafeName` and `Plan`. `TemplateData.Parameters` is populated
 nowhere. `cf create-service -c` has no effect, and a `{{ .parameters.x }}` in a
 template fails because of `missingkey=error`. *FINDINGS #17.*
-
-**`allowedParameters` is only checked on update.** `UpdateServiceInstance`
-validates, `ProvisionServiceInstance` does not. On provision arbitrary
-parameters are accepted and then discarded — not an error, just no effect, and
-that is the more unpleasant variant.
 
 **`readiness.timeoutSeconds` is never enforced.** A stuck operator makes the
 instance report `in progress` forever. `last_operation` only reports `failed`
@@ -50,28 +36,12 @@ are registered and permanently report 0.
 
 ## Structural problems
 
-**Two complete broker implementations side by side.** Every handler branches on
-its own through `resolveDefinition`
-(`internal/handlers/definition_instances.go:17`); if it returns `nil` — including
-on error — the request falls back silently to `internal/broker/broker.go`, a
-second complete broker with its own catalogue. This is the root of several of
-the points above. *FINDINGS #13.*
-
 **Nothing demonstrates that the gate's checks can fail.** `cmd/osb-checker`
 has no mutation suite: only `pickService` and `checkServiceBindingSpec` are
 tested, not the checks themselves. A gate whose checks are ineffective is
 indistinguishable from a green one — which is exactly what happened while the
 selection always hit the demo service (*FINDINGS #20*, fixed). The standalone
 checker has such a suite.
-
-**The HTTP status is guessed from error text.**
-`internal/handlers/errors.go` decides via `strings.Contains`. Every DELETE error
-with "not found" in its text becomes `410`, including "service not found".
-*FINDINGS #18.*
-
-**What follows from this:** the proposal to replace the HTTP layer and keep the
-engine is recorded as [ADR 0003](adr/0003-replace-http-layer.md) with status
-*proposed*. The state store is not affected by it.
 
 ## Definitions and deployment
 
@@ -124,8 +94,6 @@ None of it does harm, all of it costs reading time:
 
 | Location | State |
 |---|---|
-| `internal/handlers/definition_instances.go` | `deprovisionDefinition` is never called |
-| `internal/broker/broker.go` | `createOperation` and the whole `operations` map unused |
 | `internal/definition/operator.go` | `ApplyCR` and `ApplyManifests` only called from tests; `jsonField` unused |
 | `internal/definition/render.go` | the methods `instanceID()` and `safeName()` are unreachable; the mechanism is `lowerCase()` |
 | `internal/definition/engine.go`, `internal/handlers/*` | `var _ = …` as import keepers |
@@ -152,14 +120,15 @@ closer to the target platform than Korifi. Classification in
 The points are connected; worked through in this order each one makes the next
 visible or cheaper.
 
-1. **Dual path** — as long as a request silently falls through to a second
-   broker with its own catalogue on the slightest error, all further work is
-   measured against nothing. The demo catalogue goes with it.
-2. **`last_operation` for bindings** — structurally attached to the dual path
-   and falls with it.
-3. **User parameters and `allowedParameters`** — together, because both concern
-   the same route through the engine.
-4. **Error classification** — typed errors instead of `strings.Contains`; they
-   steer the platform's retry behaviour.
-5. **Enforce `readiness.timeoutSeconds`** — until then a stuck operator reports
-   `in progress` until the platform itself gives up.
+1. **User parameters** — `cf create-service -c` has no effect as long as
+   `TemplateData.Parameters` is populated by no caller. The check against
+   `allowedParameters` is already in place, it just has nothing to check yet.
+2. **Enforce `readiness.timeoutSeconds`** — until then a stuck operator reports
+   `in progress` until the platform itself gives up. Only after that is a wrong
+   readiness path visible even when nobody is looking.
+3. **The five unverified readiness paths** — create one CR per operator and
+   compute the path against it. Needs the operators in the cluster.
+4. **Orphaned CRs after a failed provision** — attached to 2., because both
+   concern the engine's abort path.
+5. **A mutation suite for `cmd/osb-checker`** — the standalone checker has one,
+   and on its first run it found two ineffective checks.

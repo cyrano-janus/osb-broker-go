@@ -9,7 +9,6 @@ import (
 
 	"github.com/example/osb-broker/internal/broker"
 	"github.com/example/osb-broker/internal/definition"
-	"github.com/example/osb-broker/internal/store"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -81,7 +80,7 @@ func newSpecBindingRouter(t *testing.T) (*gin.Engine, *definition.OperatorClient
 	stateStore := broker.NewInMemoryStateStore()
 	engine.SetInstanceRegistry(&stateStoreRegistry{store: stateStore})
 
-	b := broker.New(store.NewInMemoryStore(), stateStore)
+	b := broker.New(stateStore)
 	h := New(b)
 	h.SetEngine(&EngineHolder{Engine: engine, Op: oc})
 	return h.SetupRouter(), oc

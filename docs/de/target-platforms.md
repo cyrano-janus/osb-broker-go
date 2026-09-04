@@ -81,6 +81,8 @@ sie ersetzt hier die Plattform.
 | Neustart-Persistenz | Instanzen und Bindings überleben Kill und Rescheduling |
 | Asynchrones Provision | `202` mit `operation`, `last_operation` meldet `in progress` bis der Operator fertig ist, danach `succeeded`; ohne `accepts_incomplete=true` antwortet der Broker `422 AsyncRequired` |
 | Binding-Lebenszyklus vollständig | Bind `201`, Wiederholung `200` mit denselben Zugangsdaten, `GET binding` `200`, Unbind `200`, Unbind einer unbekannten Binding `410` |
+| Ein Pfad, kein Rückfall | der Katalog besteht ausschließlich aus ServiceDefinitions; eine unbekannte `service_id` ist `400` und läuft nicht in eine zweite Implementierung |
+| Statuscodes aus Fehlerwerten | ein unbekannter Plan ist auch auf einem `DELETE` `400` und nicht `410` — die Zuordnung hängt nicht mehr an Formulierungen |
 | Secret-Name aus `status.binding.name` | der RabbitMQ-Operator meldet `osb-<id>-default-user`, der Broker nutzt ihn ohne Namenstemplate |
 | Zielform per `mapping` | das Binding enthält genau `host, password, port, provider, type, uri, username`; `default_user.conf` und `connection_string` bleiben draußen |
 | Spec-konformes Secret | Typ `servicebinding.io/rabbitmq`, Labels für Instanz und Binding, `OwnerReference` auf den `RabbitmqCluster` |
@@ -115,15 +117,14 @@ nicht. Die Langfassung je Punkt steht in
 
 | Abweichung | auf Korifi | auf produktivem CF / TAS |
 |---|---|---|
-| `last_operation` für Bindings antwortet hart `succeeded` | unauffällig | **Blocker**, sobald Bindings asynchron werden |
-| Demo-Katalog `service-1` / `service-2` immer im Katalog | kosmetisch | **nicht vertretbar** in einem produktiven Marketplace |
 | Benutzerparameter erreichen das Template nie | `cf create-service -c` wirkt nicht | funktionale Lücke, kein Bruch |
-| `allowedParameters` nur bei `PATCH` geprüft | unauffällig | still falsch — Provision nimmt alles an und verwirft es kommentarlos |
-| Fehlerklassifikation über Fehlertexte | unauffällig | falsche Statuscodes steuern die Retry-Logik der Plattform fehl |
+| `readiness.timeoutSeconds` wird nie durchgesetzt | unauffällig, die Testservices sind schnell | ein hängender Operator meldet `in progress`, bis die Plattform selbst aufgibt |
+| Fünf Readiness-Pfade sind ungeprüft | die Operatoren sind gar nicht installiert | ein danebenliegender Pfad kostet ein Plattform-Zeitlimit je Instanz |
 
-Die mit **Blocker** markierten Punkte liegen in der HTTP-Schicht, keiner in der
-Engine und keiner im Zustandsspeicher — und beide hängen am Doppelpfad, den
-[ADR 0003](adr/0003-replace-http-layer.md) zur Entscheidung stellt.
+Keine dieser Abweichungen ist ein Ausschlusskriterium. Die Punkte, die es waren,
+lagen alle in der HTTP-Schicht und sind mit ihr ersetzt worden —
+[ADR 0003](adr/0003-replace-http-layer.md). Was bleibt, sind funktionale
+Lücken und Sorgfaltsarbeit an den Definitionen.
 
 ## Was mit Korifi passiert
 

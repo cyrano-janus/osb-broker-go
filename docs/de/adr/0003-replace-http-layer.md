@@ -2,103 +2,94 @@
 
 > [English](../../en/adr/0003-replace-http-layer.md) · Führende Fassung: deutsch
 
-**Status:** **vorgeschlagen** — nicht entschieden · **Betrifft:** `internal/handlers`, `internal/broker/broker.go`, `internal/store`
-
-> Dieses Dokument hält einen Vorschlag fest, keine getroffene Entscheidung.
+**Status:** **angenommen** · **Betrifft:** `internal/handlers`, `internal/broker/broker.go`, `internal/store`
 
 ## Kontext
 
-Mehrere der offenen Befunde gehen auf eine gemeinsame Ursache zurück: **es gibt
+Mehrere der offenen Befunde gingen auf eine gemeinsame Ursache zurück: **es gab
 zwei vollständige Broker-Implementierungen im selben Prozess.**
 
-Jeder Handler verzweigt einzeln über `resolveDefinition`
-(`internal/handlers/definition_instances.go:17`). Liefert es eine Definition,
-läuft der Request durch die Engine; liefert es `nil` — auch im Fehlerfall —,
-fällt er stumm auf `internal/broker/broker.go` zurück, einen zweiten Broker mit
-eigenen Instanz- und Binding-Maps und einem Fake-Katalog aus `internal/store`.
+Jeder Handler verzweigte einzeln über `resolveDefinition`. Lieferte es eine
+Definition, lief der Request durch die Engine; lieferte es `nil` — auch im
+Fehlerfall —, fiel er stumm auf `internal/broker/broker.go` zurück, einen
+zweiten Broker mit eigenen Instanz- und Binding-Maps und einem Demo-Katalog aus
+`internal/store`.
 
-Daraus folgen unmittelbar:
+Daraus folgte unmittelbar:
 
-- Der Demo-Katalog erscheint in jedem Produktivkatalog.
-- Die eigene Konformitätssuite prüft den Fallback-Pfad, weil sie den ersten
-  Service aus dem Katalog nimmt — deshalb ist die fehlende Binding-Persistenz
+- Der Demo-Katalog erschien in jedem Produktivkatalog, ohne Schalter dagegen.
+- Die eigene Konformitätssuite prüfte den Fallback-Pfad, weil sie den ersten
+  Service aus dem Katalog nahm — deshalb war die fehlende Binding-Persistenz
   nie aufgefallen.
-- `GET instance` und `GET binding` laufen **immer** über den Fallback-Pfad, auch
+- `GET instance` und `GET binding` liefen **immer** über den Fallback-Pfad, auch
   für Definitions-Services.
-- Async ist nie angebunden: `accepts_incomplete` wird an der falschen Stelle
-  gelesen, und der `last_operation`-Apparat läuft leer.
-- Der HTTP-Status wird aus Fehlertexten geraten.
-
-Die Einzelheiten stehen in [known-issues.md](../known-issues.md), die
-Auswirkung je Zielplattform in [target-platforms.md](../target-platforms.md).
-**Vier dieser Punkte sind Blocker für produktives Cloud Foundry und TAS**, und
-alle vier liegen in derselben Schicht.
+- `last_operation` für Bindings war eine Konstante.
+- Der HTTP-Status wurde aus Fehlertexten geraten: jeder Fehler mit „not found"
+  wurde auf einem `DELETE` zu `410 Gone`, ein unbekannter Plan also genauso wie
+  eine bereits gelöschte Instanz.
 
 ## Abgrenzung
 
-Der Zustandsspeicher ist von diesem Vorschlag **nicht** betroffen. Er liegt in
-eigenen Ressourcenarten mit `RetryOnConflict` und trägt
-([ADR 0001](0001-kubernetes-as-state-store.md)). Zur Disposition steht allein
-die HTTP-Schicht und der Fallback-Broker dahinter.
+Der Zustandsspeicher ist von dieser Entscheidung **nicht** betroffen. Er liegt
+in eigenen Ressourcenarten mit `RetryOnConflict` und trägt
+([ADR 0001](0001-kubernetes-as-state-store.md)). Ersetzt wurde allein die
+HTTP-Schicht und der Fallback-Broker dahinter.
 
-## Vorschlag
+## Entscheidung
 
-**Die HTTP-Schicht ersetzen, die Engine behalten.** Konkret:
+**Die HTTP-Schicht ist ersetzt, die Engine bleibt.** Konkret:
 
-- **Ein Pfad statt zwei.** Der Fallback-Broker und der Demo-Katalog entfallen
-  ersatzlos. Ein Service, der keiner Definition entspricht, ist ein Fehler und
-  keine stille Rückfallebene.
-- **Echtes Async** über einen persistierten Operations-Datensatz:
-  `accepts_incomplete` aus der Query lesen, `202 Accepted` mit `operation`
-  antworten, `last_operation` gegen den echten Readiness-Zustand beantworten.
-- **Bindings persistieren**, damit `GET binding` und die Idempotenz stimmen.
-- **Typisierte Fehler** statt `strings.Contains` auf Fehlertexten.
+- **Ein Pfad statt zwei.** Der Fallback-Broker und der Demo-Katalog sind
+  ersatzlos entfallen; `internal/store` gibt es nicht mehr. Ein Service, der
+  keiner Definition entspricht, ist ein Fehler — `400` mit
+  `ErrServiceUnknown` — und keine stille Rückfallebene.
+- **Der Katalog ist genau das, was die Engine kennt.** Ohne geladene
+  Definitionen antwortet `GET /v2/catalog` mit einer leeren Liste, nicht mit
+  erfundenen Services.
+- **Typisierte Fehler statt `strings.Contains`.** `internal/definition/errors.go`
+  führt `ErrServiceUnknown`, `ErrPlanUnknown`, `ErrResourceGone` und
+  `ErrParameterNotAllowed` unter der Oberkategorie `ErrNotFound`. Die
+  HTTP-Schicht bildet Werte ab, keine Formulierungen.
+- **`last_operation` für Bindings ist eine echte Abfrage.** Für eine bekannte
+  Binding `succeeded`, für eine unbekannte `410 Gone`.
 
 **Kein Neuschreiben des Repos.** Die Engine ist der teure Teil, und sie trägt.
 
-## Warum sich das rechnet
+## Warum sich das gerechnet hat
 
-Das eigentliche Argument ist nicht die Eleganz, sondern die Kosten der
-Alternative. Die offenen Befunde einzeln zu beheben, ist **innerhalb** der
-Doppelpfad-Struktur bereits ein Durchstich durch sechs Dateien — man zahlte fast
-den Preis des Umbaus und behielte die Struktur, die das Problem erzeugt.
+Das Argument war nicht die Eleganz, sondern die Kosten der Alternative. Die
+offenen Befunde einzeln zu beheben, war **innerhalb** der Doppelpfad-Struktur
+bereits ein Durchstich durch sechs Dateien — man zahlte fast den Preis des
+Umbaus und behielte die Struktur, die das Problem erzeugt.
 
 Dass die Engine den Umbau trägt, ist belegt: zwei Operatoren mit
 unterschiedlichen CRD-Gruppen, Condition-Typen und Credential-Layouts laufen
 über sie, ohne dass `internal/definition` etwas je Service wüsste. Der Umbau
-fasst sie deshalb nicht an.
+hat sie nicht angefasst.
 
 ## Umfang
 
-Von 6.560 Zeilen Produktivcode:
+| Teil | Urteil |
+|---|---|
+| `internal/definition` | unverändert |
+| `internal/broker/crdstate.go` und Umfeld | unverändert |
+| `internal/config`, `server`, `auth` | unverändert |
+| `internal/apis/v1alpha1` | unverändert |
+| `cmd/osb-checker` | unverändert |
+| Doppelpfad in den Handlern | ersetzt |
+| `internal/broker/broker.go` | auf den Zustandszugang reduziert |
+| `internal/store` | gelöscht |
 
-| Teil | Zeilen | Urteil |
-|---|---|---|
-| `internal/definition` | 1.493 | behalten |
-| `internal/broker/crdstate.go` und Umfeld | ~700 | behalten |
-| `internal/config`, `server`, `auth` | 1.011 | behalten |
-| `internal/apis/v1alpha1` | 309 | behalten |
-| `cmd/osb-checker` | 658 | behalten |
-| Logging, Metriken, Docs-Endpunkte | ~290 | behalten |
-| Doppelpfad in den Handlern | ~580 | ersetzen |
-| `internal/broker/broker.go` | 414 | ersetzen |
-| `internal/store` | 131 | entfällt |
+`internal/broker/broker.go` schrumpfte von 437 auf 100 Zeilen, die
+Handler-Schicht von rund 580 Zeilen Verzweigung auf einen Pfad.
 
-Rund 1.100 Zeilen zu ersetzen, gut 4.400 bleiben.
+## Konsequenzen
 
-## Konsequenzen, wenn zugestimmt wird
-
-- Die Konformitätssuite prüft danach die Engine, weil es nur noch sie gibt.
-  Zu erwarten ist, dass dabei weitere Abweichungen sichtbar werden, die heute
-  hinter dem Demo-Service verborgen sind.
-- `internal/auth`, `internal/server` und `internal/config` sprechen `net/http`
-  statt gin und überleben den Wechsel unverändert. Genau dafür sind sie so
-  geschnitten.
+- Die Konformitätssuite prüft die Engine, weil es nur noch sie gibt. Der
+  standalone-Checker braucht keine `skip_services`-Liste mehr.
+- `internal/auth`, `internal/server` und `internal/config` haben den Wechsel
+  unverändert überlebt. Genau dafür sind sie so geschnitten.
 - Der Umbau ist ein Bruch nach innen, nicht nach außen: die OSB-API bleibt, was
   sie ist — siehe [ADR 0006](0006-platform-independence.md).
-
-## Konsequenzen, wenn abgelehnt wird
-
-Die vier Blocker bleiben, und der Broker bleibt auf der Entwicklungsplattform
-brauchbar und auf einer Zielplattform nicht einsetzbar. Das ist eine legitime
-Entscheidung, solange sie bewusst getroffen wird.
+- Wer einen Service anbieten will, schreibt eine ServiceDefinition. Es gibt
+  keinen zweiten Weg mehr, und das ist der Punkt.

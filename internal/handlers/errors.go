@@ -3,49 +3,59 @@ package handlers
 import (
 	"errors"
 	"net/http"
-	"strings"
 
+	"github.com/example/osb-broker/internal/broker"
+	"github.com/example/osb-broker/internal/definition"
 	"github.com/gin-gonic/gin"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
-// osbError maps a broker error string to the OSB-correct HTTP status and
-// error name. Central mapping per Phase 1.4 so every handler reports
-// consistent codes:
+// respondOSBError bildet einen Fehler der Engine auf den OSB-Statuscode ab.
 //
-//   - "instance not found" on DELETE        -> 410 Gone   (OSB spec)
-//   - "binding not found" on DELETE         -> 410 Gone   (OSB spec)
-//   - "not found" / unknown service or plan -> 400 Bad Request
-//   - "already exists with different ..."   -> 409 Conflict
-//   - "has existing bindings"               -> 409 Conflict (must unbind first)
-func osbErrorStatus(err error) (status int, name string) {
-	msg := err.Error()
+// Die Zuordnung haengt am Fehlerwert, nicht mehr am Fehlertext. Vorher
+// entschied strings.Contains: jeder Fehler mit "not found" wurde auf einem
+// DELETE zu 410 Gone, ein unbekannter Plan also genauso wie eine bereits
+// geloeschte Instanz. Die Plattform leitet aus dem Statuscode ihr
+// Retry-Verhalten ab - sie darf nicht von einer Wortwahl abhaengen.
+func respondOSBError(c *gin.Context, err error) {
+	status, name := osbErrorStatus(c.Request.Method, err)
+	c.JSON(status, gin.H{"error": name, "description": err.Error()})
+}
+
+func osbErrorStatus(method string, err error) (int, string) {
 	switch {
-	case strings.Contains(msg, "has existing bindings"):
-		return http.StatusConflict, "ConcurrencyErrorException"
-	case strings.Contains(msg, "already exists with different"):
-		return http.StatusConflict, "RequiresAppInstanceAlreadyExists" // conflict family
-	case strings.Contains(msg, "instance not found"):
-		// Bind/Update against a non-existent instance -> 404 per OSB spec.
-		return http.StatusNotFound, "NotFound"
-	case strings.Contains(msg, "not found"):
+	// Katalogfehler des Aufrufers: die Angabe passt nicht zum Katalog. Das
+	// ist 400 - auch auf einem DELETE, wo ein 410 behaupten wuerde, die
+	// Ressource habe es einmal gegeben.
+	case errors.Is(err, definition.ErrServiceUnknown),
+		errors.Is(err, definition.ErrPlanUnknown):
 		return http.StatusBadRequest, "BadRequest"
+
+	// Der Parameter wurde gefunden, er ist nur nicht erlaubt.
+	case errors.Is(err, definition.ErrParameterNotAllowed):
+		return http.StatusBadRequest, "BadRequest"
+
+	// Der Datensatz verweist auf ein Objekt, das es nicht mehr gibt. Auf
+	// einem DELETE liest die Plattform 410 als "ist schon weg, gut so".
+	case errors.Is(err, definition.ErrResourceGone),
+		errors.Is(err, broker.ErrNotFound),
+		apierrors.IsNotFound(err):
+		if method == http.MethodDelete {
+			return http.StatusGone, "Gone"
+		}
+		return http.StatusNotFound, "NotFound"
+
+	// Zwei Schreiber auf demselben Objekt. Die Plattform darf wiederholen.
+	case apierrors.IsConflict(err), apierrors.IsAlreadyExists(err):
+		return http.StatusConflict, "Conflict"
+
+	// Fehlende RBAC-Rechte sind ein Konfigurationsfehler auf unserer Seite,
+	// kein Fehler des Aufrufers. 403 zurueckzugeben wuerde die Plattform
+	// glauben lassen, sie selbst sei nicht berechtigt.
+	case apierrors.IsForbidden(err), apierrors.IsUnauthorized(err):
+		return http.StatusInternalServerError, "InternalServerError"
+
 	default:
 		return http.StatusInternalServerError, "InternalServerError"
 	}
 }
-
-// respondOSBError writes the unified error body and honors the OSB rule
-// that DELETE requests to non-existent resources must return 410 Gone.
-func respondOSBError(c *gin.Context, err error) {
-	status, name := osbErrorStatus(err)
-	if c.Request.Method == http.MethodDelete && strings.Contains(err.Error(), "not found") {
-		status = http.StatusGone
-		name = "Gone"
-	}
-	c.JSON(status, gin.H{
-		"error":       name,
-		"description": err.Error(),
-	})
-}
-
-var _ = errors.New // keep import if future sentinel errors land here

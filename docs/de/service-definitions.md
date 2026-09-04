@@ -65,7 +65,7 @@ schlimmer als einer, der gar nicht startet.
 
 | Feld | Pflicht | Wirkung |
 |---|---|---|
-| `id` | ja | Die OSB-`service_id`. **Muss für immer stabil bleiben** — Cloud Foundry speichert sie, und `resolveDefinition` schlägt darüber nach. Eine Änderung macht bestehende Instanzen unauffindbar. |
+| `id` | ja | Die OSB-`service_id`. **Muss für immer stabil bleiben** — Cloud Foundry speichert sie, und `definitionFor` schlägt darüber nach. Eine Änderung macht bestehende Instanzen unauffindbar. |
 | `name` | ja | Der Name im Marketplace: `cf create-service <name> …`. |
 | `description` | nein | Katalogtext. |
 | `bindable` | nein | Vorgabe **true**. |

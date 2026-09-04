@@ -2,86 +2,108 @@ package broker
 
 import (
 	"context"
-
 	"testing"
 
-	"github.com/example/osb-broker/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// Phase 1.1: after a restart (fresh broker on the same store) ALL read and
-// write paths must behave consistently — not just GetInstance.
+// Ein neuer Prozess auf demselben Zustandsspeicher muss dieselben Antworten
+// geben wie der alte. Das ist der Grund, warum der Zustand nicht im Speicher
+// des Brokers liegt: ein Rescheduling darf keine Instanz und keine Binding
+// vergessen.
+//
+// Frueher lief dieser Nachweis ueber Provision und Bind des zweiten Brokers,
+// den es nicht mehr gibt. Er laeuft jetzt ueber die Buchfuehrung selbst -
+// naeher an dem, was tatsaechlich ueberleben muss.
 
-func restartedBroker(t *testing.T, s StateStore) *Broker {
+func recordInstance(t *testing.T, b *Broker, instanceID string) {
 	t.Helper()
-	return New(store.NewInMemoryStore(), s)
-}
-
-func provisionVia(t *testing.T, b *Broker, instanceID string) {
-	t.Helper()
-	_, err := b.Provision(context.Background(), instanceID, &ProvisionRequest{
-		ServiceID: "service-1",
-		PlanID:    "plan-free",
+	require.NoError(t, b.RecordInstance(context.Background(), &Instance{
+		ID:        instanceID,
+		ServiceID: "def-svc-0001",
+		PlanID:    "def-plan-free",
+		Namespace: "space-1",
 		Context:   Context{Platform: "cloudfoundry"},
-	})
-	require.NoError(t, err)
+		Ready:     true,
+	}))
 }
 
-func TestRestart_GetBindingWorks(t *testing.T) {
-	s := NewInMemoryStateStore()
-	b1 := New(store.NewInMemoryStore(), s)
-	provisionVia(t, b1, "inst-1")
-	_, err := b1.Bind(context.Background(), "inst-1", "bind-1", &BindRequest{
-		ServiceID: "service-1", PlanID: "plan-free", AppGUID: "app-1",
-	})
-	require.NoError(t, err)
+func recordBinding(t *testing.T, b *Broker, instanceID, bindingID string) {
+	t.Helper()
+	require.NoError(t, b.RecordBinding(context.Background(), &Binding{
+		ID:          bindingID,
+		InstanceID:  instanceID,
+		ServiceID:   "def-svc-0001",
+		PlanID:      "def-plan-free",
+		Credentials: map[string]interface{}{"username": "app"},
+		Ready:       true,
+	}))
+}
 
-	b2 := restartedBroker(t, s)
+func TestRestart_BindingUeberlebt(t *testing.T) {
+	s := NewInMemoryStateStore()
+	b1 := New(s)
+	recordInstance(t, b1, "inst-1")
+	recordBinding(t, b1, "inst-1", "bind-1")
+
+	b2 := New(s)
+
 	resp, err := b2.GetBinding(context.Background(), "inst-1", "bind-1")
 	require.NoError(t, err)
-	assert.NotNil(t, resp.Credentials)
+	assert.Equal(t, "app", resp.Credentials["username"])
 }
 
-func TestRestart_ProvisionIdempotent(t *testing.T) {
+func TestRestart_InstanzUeberlebtMitNamespace(t *testing.T) {
+	// Der Namespace ist der Teil, der aus spaeteren Requests nicht
+	// herleitbar ist: ein Deprovision traegt weder context noch space_guid.
+	// Geht er verloren, sucht der Broker am falschen Ort und meldet Erfolg,
+	// waehrend die Datenbank weiterlaeuft (FINDINGS #7).
 	s := NewInMemoryStateStore()
-	b1 := New(store.NewInMemoryStore(), s)
-	provisionVia(t, b1, "inst-1")
+	recordInstance(t, New(s), "inst-1")
 
-	// Re-provisioning the same instance via the restarted broker must be
-	// idempotent, NOT a conflict or duplicate.
-	b2 := restartedBroker(t, s)
-	_, err := b2.Provision(context.Background(), "inst-1", &ProvisionRequest{
-		ServiceID: "service-1",
-		PlanID:    "plan-free",
-		Context:   Context{Platform: "cloudfoundry"},
-	})
+	inst, err := New(s).StoredInstance(context.Background(), "inst-1")
+
 	require.NoError(t, err)
+	assert.Equal(t, "space-1", inst.Namespace)
 }
 
-func TestRestart_DeprovisionBlockedByPersistedBinding(t *testing.T) {
+func TestRestart_BindingBleibtDerInstanzZugeordnet(t *testing.T) {
+	// Ein Deprovision muss bestehende Bindings erkennen koennen, auch nach
+	// einem Neustart - sonst verschwindet der Dienst unter einer Anwendung,
+	// die noch daran gebunden ist.
 	s := NewInMemoryStateStore()
-	b1 := New(store.NewInMemoryStore(), s)
-	provisionVia(t, b1, "inst-1")
-	_, err := b1.Bind(context.Background(), "inst-1", "bind-1", &BindRequest{
-		ServiceID: "service-1", PlanID: "plan-free", AppGUID: "app-1",
-	})
-	require.NoError(t, err)
+	b1 := New(s)
+	recordInstance(t, b1, "inst-1")
+	recordBinding(t, b1, "inst-1", "bind-1")
 
-	// The restarted broker must still see the binding and refuse deprovision.
-	b2 := restartedBroker(t, s)
-	_, err = b2.Deprovision(context.Background(), "inst-1", &DeprovisionRequest{ServiceID: "service-1", PlanID: "plan-free"})
-	assert.Error(t, err) // "instance has existing bindings"
+	bindings, err := New(s).BindingsOfInstance(context.Background(), "inst-1")
 
-	// After unbinding via the new broker, deprovision must succeed.
-	_, err = b2.Unbind(context.Background(), "inst-1", "bind-1", &UnbindRequest{ServiceID: "service-1", PlanID: "plan-free"})
 	require.NoError(t, err)
-	_, err = b2.Deprovision(context.Background(), "inst-1", &DeprovisionRequest{ServiceID: "service-1", PlanID: "plan-free"})
-	require.NoError(t, err)
+	require.Len(t, bindings, 1)
+	assert.Equal(t, "bind-1", bindings[0].ID)
+	assert.True(t, bindings[0].Ready)
+}
 
-	// And nothing survives in the store.
-	_, err = s.GetInstance(context.Background(), "inst-1")
-	assert.Error(t, err)
-	_, err = s.GetBinding(context.Background(), "bind-1")
-	assert.Error(t, err)
+func TestRestart_VergesseneBindingIstWirklichWeg(t *testing.T) {
+	s := NewInMemoryStateStore()
+	b1 := New(s)
+	recordInstance(t, b1, "inst-1")
+	recordBinding(t, b1, "inst-1", "bind-1")
+	require.NoError(t, b1.ForgetBinding(context.Background(), "bind-1"))
+
+	_, err := New(s).GetBinding(context.Background(), "inst-1", "bind-1")
+
+	require.Error(t, err, "sonst bekaeme ein erneutes Bind derselben ID die alten Zugangsdaten")
+}
+
+func TestRestart_BindingEinerFremdenInstanzWirdNichtHerausgegeben(t *testing.T) {
+	s := NewInMemoryStateStore()
+	b := New(s)
+	recordInstance(t, b, "inst-1")
+	recordBinding(t, b, "inst-1", "bind-1")
+
+	_, err := b.GetBinding(context.Background(), "inst-2", "bind-1")
+
+	require.Error(t, err)
 }

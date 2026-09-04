@@ -124,11 +124,11 @@ Zwischenstände werden committet, nicht angesammelt.
 
 ## Was vor einem größeren Umbau zu lesen ist
 
-- [docs/de/architecture.md](docs/de/architecture.md) — wo die Grenze zwischen
-  tragfähig und zu ersetzen verläuft.
+- [docs/de/architecture.md](docs/de/architecture.md) — wie ein Request seinen
+  Weg findet und wo die Grenze zwischen den Schichten verläuft.
 - [docs/de/known-issues.md](docs/de/known-issues.md) — was bekannt offen ist,
   damit nichts doppelt gefunden wird.
 - [docs/de/adr/0003-replace-http-layer.md](docs/de/adr/0003-replace-http-layer.md)
-  — der vorgeschlagene, noch nicht entschiedene Umbau.
+  — warum es einen Pfad gibt und keine Rückfallebene.
 - [docs/de/target-platforms.md](docs/de/target-platforms.md) — woran „fertig"
   gemessen wird.

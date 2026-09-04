@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/example/osb-broker/internal/broker"
-	"github.com/example/osb-broker/internal/store"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 )
@@ -28,7 +27,7 @@ func TestDeprovisionNonexistentDefinitionInstanceGone(t *testing.T) {
 // Der Legacy-Pfad (example-service) muss unverändert 410 liefern.
 func TestDeprovisionNonexistentLegacyInstanceGone(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	b := broker.New(store.NewInMemoryStore(), nil)
+	b := broker.New(nil)
 	h := New(b)
 	router := h.SetupRouter()
 

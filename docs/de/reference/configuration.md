@@ -20,7 +20,7 @@ Neustart.
 | `PORT` | `8080` | Lauschport. Mit TLS setzt das Chart `8443`. |
 | `STORE_BACKEND` | `memory` | `crd` oder `memory`. `k8s` ist ein Alias für `crd` und erzeugt eine Warnung. Alles andere ist ein **Startfehler**. |
 | `POD_NAMESPACE` | leer | Namespace, in dem die State-CRs liegen. Bei `STORE_BACKEND=crd` Pflicht; das Chart füllt sie per `fieldRef`. |
-| `DEFINITIONS_DIR` | leer | Verzeichnis mit den ServiceDefinitions. Leer heißt: keine Definitionen, nur der Demo-Katalog. |
+| `DEFINITIONS_DIR` | leer | Verzeichnis mit den ServiceDefinitions. Leer heißt: leerer Katalog, der Broker bietet nichts an. |
 | `METRICS_ENABLED` | an | **Nur der exakte Wert `0` schaltet ab.** Kein `ParseBool`: `false` lässt die Metriken an. |
 
 ### Authentifizierung

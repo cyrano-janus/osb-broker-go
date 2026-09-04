@@ -14,18 +14,7 @@ in [target-platforms.md](target-platforms.md).
 
 ## Funktionale Lücken
 
-### Blocker für produktives Cloud Foundry und TAS
-
-**`last_operation` für Bindings ist eine Konstante.**
-`GetLastBindingOperation` gibt unabhängig von allem `succeeded` zurück, auch für
-unbekannte IDs.
-
-**Zwei Demo-Services im Produktivkatalog.** `internal/store` liefert einen fest
-verdrahteten Katalog mit `service-1` und `service-2`, der jedem
-`GET /v2/catalog` vorangestellt wird. Einen Schalter dagegen gibt es nicht.
-*FINDINGS #9.*
-
-### Funktional fehlend, kein Bruch
+Keiner der offenen Punkte blockiert derzeit eine Zielplattform.
 
 **Benutzerparameter erreichen das Template nicht.**
 `Engine.ProvisionInstance` nimmt `parameters` entgegen und verwendet sie nicht;
@@ -33,11 +22,6 @@ verdrahteten Katalog mit `service-1` und `service-2`, der jedem
 `TemplateData.Parameters` wird nirgends gefüllt. `cf create-service -c` bleibt
 wirkungslos, und ein `{{ .parameters.x }}` im Template scheitert wegen
 `missingkey=error`. *FINDINGS #17.*
-
-**`allowedParameters` wird nur beim Update geprüft.**
-`UpdateServiceInstance` validiert, `ProvisionServiceInstance` nicht. Beim
-Provision werden beliebige Parameter angenommen und danach verworfen — kein
-Fehler, nur Wirkungslosigkeit, und das ist die unangenehmere Variante.
 
 **`readiness.timeoutSeconds` wird nie durchgesetzt.** Ein hängender Operator
 lässt die Instanz ewig `in progress` melden. `last_operation` meldet `failed`
@@ -53,28 +37,12 @@ Gauges sind registriert und melden dauerhaft 0.
 
 ## Strukturelle Probleme
 
-**Zwei vollständige Broker-Implementierungen nebeneinander.** Jeder Handler
-verzweigt einzeln über `resolveDefinition`
-(`internal/handlers/definition_instances.go:17`); liefert es `nil` — auch im
-Fehlerfall —, fällt der Request stumm auf `internal/broker/broker.go` zurück,
-einen zweiten kompletten Broker mit eigenem Katalog. Das ist die Wurzel mehrerer
-der obigen Punkte. *FINDINGS #13.*
-
 **Nichts belegt, dass die Prüfungen des Gates fehlschlagen können.**
 `cmd/osb-checker` hat keine Mutationssuite: geprüft sind nur `pickService` und
 `checkServiceBindingSpec`, nicht die Prüfungen selbst. Ein Gate, dessen
 Prüfungen wirkungslos sind, ist von einem grünen nicht zu unterscheiden — genau
 das war lange der Fall, als die Auswahl immer den Demo-Service traf
 (*FINDINGS #20*, behoben). Der eigenständige Checker hat eine solche Suite.
-
-**Der HTTP-Status wird aus Fehlertexten geraten.**
-`internal/handlers/errors.go` entscheidet mit `strings.Contains`. Jeder
-DELETE-Fehler mit „not found" im Text wird `410`, auch „service not found".
-*FINDINGS #18.*
-
-**Was daraus folgt:** der Vorschlag, die HTTP-Schicht zu ersetzen und die
-Engine zu behalten, steht als [ADR 0003](adr/0003-replace-http-layer.md) im
-Status *vorgeschlagen*. Der Zustandsspeicher ist davon nicht betroffen.
 
 ## Definitionen und Deployment
 
@@ -127,8 +95,6 @@ Nichts davon schadet, alles davon kostet Lesezeit:
 
 | Stelle | Zustand |
 |---|---|
-| `internal/handlers/definition_instances.go` | `deprovisionDefinition` wird nie gerufen |
-| `internal/broker/broker.go` | `createOperation` und die gesamte `operations`-Map ungenutzt |
 | `internal/definition/operator.go` | `ApplyCR` und `ApplyManifests` nur noch aus Tests gerufen; `jsonField` ungenutzt |
 | `internal/definition/render.go` | die Methoden `instanceID()` und `safeName()` sind unerreichbar; der Mechanismus ist `lowerCase()` |
 | `internal/definition/engine.go`, `internal/handlers/*` | `var _ = …` als Import-Halter |
@@ -155,14 +121,15 @@ Zielplattform näher wäre als Korifi. Einordnung in
 Die Punkte hängen zusammen; in dieser Reihenfolge abgearbeitet macht jeder den
 nächsten sichtbar oder billiger.
 
-1. **Doppelpfad** — solange ein Request beim kleinsten Fehler stumm auf einen
-   zweiten Broker mit eigenem Katalog fällt, misst jede weitere Arbeit ins
-   Leere. Der Demo-Katalog verschwindet mit ihm.
-2. **`last_operation` für Bindings** — hängt strukturell am Doppelpfad und
-   fällt mit ihm.
-3. **Benutzerparameter und `allowedParameters`** — zusammen, weil beide
-   denselben Weg durch die Engine betreffen.
-4. **Fehlerklassifikation** — typisierte Fehler statt `strings.Contains`; sie
-   steuern das Retry-Verhalten der Plattform.
-5. **`readiness.timeoutSeconds` durchsetzen** — bis dahin meldet ein hängender
-   Operator `in progress`, bis die Plattform selbst aufgibt.
+1. **Benutzerparameter** — `cf create-service -c` bleibt wirkungslos, solange
+   `TemplateData.Parameters` von keinem Aufrufer gefüllt wird. Die Prüfung
+   gegen `allowedParameters` steht bereits, sie hat nur noch nichts zu prüfen.
+2. **`readiness.timeoutSeconds` durchsetzen** — bis dahin meldet ein hängender
+   Operator `in progress`, bis die Plattform selbst aufgibt. Erst danach ist
+   ein falscher Readiness-Pfad auch dann sichtbar, wenn niemand hinsieht.
+3. **Die fünf ungeprüften Readiness-Pfade** — je Operator einmal ein CR
+   anlegen und den Pfad dagegen rechnen. Braucht die Operatoren im Cluster.
+4. **Verwaiste CRs nach fehlgeschlagenem Provision** — hängt an 2., weil beide
+   den Abbruchpfad der Engine betreffen.
+5. **Mutationssuite für `cmd/osb-checker`** — der eigenständige Checker hat
+   eine, und sie hat beim ersten Lauf zwei wirkungslose Prüfungen gefunden.

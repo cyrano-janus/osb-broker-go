@@ -66,7 +66,7 @@ does not come up at all.
 
 | Field | Required | Effect |
 |---|---|---|
-| `id` | yes | The OSB `service_id`. **Must stay stable forever** — Cloud Foundry stores it, and `resolveDefinition` looks it up. Changing it makes existing instances unfindable. |
+| `id` | yes | The OSB `service_id`. **Must stay stable forever** — Cloud Foundry stores it, and `definitionFor` looks it up. Changing it makes existing instances unfindable. |
 | `name` | yes | The name in the marketplace: `cf create-service <name> …`. |
 | `description` | no | Catalogue text. |
 | `bindable` | no | Defaults to **true**. |

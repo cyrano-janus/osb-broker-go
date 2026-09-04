@@ -18,13 +18,13 @@ YAML file — see [service-definitions.md](service-definitions.md).
   ├─────────────────────────────────────────────────────────┤
   │ internal/handlers  gin router, OSB endpoints             │
   │                                                          │
-  │        resolveDefinition(service_id)                     │
+  │        definitionFor(service_id)                         │
   │             ├── matches ──▶ engine path                  │
-  │             └── no match ──▶ fallback path               │
+  │             └── no match ──▶ 400 BadRequest              │
   ├──────────────────────┬──────────────────────────────────┤
   │ internal/definition  │ internal/broker                   │
-  │ THE ENGINE           │ fallback broker + state store     │
-  │ YAML ─▶ CR           │ internal/store: demo catalogue    │
+  │ THE ENGINE           │ state store                       │
+  │ YAML ─▶ CR           │ who exists, what is bound         │
   └──────────┬───────────┴───────────┬──────────────────────┘
              │                       │
              ▼                       ▼
@@ -37,41 +37,41 @@ YAML file — see [service-definitions.md](service-definitions.md).
                     Kubernetes
 ```
 
-**The branching point is the first thing to understand.** It sits in
-`internal/handlers/definition_instances.go:17`:
+**There is one path, and that is the first thing to understand.** Every handler
+resolves the ServiceDefinition for the `service_id` through `definitionFor`
+(`internal/handlers/definition_instances.go`):
 
 ```go
-func (h *Handlers) resolveDefinition(serviceID string) (*definition.ServiceDefinition, error) {
-	if h.engine == nil || h.engine.Engine == nil { return nil, nil }
-	sd, err := h.engine.Engine.DefinitionByServiceID(serviceID)
-	if err != nil { return nil, nil } // not a definition service -> legacy path
-	return sd, nil
+func (h *Handlers) definitionFor(serviceID string) (*definition.ServiceDefinition, error) {
+	if serviceID == "" {
+		return nil, fmt.Errorf("%w: service_id is required", definition.ErrServiceUnknown)
+	}
+	if h.engine == nil || h.engine.Engine == nil {
+		return nil, fmt.Errorf("%w: no service definitions are loaded", definition.ErrServiceUnknown)
+	}
+	return h.engine.Engine.DefinitionByServiceID(serviceID)
 }
 ```
 
-If it returns a definition, the request goes through the engine. If it returns
-`nil` — including on error — the request falls back **silently** to a second,
-entirely separate broker in `internal/broker/broker.go`. Both paths exist side
-by side and every handler branches on its own. The code calls the second one the
-`legacy path`; this document names it after its function, the fallback path.
-What hangs on it is in [known-issues.md](known-issues.md) and in
-[ADR 0003](adr/0003-replace-http-layer.md).
+If the engine does not know the service, that is `ErrServiceUnknown` and
+therefore `400` — there is no fallback for a request to drop into, and the
+catalogue is exactly what the engine knows. Why it was decided that way, and
+what stood here before, is in [ADR 0003](adr/0003-replace-http-layer.md).
 
 ## Packages and sizes
 
-**6,560 lines of production code, 6,497 lines of tests** — roughly one to one.
+**6,419 lines of production code, 6,281 lines of tests** — roughly one to one.
 
 | Package | Lines | Responsibility |
 |---|---|---|
-| `internal/definition` | 1,493 | **the engine**: load a ServiceDefinition, render the template, apply CRs, evaluate readiness, shape credentials |
-| `internal/broker` | 1,284 | the fallback broker (`broker.go`, 414) **and** the CRD state store (`crdstate.go`, 486) |
+| `internal/definition` | 1,586 | **the engine**: load a ServiceDefinition, render the template, apply CRs, evaluate readiness, shape credentials |
+| `internal/broker` | 1,026 | state store: access (`broker.go`, 100) and the CRD state store (`crdstate.go`, 486) |
 | `internal/handlers` | 1,253 | gin router, OSB endpoints, auth middleware, logging, metrics |
 | `internal/config` | 411 | environment variables into one validated struct, fail fast |
 | `internal/apis/v1alpha1` | 309 | Go types for the state CRDs |
 | `internal/server` | 301 | `http.Server`, TLS, certificate hot reload, signal handling |
 | `internal/auth` | 299 | authenticator chain, independent of gin |
 | `internal/migrate` | 208 | imports state from a ConfigMap in the `state.json` format |
-| `internal/store` | 131 | static demo catalogue |
 | `main.go` | 135 | wiring, nothing else |
 | `cmd/osb-checker` | 658 | conformance suite, CI gate |
 | `cmd/osb-state-migrate` | 66 | tool around `internal/migrate` |
@@ -183,10 +183,8 @@ core of the confusion on a first read:
   `OSBServiceInstance` or `OSBServiceBinding` per record, writes via
   `RetryOnConflict`, credentials in a separate secret with an `OwnerReference`.
   Reasoning in [ADR 0001](adr/0001-kubernetes-as-state-store.md).
-- **`broker.go` (414 lines) is the fallback broker** — a second, complete OSB
-  implementation with its own catalogue from `internal/store`. It serves
-  everything `resolveDefinition` does not recognise, and its demo services
-  `service-1` and `service-2` appear in every catalogue.
+- **`broker.go` (100 lines) is the access to it** — read, write, forget, and
+  the two OSB answers `GET instance` and `GET binding`.
 
 The store derives object names from the OSB ID as long as that is a valid
 DNS-1123 label of at most 63 characters — always the case with Cloud Foundry,
@@ -196,24 +194,21 @@ cannot hand back the wrong record.
 
 ## Where the line runs
 
-The proposal reads: **keep the engine, replace the HTTP layer.** The line runs
+The decision read: **keep the engine, replace the HTTP layer.** The line runs
 between the layers, not across them:
 
 | Part | Lines | Verdict |
 |---|---|---|
-| `internal/definition` | 1,493 | carries |
+| `internal/definition` | 1,586 | carries |
 | `internal/broker/crdstate.go` and around it | ~700 | carries |
 | `internal/config`, `server`, `auth` | 1,011 | carries |
 | `internal/apis/v1alpha1` | 309 | carries |
-| `cmd/osb-checker` | 658 | carries |
+| `cmd/osb-checker` | 797 | carries |
 | logging, metrics, docs endpoints | ~290 | carries, decoupled cross-cutting concerns |
-| **dual path in the handlers** | ~580 | to be replaced |
-| **`broker.go` (fallback broker)** | 414 | to be replaced |
-| **`store.go` (demo catalogue)** | 131 | to be replaced |
 
 That the engine carries is demonstrated: two operators with different CRD
 groups, condition types and credential layouts run through it without
-`internal/definition` knowing anything per service. What would be replaced is
-one path instead of two, real async through a persisted operation record, and
-typed errors instead of `strings.Contains`. The proposal for that is
-[ADR 0003](adr/0003-replace-http-layer.md), status *proposed*.
+`internal/definition` knowing anything per service. What was replaced is the
+layer above it: one path instead of two, a catalogue built from definitions
+instead of demo data, and typed errors instead of `strings.Contains`. The
+decision is [ADR 0003](adr/0003-replace-http-layer.md).

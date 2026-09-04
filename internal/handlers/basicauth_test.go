@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/example/osb-broker/internal/broker"
-	"github.com/example/osb-broker/internal/store"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 )
@@ -20,7 +19,7 @@ func basicAuthHeader(user, pass string) string {
 // endpoint needs it) with the given Basic Auth credentials configured.
 func newAuthTestRouter(user, pass string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	b := broker.New(store.NewInMemoryStore(), nil)
+	b := broker.New(nil)
 	h := New(b)
 	h.SetBasicAuthCredentials(user, pass)
 	return h.SetupRouter()

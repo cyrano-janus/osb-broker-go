@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/example/osb-broker/internal/broker"
-	"github.com/example/osb-broker/internal/store"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,7 +14,7 @@ import (
 func newDocsTestRouter(t *testing.T, withAuth bool) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
-	b := broker.New(store.NewInMemoryStore(), nil)
+	b := broker.New(nil)
 	h := New(b)
 	if withAuth {
 		h.SetBasicAuthCredentials("u", "p")

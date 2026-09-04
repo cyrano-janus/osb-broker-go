@@ -3,10 +3,9 @@
 > [English](../../en/reference/osb-api.md) · Führende Fassung: deutsch
 
 **Maschinenlesbare Quelle ist `docs/openapi.yaml`.** Dieses Dokument nennt den
-Umfang und, wichtiger, **wo der Broker von OSB 2.17 abweicht**. Die
-Abweichungen sind der Grund, warum es existiert: mehrere davon fallen auf der
-Entwicklungsplattform nicht auf und blockieren auf einer Zielplattform. Welche
-das sind, steht in [target-platforms.md](../target-platforms.md).
+Umfang und **wo der Broker von OSB 2.17 abweicht**. Die Abweichungen fallen auf
+der Entwicklungsplattform nicht auf; ihre Wirkung je Zielplattform steht in
+[target-platforms.md](../target-platforms.md).
 
 ## Endpunkte
 
@@ -15,16 +14,16 @@ Alle `/v2`-Routen liegen hinter der Authentifizierung und der
 
 | Methode und Pfad | Verhalten |
 |---|---|
-| `GET /v2/catalog` | Vereinigung aus dem statischen Demo-Katalog und `engine.Catalog()` |
-| `PUT /v2/service_instances/:id` | Provision. Definitions-Pfad: `202` mit `operation`, ohne `?accepts_incomplete=true` **422** `AsyncRequired`; bei bekannter Instanz `200`, bei abweichenden Parametern `409`. Fallback-Pfad synchron `201`/`200` |
+| `GET /v2/catalog` | genau `engine.Catalog()`. Ohne geladene Definitionen eine leere Liste |
+| `PUT /v2/service_instances/:id` | Provision. `202` mit `operation`; ohne `?accepts_incomplete=true` **422** `AsyncRequired`; bei bekannter Instanz `200`, bei abweichenden Parametern `409`; unbekannter Service oder Plan `400`. Prüft `allowedParameters` |
 | `PATCH /v2/service_instances/:id` | Plan-Wechsel. Prüft `allowedParameters`, rendert neu, schreibt nur bei echter Änderung; `200` |
-| `DELETE /v2/service_instances/:id` | Deprovision. `410` bei unbekannter Instanz, `409` bei bestehenden Bindings (nur Fallback-Pfad) |
-| `GET /v2/service_instances/:id` | **Immer** über den Fallback-Pfad, also über den State Store |
+| `DELETE /v2/service_instances/:id` | Deprovision. `410` bei unbekannter Instanz, `409` bei bestehenden Bindings. `service_id` darf fehlen, dann kommt der Service aus dem Datensatz |
+| `GET /v2/service_instances/:id` | aus dem Zustandsspeicher; `404` bei unbekannter Instanz |
 | `GET /v2/service_instances/:id/last_operation` | Zustand aus dem CR des Operators. `service_id` darf fehlen, dann kommt der Service aus dem Datensatz. `410` bei unbekannter Instanz, `failed` wenn der Datensatz da ist und das Objekt fehlt |
 | `PUT …/service_bindings/:bid` | Bind; `201`, bei bekanntem Binding `200` |
 | `DELETE …/service_bindings/:bid` | Unbind; `200`, bei unbekannter Binding `410` |
-| `GET …/service_bindings/:bid` | **Immer** über den State Store |
-| `GET …/service_bindings/:bid/last_operation` | hart `succeeded` |
+| `GET …/service_bindings/:bid` | aus dem Zustandsspeicher; `404` bei unbekannter Binding oder fremder Instanz |
+| `GET …/service_bindings/:bid/last_operation` | `succeeded` für eine bekannte Binding, `410` für eine unbekannte. Bind ist synchron, es gibt keinen laufenden Vorgang |
 
 Ohne Authentifizierung erreichbar, absichtlich:
 
@@ -37,55 +36,25 @@ Ohne Authentifizierung erreichbar, absichtlich:
 
 ## Abweichungen von OSB 2.17
 
-### `last_operation` für Bindings ist eine Konstante
-
-`GetLastBindingOperation` gibt unabhängig von allem `succeeded` zurück, auch für
-unbekannte IDs.
-
 ### Benutzerparameter erreichen das Template nicht
 
 `Engine.ProvisionInstance` nimmt ein `parameters`-Argument entgegen und
 verwendet es nicht; `RenderProvision` setzt nur `InstanceID`, `SafeName` und
 `Plan`. `cf create-service -c '{...}'` bleibt damit wirkungslos.
 
-### `allowedParameters` wird nur beim Update geprüft
-
-`UpdateServiceInstance` ruft `ValidatePlanParamsForService`,
-`ProvisionServiceInstance` nicht. Beim Provision werden beliebige Parameter
-angenommen und danach verworfen. Das ist die unangenehmere Variante von
-Punkt vier: kein Fehler, nur Wirkungslosigkeit.
-
-### Der HTTP-Status wird aus Fehlertexten geraten
-
-`internal/handlers/errors.go` entscheidet mit `strings.Contains`:
-
-| Text im Fehler | Status |
-|---|---|
-| `has existing bindings` | 409 |
-| `already exists with different` | 409 |
-| `instance not found` | 404 |
-| `not found` | 400 |
-| sonst | 500 |
-
-Anschließend überschreibt `respondOSBError` jeden **DELETE**-Fehler mit „not
-found" im Text auf `410 Gone` — auch „service not found", wo `400` richtig wäre.
-
-### Zwei Demo-Services im Katalog
-
-`internal/store` liefert einen fest verdrahteten Katalog mit `service-1`
-(`example-service`) und `service-2` (`database-service`), der bei jedem
-`GET /v2/catalog` den Definitions-Services vorangestellt wird. Einen Schalter
-dagegen gibt es nicht.
-
-Das hat einen zweiten, unangenehmeren Effekt: die eigene Konformitätssuite
-`cmd/osb-checker` nimmt in `pickService` den **ersten** Treffer aus dem Katalog —
-und das ist immer `service-1`. Die Suite prüft damit den Fallback-Pfad, nicht die
-Engine. Deshalb ist die fehlende Binding-Persistenz nie aufgefallen.
+Die Prüfung gegen `allowedParameters` läuft bereits beim Provision — sie hat
+nur noch nichts zu prüfen, was das Template erreicht.
 
 ### `dashboard_url` ist eine Konstante
 
-Beide Pfade setzen `https://dashboard.example.com/instances/<id>`. Für Cloud
+Jede Instanz bekommt `https://dashboard.example.com/instances/<id>`. Für Cloud
 Foundry folgenlos, für einen Marketplace, der den Link anbietet, nicht.
+
+### `readiness.timeoutSeconds` wird gelesen und nie durchgesetzt
+
+Ein Operator, der die Readiness-Bedingung nie erfüllt, lässt `last_operation`
+unbegrenzt `in progress` melden. Die Beschreibung nennt seit der
+Readiness-Diagnose den Grund, der Zustand wechselt aber nicht auf `failed`.
 
 ## Was korrekt ist
 
@@ -95,11 +64,15 @@ Damit das Bild nicht schief wird — diese Punkte sind konform und geprüft:
 - Die Aushandlung über `X-Broker-API-Version`.
 - Idempotentes Provision und Bind, soweit der Zustand bekannt ist.
 - `410 Gone` beim Deprovision einer unbekannten Instanz.
+- Ein Pfad ohne Rückfallebene: eine unbekannte `service_id` ist `400`, kein
+  stiller Wechsel in eine zweite Implementierung.
+- Statuscodes aus Fehlerwerten statt aus Fehlertexten — ein unbekannter Plan
+  ist auch auf einem `DELETE` `400` und nicht `410`.
 - Die Trennung von authentifizierten und freien Pfaden.
 - Basic Auth mit konstantzeitigem Vergleich; mTLS gleichrangig daneben.
 - Der Lebenszyklus Ende zu Ende gegen echte Operatoren — CloudNativePG und
   RabbitMQ, jeweils auf der Entwicklungsplattform.
 
-Die Konformitätssuite `cmd/osb-checker` fährt 24 Prüfungen und läuft in der CI
-zweimal: einmal über HTTP gegen CloudNativePG, einmal über HTTPS mit
-Client-Zertifikat gegen das Helm-Chart.
+Die Konformitätssuite `cmd/osb-checker` läuft in der CI zweimal: einmal über
+HTTP gegen CloudNativePG, einmal über HTTPS mit Client-Zertifikat gegen das
+Helm-Chart. Der eigenständige Checker läuft als blockierende Gegenprobe daneben.

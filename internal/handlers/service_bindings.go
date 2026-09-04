@@ -14,49 +14,75 @@ func (h *Handlers) BindServiceInstance(c *gin.Context) {
 
 	var req broker.BindRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":       "BadRequest",
-			"description": "Invalid request body: " + err.Error(),
-		})
+		badRequest(c, "Invalid request body: "+err.Error())
 		return
 	}
-
-	// Validate required fields
 	if req.ServiceID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":       "BadRequest",
-			"description": "service_id is required",
-		})
+		badRequest(c, "service_id is required")
 		return
 	}
-
 	if req.PlanID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":       "BadRequest",
-			"description": "plan_id is required",
-		})
+		badRequest(c, "plan_id is required")
 		return
 	}
 
-	// Phase 2: definition-based services bind via operator secret.
-	if sd, _ := h.resolveDefinition(req.ServiceID); sd != nil {
-		h.bindDefinition(c, instanceID, bindingID, req)
-		return
-	}
-
-	response, err := h.broker.Bind(c.Request.Context(), instanceID, bindingID, &req)
+	sd, err := h.definitionFor(req.ServiceID)
 	if err != nil {
 		respondOSBError(c, err)
 		return
 	}
 
-	// OSB spec: re-bind of an existing binding with identical parameters
-	// returns 200 (fetch semantics), first creation returns 201.
-	if h.broker.LastBindWasIdempotent {
-		c.JSON(http.StatusOK, response)
+	// OSB 2.17: ein wiederholtes Bind derselben Binding-ID mit denselben
+	// Parametern ist 200, nicht 201.
+	if known, err := h.broker.StoredBinding(c.Request.Context(), bindingID); err == nil && known != nil {
+		if known.ServiceID != req.ServiceID || known.InstanceID != instanceID {
+			c.JSON(http.StatusConflict, gin.H{
+				"error":       "Conflict",
+				"description": "binding already exists with different service_id or instance",
+			})
+			return
+		}
+		c.JSON(http.StatusOK, broker.BindResponse{Credentials: known.Credentials})
 		return
 	}
-	c.JSON(http.StatusCreated, response)
+
+	// Der Bind-Request traegt keine Space-GUID. Der Namespace gehoert zur
+	// Instanz, nicht zum Bind - also aus dem Datensatz.
+	namespace := h.instanceNamespace(c.Request.Context(), instanceID)
+	creds, _, err := h.engine.Engine.BindCredentials(c.Request.Context(), sd, namespace, instanceID)
+	if err != nil {
+		respondOSBError(c, err)
+		return
+	}
+
+	// Dasselbe Binding zusaetzlich als spec-konformes Secret ablegen, damit
+	// Konsumenten ausserhalb von Cloud Foundry es nutzen koennen - die sehen
+	// die OSB-Antwort nie. No-op ohne projectSecret.
+	if _, err := h.engine.Engine.ProjectBindingSecret(
+		c.Request.Context(), sd, namespace, instanceID, bindingID, creds); err != nil {
+		respondOSBError(c, err)
+		return
+	}
+
+	// Den Datensatz anlegen, sonst weiss der Broker nach der Antwort nichts
+	// mehr von diesem Binding: GET binding liefe ins Leere, ein Deprovision
+	// koennte bestehende Bindings nicht erkennen, und eine Wiederholung waere
+	// nicht von einem neuen Bind zu unterscheiden.
+	if err := h.broker.RecordBinding(c.Request.Context(), &broker.Binding{
+		ID:          bindingID,
+		InstanceID:  instanceID,
+		ServiceID:   req.ServiceID,
+		PlanID:      req.PlanID,
+		AppGUID:     req.AppGUID,
+		Credentials: creds,
+		Ready:       true,
+	}); err != nil {
+		respondOSBError(c, err)
+		return
+	}
+
+	h.observeBind(req.ServiceID)
+	c.JSON(http.StatusCreated, broker.BindResponse{Credentials: creds})
 }
 
 // UnbindServiceInstance handles DELETE /v2/service_instances/:instance_id/service_bindings/:binding_id
@@ -64,88 +90,89 @@ func (h *Handlers) UnbindServiceInstance(c *gin.Context) {
 	instanceID := c.Param("instance_id")
 	bindingID := c.Param("binding_id")
 
-	serviceID := c.Query("service_id")
-	planID := c.Query("plan_id")
-
-	req := &broker.UnbindRequest{
-		ServiceID: serviceID,
-		PlanID:    planID,
-	}
-
-	// Definition-basierte Services: das Credentials-Secret des Operators
-	// bleibt stehen, es gehoert ihm. Ein von uns projiziertes Secret
-	// (Phase 6.4) muss dagegen weg - sonst bliebe bei jedem Unbind eines mit
-	// echten Zugangsdaten im Namespace liegen.
-	if sd, _ := h.resolveDefinition(req.ServiceID); sd != nil {
-		namespace := h.instanceNamespace(c.Request.Context(), instanceID)
-		// OSB 2.17: das Unbind einer unbekannten Binding ist 410 Gone. Ohne
-		// Datensatz war das nicht zu unterscheiden - jedes Unbind antwortete
-		// 200, auch fuer eine Binding, die es nie gab.
-		if known, err := h.broker.StoredBinding(c.Request.Context(), bindingID); err != nil || known == nil {
-			c.JSON(http.StatusGone, gin.H{"error": "Gone", "description": "binding not found"})
-			return
-		}
-
-		if err := h.engine.Engine.DeleteBindingSecret(
-			c.Request.Context(), sd, namespace, bindingID); err != nil {
-			respondOSBError(c, err)
-			return
-		}
-
-		// Datensatz mit abraeumen, sonst laege nach dem Unbind ein Eintrag mit
-		// echten Zugangsdaten weiter im Zustandsspeicher - und ein erneutes
-		// Bind derselben ID bekaeme die alten Credentials zurueck.
-		if err := h.broker.ForgetBinding(c.Request.Context(), bindingID); err != nil {
-			respondOSBError(c, err)
-			return
-		}
-
-		h.observeUnbind(req.ServiceID)
-		c.JSON(http.StatusOK, broker.UnbindResponse{})
+	// OSB 2.17: das Unbind einer unbekannten Binding ist 410 Gone. Ohne
+	// Datensatz war das nicht zu unterscheiden - jedes Unbind antwortete 200,
+	// auch fuer eine Binding, die es nie gab.
+	known, err := h.broker.StoredBinding(c.Request.Context(), bindingID)
+	if err != nil || known == nil {
+		c.JSON(http.StatusGone, gin.H{"error": "Gone", "description": "binding not found"})
 		return
 	}
 
-	response, err := h.broker.Unbind(c.Request.Context(), instanceID, bindingID, req)
+	serviceID := c.Query("service_id")
+	if serviceID == "" {
+		serviceID = known.ServiceID
+	}
+	sd, err := h.definitionFor(serviceID)
 	if err != nil {
 		respondOSBError(c, err)
 		return
 	}
-	h.observeUnbind(serviceID)
 
-	c.JSON(http.StatusOK, response)
+	// Das Credentials-Secret des Operators bleibt stehen, es gehoert ihm. Ein
+	// von uns projiziertes Secret muss dagegen weg - sonst bliebe bei jedem
+	// Unbind eines mit echten Zugangsdaten im Namespace liegen.
+	namespace := h.instanceNamespace(c.Request.Context(), instanceID)
+	if err := h.engine.Engine.DeleteBindingSecret(c.Request.Context(), sd, namespace, bindingID); err != nil {
+		respondOSBError(c, err)
+		return
+	}
+
+	// Datensatz mit abraeumen, sonst laege nach dem Unbind ein Eintrag mit
+	// echten Zugangsdaten weiter im Zustandsspeicher - und ein erneutes Bind
+	// derselben ID bekaeme die alten Credentials zurueck.
+	if err := h.broker.ForgetBinding(c.Request.Context(), bindingID); err != nil {
+		respondOSBError(c, err)
+		return
+	}
+
+	h.observeUnbind(serviceID)
+	c.JSON(http.StatusOK, broker.UnbindResponse{})
 }
 
 // GetBinding handles GET /v2/service_instances/:instance_id/service_bindings/:binding_id
 func (h *Handlers) GetBinding(c *gin.Context) {
-	instanceID := c.Param("instance_id")
-	bindingID := c.Param("binding_id")
-
-	response, err := h.broker.GetBinding(c.Request.Context(), instanceID, bindingID)
+	response, err := h.broker.GetBinding(c.Request.Context(),
+		c.Param("instance_id"), c.Param("binding_id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error":       "NotFound",
-			"description": err.Error(),
-		})
+		respondOSBError(c, err)
 		return
 	}
-
 	c.JSON(http.StatusOK, response)
 }
 
-// GetLastBindingOperation handles GET /v2/service_instances/:instance_id/service_bindings/:binding_id/last_operation
+// GetLastBindingOperation handles
+// GET /v2/service_instances/:instance_id/service_bindings/:binding_id/last_operation
+//
+// Bind ist in diesem Broker synchron: die Antwort auf PUT traegt die
+// Zugangsdaten, es gibt keinen Vorgang, der danach noch laeuft. Die ehrliche
+// Antwort ist deshalb "succeeded" fuer eine Binding, die es gibt, und 410 Gone
+// fuer eine, die es nicht gibt.
+//
+// Vorher stand hier eine Konstante: jede Abfrage bekam "succeeded", auch fuer
+// eine Binding-ID, die nie existiert hat. Sobald ein Service Zugangsdaten
+// asynchron ausstellt, wird aus dieser Stelle wieder eine echte Abfrage - der
+// Unterschied ist, dass sie dann nicht mehr luegen kann, ohne dass es auffaellt.
 func (h *Handlers) GetLastBindingOperation(c *gin.Context) {
 	instanceID := c.Param("instance_id")
 	bindingID := c.Param("binding_id")
-	operation := c.Query("operation")
 
-	response, err := h.broker.GetLastBindingOperation(instanceID, bindingID, operation)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error":       "NotFound",
-			"description": err.Error(),
+	known, err := h.broker.StoredBinding(c.Request.Context(), bindingID)
+	if err != nil || known == nil {
+		c.JSON(http.StatusGone, gin.H{"error": "Gone", "description": "binding not found"})
+		return
+	}
+	if known.InstanceID != instanceID {
+		c.JSON(http.StatusGone, gin.H{
+			"error":       "Gone",
+			"description": "binding does not belong to instance",
 		})
 		return
 	}
 
-	c.JSON(http.StatusOK, response)
+	c.JSON(http.StatusOK, broker.LastOperationResponse{
+		State:       string(broker.OperationStateSucceeded),
+		Description: "die Zugangsdaten stehen seit der Antwort auf das Bind bereit",
+		Operation:   c.Query("operation"),
+	})
 }

@@ -81,6 +81,8 @@ case at all; here it stands in for the platform.
 | Restart persistence | instances and bindings survive kill and rescheduling |
 | Asynchronous provisioning | `202` with `operation`, `last_operation` reports `in progress` until the operator is done, then `succeeded`; without `accepts_incomplete=true` the broker answers `422 AsyncRequired` |
 | Complete binding lifecycle | bind `201`, repeat `200` with the same credentials, `GET binding` `200`, unbind `200`, unbind of an unknown binding `410` |
+| One path, no fallback | the catalogue consists exclusively of ServiceDefinitions; an unknown `service_id` is `400` and does not run into a second implementation |
+| Status codes from error values | an unknown plan is `400` even on a `DELETE`, not `410` — the mapping no longer depends on wordings |
 | Secret name from `status.binding.name` | the RabbitMQ operator reports `osb-<id>-default-user` and the broker uses it without a name template |
 | Target shape via `mapping` | the binding contains exactly `host, password, port, provider, type, uri, username`; `default_user.conf` and `connection_string` stay out |
 | Spec-conformant secret | type `servicebinding.io/rabbitmq`, labels for instance and binding, `OwnerReference` on the `RabbitmqCluster` |
@@ -114,15 +116,14 @@ locations in [reference/osb-api.md](reference/osb-api.md).
 
 | Deviation | on Korifi | on production CF / TAS |
 |---|---|---|
-| `last_operation` for bindings always answers `succeeded` | invisible | **blocker** as soon as bindings become asynchronous |
-| Demo catalogue `service-1` / `service-2` always present | cosmetic | **not acceptable** in a production marketplace |
 | User parameters never reach the template | `cf create-service -c` has no effect | functional gap, not a breach |
-| `allowedParameters` only checked on `PATCH` | invisible | quietly wrong — provision accepts everything and discards it without comment |
-| Error classification from error text | invisible | wrong status codes misdirect the platform's retry logic |
+| `readiness.timeoutSeconds` is never enforced | invisible, the test services are fast | a stuck operator reports `in progress` until the platform itself gives up |
+| Five readiness paths are unverified | the operators are not installed at all | a path that misses costs one platform timeout per instance |
 
-The points marked **blocker** sit in the HTTP layer, none in the engine and none
-in the state store — and both hang on the dual path that
-[ADR 0003](adr/0003-replace-http-layer.md) puts up for decision.
+None of these deviations is an exclusion criterion. The points that were sat in
+the HTTP layer and were replaced along with it —
+[ADR 0003](adr/0003-replace-http-layer.md). What remains are functional gaps
+and diligence on the definitions.
 
 ## What happens to Korifi
 
