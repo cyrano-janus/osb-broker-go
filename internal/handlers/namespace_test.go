@@ -49,11 +49,11 @@ func TestNamespace_ProvisionLandetImSpaceNamespace(t *testing.T) {
 	router, oc := newDefinitionRouter(t)
 	const instanceID = "ns-inst-1"
 
-	w := putJSON(router, "/v2/service_instances/"+instanceID, map[string]interface{}{
+	w := provisionJSON(router, "/v2/service_instances/"+instanceID, map[string]interface{}{
 		"service_id": "def-svc-0001", "plan_id": "def-plan-free",
 		"organization_guid": "org-1", "space_guid": spaceNS,
 	})
-	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
 
 	_, err := crIn(t, oc, spaceNS, instanceID)
 	require.NoError(t, err, "die Operator-Ressource gehoert in den Space-Namespace")
@@ -67,10 +67,10 @@ func TestNamespace_OhneSpaceGUIDBleibtEsDefault(t *testing.T) {
 	router, oc := newDefinitionRouter(t)
 	const instanceID = "ns-inst-2"
 
-	w := putJSON(router, "/v2/service_instances/"+instanceID, map[string]interface{}{
+	w := provisionJSON(router, "/v2/service_instances/"+instanceID, map[string]interface{}{
 		"service_id": "def-svc-0001", "plan_id": "def-plan-free",
 	})
-	require.Equal(t, http.StatusCreated, w.Code)
+	require.Equal(t, http.StatusAccepted, w.Code)
 
 	_, err := crIn(t, oc, "default", instanceID)
 	assert.NoError(t, err)
@@ -84,7 +84,7 @@ func TestNamespace_DeprovisionLoeschtImRichtigenNamespace(t *testing.T) {
 	router, oc := newDefinitionRouter(t)
 	const instanceID = "ns-inst-3"
 
-	require.Equal(t, http.StatusCreated, putJSON(router, "/v2/service_instances/"+instanceID,
+	require.Equal(t, http.StatusAccepted, provisionJSON(router, "/v2/service_instances/"+instanceID,
 		map[string]interface{}{
 			"service_id": "def-svc-0001", "plan_id": "def-plan-free", "space_guid": spaceNS,
 		}).Code)
@@ -106,7 +106,7 @@ func TestNamespace_LastOperationFindetDieInstanzImSpaceNamespace(t *testing.T) {
 	router, oc := newDefinitionRouter(t)
 	const instanceID = "ns-inst-4"
 
-	require.Equal(t, http.StatusCreated, putJSON(router, "/v2/service_instances/"+instanceID,
+	require.Equal(t, http.StatusAccepted, provisionJSON(router, "/v2/service_instances/"+instanceID,
 		map[string]interface{}{
 			"service_id": "def-svc-0001", "plan_id": "def-plan-free", "space_guid": spaceNS,
 		}).Code)
@@ -140,7 +140,7 @@ func TestNamespace_BindLiestDasSecretImSpaceNamespace(t *testing.T) {
 	router, oc := newDefinitionRouter(t)
 	const instanceID = "ns-inst-5"
 
-	require.Equal(t, http.StatusCreated, putJSON(router, "/v2/service_instances/"+instanceID,
+	require.Equal(t, http.StatusAccepted, provisionJSON(router, "/v2/service_instances/"+instanceID,
 		map[string]interface{}{
 			"service_id": "def-svc-0001", "plan_id": "def-plan-free", "space_guid": spaceNS,
 		}).Code)
@@ -175,7 +175,7 @@ func TestNamespace_WirdAmDatensatzGespeichert(t *testing.T) {
 	router, _ := newDefinitionRouter(t)
 	const instanceID = "ns-inst-6"
 
-	require.Equal(t, http.StatusCreated, putJSON(router, "/v2/service_instances/"+instanceID,
+	require.Equal(t, http.StatusAccepted, provisionJSON(router, "/v2/service_instances/"+instanceID,
 		map[string]interface{}{
 			"service_id": "def-svc-0001", "plan_id": "def-plan-free", "space_guid": spaceNS,
 		}).Code)

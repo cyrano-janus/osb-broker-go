@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
 // Config carries the checker run parameters.
@@ -229,6 +230,53 @@ func Run(cfg Config) int {
 	return failures
 }
 
+// awaitOperation pollt last_operation, bis der Vorgang abgeschlossen ist.
+//
+// Der Zustand kommt aus dem CR des Operators, nicht aus einer Buchhaltung im
+// Broker - "in progress" heisst also wirklich, dass der Dienst noch entsteht.
+func awaitOperation(c *client, instanceID, serviceID, planID string) bool {
+	const check = "lifecycle-provision-async"
+	path := fmt.Sprintf("/v2/service_instances/%s/last_operation?service_id=%s&plan_id=%s&operation=provision",
+		instanceID, serviceID, planID)
+
+	deadline := time.Now().Add(asyncDeadline)
+	wait := time.Second
+	for {
+		status, body := c.do("GET", path, nil)
+		if status != 200 {
+			fail(check, "last_operation -> expected 200, got %d: %s", status, truncate(body))
+			return false
+		}
+		var resp struct {
+			State string `json:"state"`
+		}
+		if err := json.Unmarshal(body, &resp); err != nil {
+			fail(check, "last_operation: invalid JSON: %s", truncate(body))
+			return false
+		}
+		switch resp.State {
+		case "succeeded":
+			pass(check, "last_operation -> succeeded")
+			return true
+		case "failed":
+			fail(check, "last_operation -> failed: %s", truncate(body))
+			return false
+		}
+		if time.Now().After(deadline) {
+			fail(check, "last_operation still %q after %s", resp.State, asyncDeadline)
+			return false
+		}
+		time.Sleep(wait)
+		if wait < 5*time.Second {
+			wait += time.Second
+		}
+	}
+}
+
+// asyncDeadline begrenzt das Warten. Ein CloudNativePG-Cluster braucht auf
+// kind gut eine Minute; laenger als das ist ein Befund, kein Geduldsspiel.
+const asyncDeadline = 4 * time.Minute
+
 // pickService waehlt Service und Plan fuer den Lifecycle-Audit.
 //
 // Vorrang hat, was der Aufrufer per --service-id vorgibt; ein unbekannter Wert
@@ -411,7 +459,10 @@ func checkErrorMapping(c *client) {
 func runLifecycleAudit(c *client, serviceID, planID string) string {
 	instanceID := c.cfg.IDPrefix + "-lc"
 
-	status, body := c.do("PUT", "/v2/service_instances/"+instanceID, map[string]interface{}{
+	// accepts_incomplete gehoert in die Query, nicht in den Body. Ohne den
+	// Parameter antwortet ein Broker, der nur asynchron kann, mit 422
+	// AsyncRequired - und das ist die richtige Antwort, kein Fehler.
+	status, body := c.do("PUT", "/v2/service_instances/"+instanceID+"?accepts_incomplete=true", map[string]interface{}{
 		"service_id": serviceID,
 		"plan_id":    planID,
 		"context": map[string]interface{}{
@@ -419,15 +470,25 @@ func runLifecycleAudit(c *client, serviceID, planID string) string {
 			"space_guid": "default",
 		},
 	})
-	if status != 201 {
+	switch status {
+	case 201:
+		pass("lifecycle-provision", "provision -> 201 (synchron)")
+	case 202:
+		pass("lifecycle-provision", "provision -> 202 (asynchron)")
+		// Erst wenn last_operation Vollzug meldet, ist der Dienst da. Wer
+		// hier nicht wartet, bindet gegen Zugangsdaten, die es noch nicht
+		// gibt - genau das hat der Checker frueher getan.
+		if !awaitOperation(c, instanceID, serviceID, planID) {
+			return ""
+		}
+	default:
 		fmt.Printf("::error::PROVISION FULL RESPONSE (status %d): %s\n", status, string(body))
-		fail("lifecycle-provision", "provision -> expected 201, got %d: %s", status, truncate(body))
+		fail("lifecycle-provision", "provision -> expected 201 or 202, got %d: %s", status, truncate(body))
 		return ""
 	}
-	pass("lifecycle-provision", "provision -> 201")
 
 	// Idempotent re-provision must succeed (200 per OSB spec).
-	st2, _ := c.do("PUT", "/v2/service_instances/"+instanceID, map[string]interface{}{
+	st2, _ := c.do("PUT", "/v2/service_instances/"+instanceID+"?accepts_incomplete=true", map[string]interface{}{
 		"service_id": serviceID,
 		"plan_id":    planID,
 	})

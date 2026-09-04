@@ -1,7 +1,6 @@
 package handlers
 
 import (
-
 	"net/http"
 
 	"github.com/example/osb-broker/internal/broker"
@@ -79,11 +78,28 @@ func (h *Handlers) UnbindServiceInstance(c *gin.Context) {
 	// echten Zugangsdaten im Namespace liegen.
 	if sd, _ := h.resolveDefinition(req.ServiceID); sd != nil {
 		namespace := h.instanceNamespace(c.Request.Context(), instanceID)
+		// OSB 2.17: das Unbind einer unbekannten Binding ist 410 Gone. Ohne
+		// Datensatz war das nicht zu unterscheiden - jedes Unbind antwortete
+		// 200, auch fuer eine Binding, die es nie gab.
+		if known, err := h.broker.StoredBinding(c.Request.Context(), bindingID); err != nil || known == nil {
+			c.JSON(http.StatusGone, gin.H{"error": "Gone", "description": "binding not found"})
+			return
+		}
+
 		if err := h.engine.Engine.DeleteBindingSecret(
 			c.Request.Context(), sd, namespace, bindingID); err != nil {
 			respondOSBError(c, err)
 			return
 		}
+
+		// Datensatz mit abraeumen, sonst laege nach dem Unbind ein Eintrag mit
+		// echten Zugangsdaten weiter im Zustandsspeicher - und ein erneutes
+		// Bind derselben ID bekaeme die alten Credentials zurueck.
+		if err := h.broker.ForgetBinding(c.Request.Context(), bindingID); err != nil {
+			respondOSBError(c, err)
+			return
+		}
+
 		h.observeUnbind(req.ServiceID)
 		c.JSON(http.StatusOK, broker.UnbindResponse{})
 		return

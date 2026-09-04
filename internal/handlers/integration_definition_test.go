@@ -91,6 +91,14 @@ func putJSON(router *gin.Engine, path string, body interface{}) *httptest.Respon
 	return sendJSON(router, "PUT", path, body)
 }
 
+// provisionJSON provisioniert wie die Plattform es tut: mit
+// accepts_incomplete=true in der Query. Ohne den Parameter antwortet der
+// Definitions-Pfad mit 422 AsyncRequired - er kann nicht synchron fertig
+// werden, und das zu behaupten war der Fehler.
+func provisionJSON(router *gin.Engine, path string, body interface{}) *httptest.ResponseRecorder {
+	return sendJSON(router, "PUT", path+"?accepts_incomplete=true", body)
+}
+
 func patchJSON(router *gin.Engine, path string, body interface{}) *httptest.ResponseRecorder {
 	return sendJSON(router, "PATCH", path, body)
 }
@@ -126,12 +134,12 @@ func TestIntegration_DefinitionLifecycleOverHTTP(t *testing.T) {
 	assert.True(t, found, "test-db must appear in catalog")
 
 	// 2. Provision
-	w = putJSON(router, "/v2/service_instances/inst-int-1", map[string]interface{}{
+	w = provisionJSON(router, "/v2/service_instances/inst-int-1", map[string]interface{}{
 		"service_id": "def-svc-0001",
 		"plan_id":    "def-plan-free",
 		"context":    map[string]interface{}{"platform": "cloudfoundry"},
 	})
-	require.Equal(t, http.StatusCreated, w.Code, "body: %s", w.Body.String())
+	require.Equal(t, http.StatusAccepted, w.Code, "body: %s", w.Body.String())
 
 	// CR exists with rendered spec
 	cr, err := oc.GetCR(ctx, "test.example.com/v1", "Database", "default", "osb-inst-int-1")
@@ -202,11 +210,11 @@ func TestIntegration_DefinitionUpdateOverHTTP(t *testing.T) {
 	ctx := context.Background()
 
 	// Provision small
-	w := putJSON(router, "/v2/service_instances/inst-upd-http", map[string]interface{}{
+	w := provisionJSON(router, "/v2/service_instances/inst-upd-http", map[string]interface{}{
 		"service_id": "def-svc-0001",
 		"plan_id":    "def-plan-free",
 	})
-	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
 
 	cr, err := oc.GetCR(ctx, "test.example.com/v1", "Database", "default", "osb-inst-upd-http")
 	require.NoError(t, err)
@@ -217,8 +225,8 @@ func TestIntegration_DefinitionUpdateOverHTTP(t *testing.T) {
 
 	// PATCH auf denselben Plan → No-op: CR darf nicht verändert werden
 	patchBody, _ := json.Marshal(map[string]interface{}{
-		"service_id":     "def-svc-0001",
-		"plan_id":        "def-plan-free",
+		"service_id":      "def-svc-0001",
+		"plan_id":         "def-plan-free",
 		"previous_values": map[string]interface{}{"plan_id": "def-plan-free"},
 	})
 	w = httptest.NewRecorder()

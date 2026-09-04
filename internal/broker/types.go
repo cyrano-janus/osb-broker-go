@@ -7,11 +7,11 @@ const APIVersion = "2.17"
 
 // Context represents platform context
 type Context struct {
-	Platform           string `json:"platform"`
-	OrganizationGUID   string `json:"organization_guid,omitempty"`
-	SpaceGUID          string `json:"space_guid,omitempty"`
-	ClusterID          string `json:"cluster_id,omitempty"`
-	Namespace          string `json:"namespace,omitempty"`
+	Platform            string `json:"platform"`
+	OrganizationGUID    string `json:"organization_guid,omitempty"`
+	SpaceGUID           string `json:"space_guid,omitempty"`
+	ClusterID           string `json:"cluster_id,omitempty"`
+	Namespace           string `json:"namespace,omitempty"`
 	OriginatingIdentity string `json:"originating_identity,omitempty"`
 }
 
@@ -21,7 +21,6 @@ type ProvisionRequest struct {
 	PlanID     string                 `json:"plan_id"`
 	Context    Context                `json:"context"`
 	Parameters map[string]interface{} `json:"parameters,omitempty"`
-	AcceptsIncomplete bool            `json:"accepts_incomplete"`
 
 	// OrganizationGUID und SpaceGUID sind die Top-Level-Felder aus OSB <= 2.12.
 	// Die Spezifikation fuehrt sie als veraltet, Cloud Foundry sendet sie aber
@@ -66,18 +65,18 @@ type DeprovisionResponse struct {
 
 // BindRequest represents a bind request
 type BindRequest struct {
-	ServiceID  string                 `json:"service_id"`
-	PlanID     string                 `json:"plan_id"`
-	AppGUID    string                 `json:"app_guid"`
-	Context    Context                `json:"context"`
-	Parameters map[string]interface{} `json:"parameters,omitempty"`
-	BindResource *BindResource        `json:"bind_resource,omitempty"`
+	ServiceID    string                 `json:"service_id"`
+	PlanID       string                 `json:"plan_id"`
+	AppGUID      string                 `json:"app_guid"`
+	Context      Context                `json:"context"`
+	Parameters   map[string]interface{} `json:"parameters,omitempty"`
+	BindResource *BindResource          `json:"bind_resource,omitempty"`
 }
 
 // BindResource represents bind resource information
 type BindResource struct {
-	AppGUID    string `json:"app_guid,omitempty"`
-	Route      string `json:"route,omitempty"`
+	AppGUID        string `json:"app_guid,omitempty"`
+	Route          string `json:"route,omitempty"`
 	CredentialName string `json:"credential_name,omitempty"`
 }
 
@@ -103,12 +102,11 @@ type UnbindResponse struct {
 
 // UpdateInstanceRequest represents an update instance request
 type UpdateInstanceRequest struct {
-	ServiceID       string                 `json:"service_id"`
-	PlanID          string                 `json:"plan_id"`
-	Context         Context                `json:"context"`
-	Parameters      map[string]interface{} `json:"parameters,omitempty"`
-	PreviousValues  PreviousValues         `json:"previous_values"`
-	AcceptsIncomplete bool                `json:"accepts_incomplete"`
+	ServiceID      string                 `json:"service_id"`
+	PlanID         string                 `json:"plan_id"`
+	Context        Context                `json:"context"`
+	Parameters     map[string]interface{} `json:"parameters,omitempty"`
+	PreviousValues PreviousValues         `json:"previous_values"`
 }
 
 // PreviousValues represents previous state values
@@ -131,10 +129,10 @@ type LastOperationResponse struct {
 
 // GetInstanceResponse represents a get instance response
 type GetInstanceResponse struct {
-	ServiceID string `json:"service_id"`
-	PlanID    string `json:"plan_id"`
-	DashboardURL string `json:"dashboard_url,omitempty"`
-	Parameters  map[string]interface{} `json:"parameters,omitempty"`
+	ServiceID    string                 `json:"service_id"`
+	PlanID       string                 `json:"plan_id"`
+	DashboardURL string                 `json:"dashboard_url,omitempty"`
+	Parameters   map[string]interface{} `json:"parameters,omitempty"`
 }
 
 // GetBindingResponse represents a get binding response

@@ -44,7 +44,6 @@ func TestProvision(t *testing.T) {
 			OrganizationGUID: "org-123",
 			SpaceGUID:        "space-456",
 		},
-		AcceptsIncomplete: false,
 	}
 
 	response, err := broker.Provision(context.Background(), "instance-1", req)

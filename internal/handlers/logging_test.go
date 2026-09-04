@@ -95,8 +95,8 @@ func TestStructuredLogOutput_ContainsCorrelationID(t *testing.T) {
 // --- helpers ---
 
 type testLogWriter struct {
-	mu  sync.Mutex
-	sb  strings.Builder
+	mu sync.Mutex
+	sb strings.Builder
 }
 
 func (w *testLogWriter) Write(p []byte) (int, error) {

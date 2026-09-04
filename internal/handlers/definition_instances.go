@@ -25,7 +25,7 @@ func (h *Handlers) resolveDefinition(serviceID string) (*definition.ServiceDefin
 }
 
 // ProvisionDefinitionInstance handles definition-based provisioning.
-func (h *Handlers) provisionDefinitionWithRequest(c *gin.Context, instanceID string, req broker.ProvisionRequest) {
+func (h *Handlers) provisionDefinitionWithRequest(c *gin.Context, instanceID string, req broker.ProvisionRequest, acceptsIncomplete bool) {
 	if req.ServiceID == "" || req.PlanID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "BadRequest", "description": "service_id and plan_id are required"})
 		return
@@ -55,6 +55,22 @@ func (h *Handlers) provisionDefinitionWithRequest(c *gin.Context, instanceID str
 		return
 	}
 
+	// OSB 2.17: kann der Broker nur asynchron provisionieren und hat der
+	// Aufrufer das nicht erlaubt, ist die Antwort 422 AsyncRequired - nicht
+	// ein 201, das Fertigstellung behauptet.
+	//
+	// Der Definitions-Pfad IST asynchron: er legt ein CR an, fertig ist der
+	// Dienst erst, wenn der Operator ihn hergestellt hat. Bei CloudNativePG
+	// sind das Minuten. Ein synchrones 201 fuehrte genau dazu, dass die
+	// Plattform gegen ein Secret bindet, das es noch nicht gibt.
+	if !acceptsIncomplete {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"error":       "AsyncRequired",
+			"description": "This service plan requires client support for asynchronous service operations.",
+		})
+		return
+	}
+
 	// Beide erlaubten Quellen auswerten: Korifi schickt space_guid
 	// ausschliesslich als Top-Level-Feld (FINDINGS #3).
 	namespace := targetNamespace(req.ResolvedContext())
@@ -64,9 +80,18 @@ func (h *Handlers) provisionDefinitionWithRequest(c *gin.Context, instanceID str
 	}
 	h.observeProvision(req.ServiceID, req.PlanID)
 
-	dashboard := "https://dashboard.example.com/instances/" + instanceID
-	c.JSON(http.StatusCreated, broker.ProvisionResponse{DashboardURL: dashboard})
+	c.JSON(http.StatusAccepted, broker.ProvisionResponse{
+		DashboardURL: "https://dashboard.example.com/instances/" + instanceID,
+		Operation:    provisionOperation,
+	})
 }
+
+// provisionOperation ist die Kennung, die der Broker mit dem 202 zurueckgibt
+// und die die Plattform bei last_operation wieder mitschickt.
+//
+// Ein Wert genuegt: der Zustand wird bei jeder Abfrage frisch aus dem CR
+// gelesen, es gibt also keinen Vorgang, den der Broker sich merken muesste.
+const provisionOperation = "provision"
 
 // DeprovisionDefinitionInstance removes the CR for the instance.
 func (h *Handlers) deprovisionDefinition(c *gin.Context, instanceID, serviceID string) {

@@ -11,12 +11,12 @@ import (
 
 // Broker implements the Open Service Broker API
 type Broker struct {
-	store       store.ServiceStore
-	state       StateStore
-	instances   map[string]*Instance
-	bindings    map[string]*Binding
-	operations  map[string]*Operation
-	mu          sync.RWMutex
+	store      store.ServiceStore
+	state      StateStore
+	instances  map[string]*Instance
+	bindings   map[string]*Binding
+	operations map[string]*Operation
+	mu         sync.RWMutex
 
 	// LastBindWasIdempotent reports whether the most recent Bind call
 	// returned an existing binding (true) or created a new one (false).
@@ -292,6 +292,28 @@ func (b *Broker) GetInstance(ctx context.Context, instanceID string) (*GetInstan
 }
 
 // GetBinding retrieves binding details
+// StoredBinding liefert den gespeicherten Binding-Datensatz oder einen
+// Fehler. Gegenstueck zu StoredInstance, gebraucht vom Definitions-Pfad.
+func (b *Broker) StoredBinding(ctx context.Context, bindingID string) (*Binding, error) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.state.GetBinding(ctx, bindingID)
+}
+
+// ForgetBinding entfernt einen Binding-Datensatz aus dem Zustandsspeicher.
+func (b *Broker) ForgetBinding(ctx context.Context, bindingID string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.state.DeleteBinding(ctx, bindingID)
+}
+
+// RecordBinding schreibt einen Binding-Datensatz in den Zustandsspeicher.
+func (b *Broker) RecordBinding(ctx context.Context, bd *Binding) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.state.PutBinding(ctx, bd)
+}
+
 func (b *Broker) GetBinding(ctx context.Context, instanceID, bindingID string) (*GetBindingResponse, error) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()

@@ -72,11 +72,12 @@ on error — the request falls back silently to `internal/broker/broker.go`, a
 second complete broker with its own catalogue. This is the root of several of
 the points above. *FINDINGS #13.*
 
-**The project's own conformance suite tests the wrong path.** `pickService` in
-`cmd/osb-checker/checks/checks.go` takes the first service from the catalogue,
-and that is always the demo service `service-1`. The suite therefore measures
-the fallback path, not the engine — which is why the missing binding persistence
-went unnoticed. *FINDINGS #20.*
+**Nothing demonstrates that the gate's checks can fail.** `cmd/osb-checker`
+has no mutation suite: only `pickService` and `checkServiceBindingSpec` are
+tested, not the checks themselves. A gate whose checks are ineffective is
+indistinguishable from a green one — which is exactly what happened while the
+selection always hit the demo service (*FINDINGS #20*, fixed). The standalone
+checker has such a suite.
 
 **The HTTP status is guessed from error text.**
 `internal/handlers/errors.go` decides via `strings.Contains`. Every DELETE error

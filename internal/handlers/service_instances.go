@@ -1,7 +1,6 @@
 package handlers
 
 import (
-
 	"net/http"
 
 	"github.com/example/osb-broker/internal/broker"
@@ -38,14 +37,15 @@ func (h *Handlers) ProvisionServiceInstance(c *gin.Context) {
 		return
 	}
 
-	// Check for async support
-	if req.AcceptsIncomplete {
-		// For this reference implementation, we support async but execute synchronously
-	}
+	// accepts_incomplete ist ein QUERY-Parameter, kein Body-Feld. Als Feld
+	// modelliert wurde er nie gefuellt, der Async-Apparat lief deshalb leer
+	// und der Broker meldete "fertig", sobald das CR angelegt war - bei
+	// CloudNativePG Minuten zu frueh.
+	acceptsIncomplete := c.Query("accepts_incomplete") == "true"
 
 	// Phase 2: definition-based services take precedence.
 	if sd, _ := h.resolveDefinition(req.ServiceID); sd != nil {
-		h.provisionDefinitionWithRequest(c, instanceID, req)
+		h.provisionDefinitionWithRequest(c, instanceID, req, acceptsIncomplete)
 		return
 	}
 
@@ -169,8 +169,19 @@ func (h *Handlers) GetLastOperation(c *gin.Context) {
 	instanceID := c.Param("instance_id")
 	operation := c.Query("operation")
 
+	// service_id ist laut Spezifikation empfohlen, nicht Pflicht. Fehlt es,
+	// kommt der Service aus dem gespeicherten Datensatz - sonst faellt die
+	// Abfrage auf den Fallback-Pfad zurueck, der hart "succeeded" meldet, und
+	// die Plattform haelt eine Instanz fuer fertig, die noch entsteht.
+	serviceID := c.Query("service_id")
+	if serviceID == "" {
+		if inst, err := h.broker.StoredInstance(c.Request.Context(), instanceID); err == nil && inst != nil {
+			serviceID = inst.ServiceID
+		}
+	}
+
 	// Phase 2: definition-based services derive state from CR readiness.
-	if serviceID := c.Query("service_id"); serviceID != "" {
+	if serviceID != "" {
 		if sd, _ := h.resolveDefinition(serviceID); sd != nil {
 			// Ebenso hier: ohne den gespeicherten Namespace suchte
 			// last_operation in "default", fand nichts und fiel auf den
@@ -178,11 +189,28 @@ func (h *Handlers) GetLastOperation(c *gin.Context) {
 			// eine Instanz, die der Broker gar nicht gefunden hat
 			// (FINDINGS #16).
 			namespace := h.instanceNamespace(c.Request.Context(), instanceID)
+
+			// OSB 2.17: kennt der Broker die Instanz nicht, ist die Antwort
+			// 410 Gone. Genau daran erkennt die Plattform, dass ein
+			// Deprovision durch ist - Korifi liest 410 als Abschluss.
+			if !h.instanceKnown(instanceID) {
+				c.JSON(http.StatusGone, gin.H{
+					"error":       "Gone",
+					"description": "instance not found",
+				})
+				return
+			}
+
 			state, err := h.engine.Engine.LastOperation(c.Request.Context(), sd, namespace, instanceID)
 			if err != nil {
-				c.JSON(http.StatusNotFound, gin.H{
-					"error":       "NotFound",
-					"description": err.Error(),
+				// Der Datensatz existiert, das Objekt nicht: der Vorgang ist
+				// gescheitert, nicht "noch unterwegs". Ohne diesen Zweig
+				// pollte die Plattform bis in ihr eigenes Zeitlimit.
+				h.observeLastOperation("failed")
+				c.JSON(http.StatusOK, broker.LastOperationResponse{
+					State:       "failed",
+					Description: "the provisioned resource is gone: " + err.Error(),
+					Operation:   operation,
 				})
 				return
 			}

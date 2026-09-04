@@ -77,11 +77,12 @@ Fehlerfall —, fällt der Request stumm auf `internal/broker/broker.go` zurück
 einen zweiten kompletten Broker mit eigenem Katalog. Das ist die Wurzel mehrerer
 der obigen Punkte. *FINDINGS #13.*
 
-**Die eigene Konformitätssuite prüft den falschen Pfad.** `pickService` in
-`cmd/osb-checker/checks/checks.go` nimmt den ersten Service aus dem Katalog, und
-das ist immer der Demo-Service `service-1`. Die Suite misst damit den
-Fallback-Pfad, nicht die Engine — deshalb ist die fehlende Binding-Persistenz nie
-aufgefallen. *FINDINGS #20.*
+**Nichts belegt, dass die Prüfungen des Gates fehlschlagen können.**
+`cmd/osb-checker` hat keine Mutationssuite: geprüft sind nur `pickService` und
+`checkServiceBindingSpec`, nicht die Prüfungen selbst. Ein Gate, dessen
+Prüfungen wirkungslos sind, ist von einem grünen nicht zu unterscheiden — genau
+das war lange der Fall, als die Auswahl immer den Demo-Service traf
+(*FINDINGS #20*, behoben). Der eigenständige Checker hat eine solche Suite.
 
 **Der HTTP-Status wird aus Fehlertexten geraten.**
 `internal/handlers/errors.go` entscheidet mit `strings.Contains`. Jeder

@@ -22,10 +22,10 @@ func TestProvision_WiederholungIstIdempotent(t *testing.T) {
 		"organization_guid": "org-1", "space_guid": spaceNS,
 	}
 
-	first := putJSON(router, "/v2/service_instances/"+instanceID, body)
-	require.Equal(t, http.StatusCreated, first.Code, first.Body.String())
+	first := provisionJSON(router, "/v2/service_instances/"+instanceID, body)
+	require.Equal(t, http.StatusAccepted, first.Code, first.Body.String())
 
-	second := putJSON(router, "/v2/service_instances/"+instanceID, body)
+	second := provisionJSON(router, "/v2/service_instances/"+instanceID, body)
 
 	assert.Equal(t, http.StatusOK, second.Code,
 		"OSB 2.17: dieselbe Instanz mit denselben Parametern ist 200, nicht 201 - die Plattform wiederholt Requests")
@@ -36,13 +36,13 @@ func TestProvision_AndereParameterSindEinKonflikt(t *testing.T) {
 	router, _ := newDefinitionRouter(t)
 	const instanceID = "idem-inst-2"
 
-	first := putJSON(router, "/v2/service_instances/"+instanceID, map[string]interface{}{
+	first := provisionJSON(router, "/v2/service_instances/"+instanceID, map[string]interface{}{
 		"service_id": "def-svc-0001", "plan_id": "def-plan-free",
 		"organization_guid": "org-1", "space_guid": spaceNS,
 	})
-	require.Equal(t, http.StatusCreated, first.Code, first.Body.String())
+	require.Equal(t, http.StatusAccepted, first.Code, first.Body.String())
 
-	second := putJSON(router, "/v2/service_instances/"+instanceID, map[string]interface{}{
+	second := provisionJSON(router, "/v2/service_instances/"+instanceID, map[string]interface{}{
 		"service_id": "def-svc-0001", "plan_id": "def-plan-paid",
 		"organization_guid": "org-1", "space_guid": spaceNS,
 	})

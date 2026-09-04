@@ -123,10 +123,10 @@ func TestSpecBinding_BindLiefertGeformteCredentialsUndSchreibtDasSecret(t *testi
 	const instanceID = "spec-inst-1"
 	const bindingID = "spec-bind-1"
 
-	w := putJSON(router, "/v2/service_instances/"+instanceID, map[string]interface{}{
+	w := provisionJSON(router, "/v2/service_instances/"+instanceID, map[string]interface{}{
 		"service_id": "spec-svc-0001", "plan_id": "spec-plan-free",
 	})
-	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
 	operatorSecret(t, oc, instanceID)
 
 	w = putJSON(router, "/v2/service_instances/"+instanceID+"/service_bindings/"+bindingID,
@@ -161,7 +161,7 @@ func TestSpecBinding_UnbindRaeumtDasProjizierteSecretAb(t *testing.T) {
 	const bindingID = "spec-bind-2"
 	ctx := context.Background()
 
-	require.Equal(t, http.StatusCreated, putJSON(router, "/v2/service_instances/"+instanceID,
+	require.Equal(t, http.StatusAccepted, provisionJSON(router, "/v2/service_instances/"+instanceID,
 		map[string]interface{}{"service_id": "spec-svc-0001", "plan_id": "spec-plan-free"}).Code)
 	operatorSecret(t, oc, instanceID)
 	require.Equal(t, http.StatusCreated, putJSON(router,
@@ -180,9 +180,13 @@ func TestSpecBinding_UnbindRaeumtDasProjizierteSecretAb(t *testing.T) {
 	assert.Error(t, err, "nach dem Unbind darf kein Secret mit echten Credentials stehen bleiben")
 }
 
-func TestSpecBinding_ZweitesUnbindBleibtErfolgreich(t *testing.T) {
+func TestSpecBinding_UnbindEinerUnbekanntenIst410(t *testing.T) {
+	// OSB 2.17: das Unbind einer Binding, die es nicht gibt, ist 410 Gone.
+	// Idempotenz beim Loeschen heisst genau das - nicht ein zweites 200, das
+	// eine Loeschung behauptet, die nie stattgefunden hat. Ohne
+	// Binding-Datensatz konnte der Broker den Unterschied nicht kennen.
 	router, _ := newSpecBindingRouter(t)
 	w := deleteJSON(router, "/v2/service_instances/spec-inst-3/service_bindings/spec-bind-3"+
 		"?service_id=spec-svc-0001&plan_id=spec-plan-free")
-	assert.Equal(t, http.StatusOK, w.Code, "Unbind ist idempotent")
+	assert.Equal(t, http.StatusGone, w.Code, w.Body.String())
 }

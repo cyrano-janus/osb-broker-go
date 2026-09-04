@@ -40,6 +40,7 @@ func New(b *broker.Broker) *Handlers {
 		broker: b,
 	}
 }
+
 // Healthz handles GET /healthz for Kubernetes liveness/readiness probes
 func (h *Handlers) Healthz(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})

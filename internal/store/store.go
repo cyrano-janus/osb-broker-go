@@ -7,21 +7,21 @@ type Catalog struct {
 
 // Service represents a service offering
 type Service struct {
-	ID          string        `json:"id"`
-	Name        string        `json:"name"`
-	Description string        `json:"description"`
-	Bindable    bool          `json:"bindable"`
-	Plans       []ServicePlan `json:"plans"`
+	ID          string           `json:"id"`
+	Name        string           `json:"name"`
+	Description string           `json:"description"`
+	Bindable    bool             `json:"bindable"`
+	Plans       []ServicePlan    `json:"plans"`
 	Metadata    *ServiceMetadata `json:"metadata,omitempty"`
-	Tags        []string      `json:"tags,omitempty"`
-	Requires    []string      `json:"requires,omitempty"`
+	Tags        []string         `json:"tags,omitempty"`
+	Requires    []string         `json:"requires,omitempty"`
 }
 
 // ServiceMetadata contains optional metadata for a service
 type ServiceMetadata struct {
-	DisplayName     string `json:"displayName,omitempty"`
-	ImageURL        string `json:"imageUrl,omitempty"`
-	LongDescription string `json:"longDescription,omitempty"`
+	DisplayName         string `json:"displayName,omitempty"`
+	ImageURL            string `json:"imageUrl,omitempty"`
+	LongDescription     string `json:"longDescription,omitempty"`
 	ProviderDisplayName string `json:"providerDisplayName,omitempty"`
 	DocumentationURL    string `json:"documentationUrl,omitempty"`
 	SupportURL          string `json:"supportUrl,omitempty"`
