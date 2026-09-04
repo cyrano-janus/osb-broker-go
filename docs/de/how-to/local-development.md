@@ -157,6 +157,34 @@ ServiceDefinition, und damit die Engine. Gezielt wählen geht so:
 Rückfall — sonst prüfte die CI klaglos etwas anderes als gemeint. Welcher
 Service gewählt wurde, steht als erste `PASS`-Zeile im Bericht.
 
+## Zwei Checker, zwei Rollen
+
+Neben dem eingebauten gibt es ein eigenstaendiges Werkzeug,
+`github.com/cyrano-janus/osb-checker`. Die Rollen sind festgelegt, damit sie
+nicht auseinanderdriften:
+
+| Werkzeug | Rolle | Laeuft |
+|---|---|---|
+| `cmd/osb-checker` | schnelles Gate, blockierend | L2 und L2b, jeder Push |
+| standalone `osb-checker` | Voll-Audit, unabhaengige Gegenprobe | L2, berichtend |
+
+**Widersprechen sich beide, gewinnt die Spezifikation, nicht das Werkzeug.** Ein
+Widerspruch ist ein Befund fuer [known-issues.md](../known-issues.md), kein
+Grund, eine der beiden Suiten anzupassen.
+
+Der standalone-Lauf braucht in der CI ein Token, weil das Repo privat ist:
+Repository-Secret `OSB_CHECKER_TOKEN`. Fehlt es, entfaellt der Schritt und der
+Gate bleibt vollstaendig — nur ohne Gegenprobe.
+
+Lokal:
+
+```bash
+git clone git@github.com:cyrano-janus/osb-checker
+cd osb-checker && cp config.yaml configs/config.yaml
+# configs/ ist gitignoriert: dort stehen echte Zugangsdaten
+go build -o osb-checker . && ./osb-checker -f configs/config.yaml
+```
+
 ## Konventionen
 
 - **Sprache:** Kommentare, Commit-Nachrichten und neue Testnamen auf Deutsch.

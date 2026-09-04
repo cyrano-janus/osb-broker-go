@@ -115,6 +115,12 @@ Services bekämen beim Provision einen 403.
 trifft auf einen leeren `issuerRef.name` und damit auf ein `{{ required }}`.
 Beabsichtigt, aber unerwartet.
 
+**Die Zweitmeinung in der CI blockiert noch nicht.** Der standalone-Checker
+laeuft im Job `conformance` mit `continue-on-error: true`, weil er ueber die
+oben genannten Blocker stolpert — Bind und `GET binding` antworten 404. Sein
+Bericht steht in der Job-Zusammenfassung und als Artefakt. Sobald die Blocker
+weg sind, faellt `continue-on-error` weg.
+
 **`config.logRequests` wird von keinem Template gelesen** und hat keine
 entsprechende Umgebungsvariable.
 

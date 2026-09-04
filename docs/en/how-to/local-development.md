@@ -158,6 +158,34 @@ ServiceDefinition, and therefore the engine. To choose deliberately:
 otherwise CI would happily audit something other than intended. Which service
 was chosen appears as the first `PASS` line of the report.
 
+## Two checkers, two roles
+
+Besides the built-in one there is a standalone tool,
+`github.com/cyrano-janus/osb-checker`. The roles are fixed so that the two do
+not drift apart:
+
+| Tool | Role | Runs |
+|---|---|---|
+| `cmd/osb-checker` | fast gate, blocking | L2 and L2b, every push |
+| standalone `osb-checker` | full audit, independent counter-check | L2, reporting only |
+
+**If the two disagree, the specification wins, not the tool.** A disagreement is
+a finding for [known-issues.md](../known-issues.md), not a reason to adjust
+either suite.
+
+The standalone run needs a token in CI because the repository is private:
+repository secret `OSB_CHECKER_TOKEN`. Without it the step is skipped and the
+gate stays complete — just without the counter-check.
+
+Locally:
+
+```bash
+git clone git@github.com:cyrano-janus/osb-checker
+cd osb-checker && cp config.yaml configs/config.yaml
+# configs/ is gitignored: it holds real credentials
+go build -o osb-checker . && ./osb-checker -f configs/config.yaml
+```
+
 ## Conventions
 
 - **Language:** comments, commit messages and new test names in German.

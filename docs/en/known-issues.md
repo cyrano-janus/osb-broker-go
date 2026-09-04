@@ -110,6 +110,12 @@ services would get a 403 on provision.
 `tls.certManager.enabled: true` meets an empty `issuerRef.name` and therefore a
 `{{ required }}`. Intended, but surprising.
 
+**The counter-check in CI does not block yet.** The standalone checker runs in
+the `conformance` job with `continue-on-error: true`, because it trips over the
+blockers listed above — bind and `GET binding` answer 404. Its report is in the
+job summary and as an artifact. Once the blockers are gone, `continue-on-error`
+goes with them.
+
 **`config.logRequests` is read by no template** and has no corresponding
 environment variable.
 
