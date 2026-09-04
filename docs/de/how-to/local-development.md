@@ -166,14 +166,21 @@ nicht auseinanderdriften:
 | Werkzeug | Rolle | Laeuft |
 |---|---|---|
 | `cmd/osb-checker` | schnelles Gate, blockierend | L2 und L2b, jeder Push |
-| standalone `osb-checker` | Voll-Audit, unabhaengige Gegenprobe | L2, berichtend |
+| standalone `osb-checker` | Voll-Audit, unabhaengige Gegenprobe | L2, blockierend |
 
 **Widersprechen sich beide, gewinnt die Spezifikation, nicht das Werkzeug.** Ein
 Widerspruch ist ein Befund fuer [known-issues.md](../known-issues.md), kein
 Grund, eine der beiden Suiten anzupassen.
 
+Beide Laeufe blockieren. Eine Gegenprobe, die nur berichtet, wird ueberlesen;
+ein Werkzeug, dessen Urteil folgenlos bleibt, ist von einem kaputten nicht zu
+unterscheiden.
+
 Das Checker-Repo ist öffentlich; die CI klont es ohne Anmeldung und ohne
-gepinnten Stand — die Gegenprobe soll den jeweils aktuellen Checker fahren.
+gepinnten Stand — die Gegenprobe soll den jeweils aktuellen Checker fahren. Der
+Preis dafuer ist bekannt: ein Commit im Checker-Repo kann die CI dieses Repos
+rot machen, ohne dass sich hier etwas geaendert hat. Genau dann soll jemand
+hinsehen.
 
 Lokal:
 

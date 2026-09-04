@@ -167,15 +167,20 @@ not drift apart:
 | Tool | Role | Runs |
 |---|---|---|
 | `cmd/osb-checker` | fast gate, blocking | L2 and L2b, every push |
-| standalone `osb-checker` | full audit, independent counter-check | L2, reporting only |
+| standalone `osb-checker` | full audit, independent counter-check | L2, blocking |
 
 **If the two disagree, the specification wins, not the tool.** A disagreement is
 a finding for [known-issues.md](../known-issues.md), not a reason to adjust
 either suite.
 
+Both runs block. A counter-check that only reports gets skimmed past; and a
+tool whose verdict has no consequence is indistinguishable from a broken one.
+
 The checker repository is public; CI clones it without credentials and without
 a pinned revision — the counter-check should run whatever the current checker
-is.
+is. The price is known: a commit in the checker repository can turn this
+repository's CI red without anything here having changed. That is exactly when
+somebody should look.
 
 Locally:
 

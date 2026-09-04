@@ -151,18 +151,22 @@ jobs:
           repository: cyrano-janus/osb-checker
           path: .osb-checker-standalone
 
-      - name: Zweitmeinung — standalone osb-checker (nur berichtend)
+      - name: Zweitmeinung — standalone osb-checker
         # Zwei Werkzeuge fuer dieselbe Aufgabe koennen auseinanderdriften.
-        # Deshalb ist die Rollentrennung festgelegt: cmd/osb-checker ist der
-        # blockierende Gate, dieser Lauf ist die unabhaengige Gegenprobe.
-        # Widersprechen sich beide, gewinnt die Spezifikation - ein
-        # Widerspruch ist ein Befund, kein Grund, eine Suite anzupassen.
+        # Deshalb ist die Rollentrennung festgelegt: cmd/osb-checker prueft
+        # gegen die eigene Auslegung der Spezifikation, dieser Lauf ist die
+        # unabhaengige Gegenprobe. Widersprechen sich beide, gewinnt die
+        # Spezifikation - ein Widerspruch ist ein Befund, kein Grund, eine
+        # Suite anzupassen.
         #
-        # continue-on-error, solange die bekannten Blocker offen sind: ein
-        # Gate, das immer rot ist, wird abgeschaltet statt beachtet. Der
-        # Bericht steht trotzdem in der Zusammenfassung und als Artefakt.
-        # Zu entfernen, sobald known-issues.md die Blocker nicht mehr fuehrt.
-        continue-on-error: true
+        # Beide Laeufe blockieren. Eine Gegenprobe, die nur berichtet, wird
+        # ueberlesen; und ein Werkzeug, dessen Urteil folgenlos bleibt, ist von
+        # einem kaputten nicht zu unterscheiden.
+        #
+        # Der Checkout oben ist bewusst ungepinnt (siehe dort). Das heisst
+        # jetzt auch: ein Commit im Checker-Repo kann diesen Job rot machen,
+        # ohne dass sich hier etwas geaendert hat. Das ist gewollt - genau
+        # dann soll jemand hinsehen.
         run: |
           cd .osb-checker-standalone
           go build -o /tmp/osb-checker-standalone .
