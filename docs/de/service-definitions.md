@@ -81,6 +81,8 @@ schlimmer als einer, der gar nicht startet.
 | `description` | nein | Katalogtext. |
 | `params` | nein | **Die Stellschrauben.** Landen im Template als `{{ .plan.<key> }}`. |
 | `allowedParameters` | nein | Welche dieser Stellschrauben der Benutzer selbst setzen darf. Siehe unten. |
+| `parameterLimits` | nein | **Kontingente.** Grenzen für die Werte, die er setzen darf. Siehe unten. |
+| `retainOnDeprovision` | nein | Lässt die Ressourcen des Operators beim Löschen stehen. Siehe unten. |
 | `free` | nein | Wird gelesen und **nicht verwendet** — der Katalog setzt für jeden Plan hart `free: true`. |
 
 **Der Typ eines `params`-Wertes zählt.** YAML liest `1` als Zahl und `1Gi` als
@@ -105,6 +107,75 @@ nimmt keine Benutzerparameter.
 `cf create-service pg small db -c '{"storageSize":"5Gi"}'` rendert damit
 `5Gi`, `cf create-service pg small db` rendert `1Gi`, und
 `-c '{"instances":3}'` ist `400`.
+
+**`parameterLimits` macht aus „darf setzen" ein Kontingent.** Ohne Grenzen
+beschreibt ein Plan seine Größen, erzwingt sie aber nicht: der Plan `small` mit
+1Gi ließe sich mit `10Ti` provisionieren, und der Betreiber sähe es an der
+Rechnung.
+
+```yaml
+allowedParameters: [storageSize, instances, tier]
+parameterLimits:
+  storageSize: {max: 5Gi}            # Mengenangabe
+  instances:   {min: "1", max: "3"}  # Zahl
+  tier:        {oneOf: [bronze, silber]}
+```
+
+Verglichen wird über `resource.Quantity` — dieselbe Schreibweise deckt eine
+bloße Zahl und eine Kubernetes-Mengenangabe ab. Zahlen kommen aus JSON als
+`float64`, aus YAML als `int`; beide werden auf dieselbe Form gebracht, sonst
+griffe die Grenze je nach Herkunft des Wertes anders. Ein Wert, der sich nicht
+vergleichen lässt, wird **abgelehnt** und nicht durchgewinkt — sonst umginge
+`"viel"` jede Grenze.
+
+`oneOf` schließt max/min aus; beides zusammen ist ein Ladefehler. Zwei weitere
+Fehler fallen ebenfalls beim Laden auf statt beim ersten Provision: eine Grenze
+auf einem Schlüssel, der nicht in `allowedParameters` steht (sie könnte nie
+greifen und täuschte Schutz vor), und eine Grenze, die sich nicht lesen lässt.
+
+**Die Grenzen stehen auch im Katalog.** OSB 2.17 sieht je Plan einen
+`schemas`-Block vor; eine Plattform kann damit ablehnen, bevor der Broker
+gefragt wird, und eine Oberfläche daraus ein Formular bauen. Der Broker leitet
+ihn aus `allowedParameters` und `parameterLimits` ab — zwei Quellen für
+dieselbe Aussage liefen auseinander:
+
+| Definition | im Plan-Schema |
+|---|---|
+| `allowedParameters` | `properties` plus `additionalProperties: false` |
+| `oneOf` | `enum` |
+| `max`/`min` als bloße Zahl | `maximum`/`minimum` |
+| `max`/`min` als Mengenangabe | `description` — `10Gi` ist in JSON Schema keine Zahl |
+
+**`retainOnDeprovision` schützt Daten vor einem Tastendruck.**
+`cf delete-service` löscht die Backing-Ressource sonst sofort. Für einen
+Entwicklungsplan ist das richtig; für einen Produktionsplan ist es die
+unwiderrufliche Löschung einer Datenbank — und OSB kennt für das Deprovision
+keinen Weg, eine Bestätigung zu übermitteln. Der Request trägt weder Körper
+noch Parameter, mit dem ein Benutzer „ja wirklich" sagen könnte. **Deshalb
+entscheidet der Plan.**
+
+```yaml
+- id: plan-large-0000-0000-000000000002
+  name: large
+  description: "HA, 3 Instanzen. Deleting the service keeps the data."
+  retainOnDeprovision: true
+```
+
+Der Broker gibt die Instanz trotzdem auf: der Datensatz verschwindet, das
+Deprovision ist `200`, ein zweites `410`. OSB kennt kein „teilweise gelöscht",
+und die Plattform muss abschließen können. Nur die Daten bleiben — und die
+Ressourcen tragen `osb.io/retained-instance` und `osb.io/retained-at`, damit
+ein Betreiber sie findet:
+
+```bash
+kubectl get clusters.postgresql.cnpg.io -A -l osb.io/retained-instance
+```
+
+**Ohne Datensatz wird gelöscht.** Kennt der Broker den Plan einer Instanz nicht
+mehr, hält er nicht zurück: das wäre eine Annahme über einen Plan, den er nicht
+kennt, und jede verlorene Buchführung würde stillschweigend Ressourcen
+anhäufen. Und: schreibe die Absicht in die `description` — das ist der Text,
+den ein Benutzer in `cf marketplace` sieht.
 
 ## `spec.provision`
 

@@ -245,6 +245,29 @@ cd osb-checker && cp config.yaml configs/config.yaml
 go build -o osb-checker . && ./osb-checker -f configs/config.yaml
 ```
 
+## Ein neues Feld an einer Definition
+
+Der Weg ist kurz, aber es gibt vier Stellen, und drei davon mahnt ein Test an,
+wenn man sie vergisst:
+
+1. **Der Go-Typ** in `internal/definition/definition.go`.
+2. **Das JSON-Schema** `schemas/service-definition.schema.json` — damit prüft
+   ein Anwender seine Definition offline, bevor er sie ausrollt.
+3. **Die eingebettete Kopie** `internal/handlers/docs/service-definition.schema.json`,
+   die der Broker unter `/schemas/…` ausliefert. Ein `cp` genügt.
+4. **Diese Doku** — `service-definitions.md`, in beiden Sprachbäumen.
+
+`TestSchema_PlanDecktDenGoTyp` und sein Gegenstück prüfen Schritt 1 und 2 **in
+beide Richtungen**: ein Go-Feld ohne Schema-Eintrag fällt auf, und ein
+Schema-Schlüssel ohne Go-Feld auch — das wäre eine Zusage an Anwender, die der
+Broker nicht einlöst. `TestDocsSync_ServiceDefinitionSchemaMatchesEmbeddedCopy`
+prüft Schritt 3.
+
+**Diese Wächter gab es nicht immer.** `Plan` steckt nicht unter `definitions/`
+im Schema, sondern inline in `offering.properties.plans.items` — deshalb hatte
+es lange keinen Wächter, und `parameterLimits` ist am Schema vorbeigerutscht.
+Der Wächter kam danach und hat beim nächsten Feld sofort angeschlagen.
+
 ## Das Chart bleibt mit dem Repo zusammen
 
 `values-kind.yaml` bettet die Definitionen als Zeichenketten ein. Zwei Kopien

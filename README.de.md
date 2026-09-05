@@ -17,6 +17,13 @@ hinzu, wenn ihn eine konkrete Last verlangt **und** sein Operator das
 Dreier-Muster erfüllt. Warum das so ist, steht in
 [ADR 0008](docs/de/adr/0008-depth-over-breadth.md).
 
+Die Arbeit geht deshalb in die Tiefe: ein Plan **erzwingt** seine Größen
+(`parameterLimits`, auch als OSB-Plan-Schema im Katalog), ein Produktionsplan
+verliert seine Daten nicht auf einen Tastendruck (`retainOnDeprovision`), und
+der Bestand ist nach Angebot und Plan aufgeschlüsselt. Was noch fehlt —
+Sicherung, Point-in-Time-Recovery, Upgrades bestehender Instanzen — steht
+ungeschönt in [target-platforms.md](docs/de/target-platforms.md).
+
 ## Wofür das gebaut wird
 
 | Rolle | System |

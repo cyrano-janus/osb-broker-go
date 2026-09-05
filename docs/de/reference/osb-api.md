@@ -46,6 +46,10 @@ Foundry folgenlos, für einen Marketplace, der den Link anbietet, nicht.
 Damit das Bild nicht schief wird — diese Punkte sind konform und geprüft:
 
 - Die Katalogstruktur, inklusive Plänen, Tags und `bindable`.
+- **Plan-Schemas** (`schemas.service_instance.create/update.parameters`): jeder
+  Plan veröffentlicht, welche Parameter er annimmt — abgeleitet aus
+  `allowedParameters` und `parameterLimits`, also aus dem, was der Broker
+  ohnehin durchsetzt.
 - Die Aushandlung über `X-Broker-API-Version`: der Header ist **Pflicht**, eine
   fremde Hauptversion ist `412 Precondition Failed`. Eine neuere Nebenversion
   wird bedient — die Plattform nennt, was sie zu sprechen bereit ist, und ein

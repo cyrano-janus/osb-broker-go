@@ -139,17 +139,31 @@ weighs more for an operator than a fourth service in the marketplace.
 
 | | State |
 |---|---|
-| **Backup and restore** | CloudNativePG can do it (`Backup`, `ScheduledBackup`, Barman) — the broker offers it neither as a plan attribute nor as a service key |
-| **Point-in-time recovery on provision** | not provided for; an instance is always created empty |
-| **Upgrades of existing instances** | there is no path. Definitions are read at start-up, a changed definition does not touch existing instances |
-| **Quotas** | plans describe sizes, but nothing enforces them — a user parameter can exceed them as far as `allowedParameters` permits |
-| **Per-instance monitoring** | the broker measures itself (`osb_*`), not the services it creates |
-| **Deletion protection** | `cf delete-service` removes the backing resource immediately; there is no grace period and no recycle bin |
+| **Quotas** | ✅ `parameterLimits` per plan, enforced on `PUT` and `PATCH` and published as the plan's OSB schema in the catalogue |
+| **Deletion protection** | ✅ `retainOnDeprovision` per plan; the instance is given up, the data stays and carries `osb.io/retained-instance` |
+| **Inventory** | ✅ `osb_active_instances{service_id,plan_id}` — which offering is used how often |
+| **Backup and restore** | open. CloudNativePG can do it (`Backup`, `ScheduledBackup`, Barman) — the broker offers it neither as a plan attribute nor as a service key |
+| **Point-in-time recovery on provision** | open; an instance is always created empty |
+| **Upgrades of existing instances** | open. Definitions are read at start-up, a changed definition does not touch existing instances |
 | **Behaviour under load, real multi-tenancy** | unverified — see the state of verification |
 
-The order of these points is not settled, and it depends on the target-system
-run: that is where it is decided how backups are stored and who administers
-them.
+**What the broker deliberately does not measure: the health of the services.**
+A broker that rebuilds Postgres metrics duplicates what CloudNativePG and the
+RabbitMQ operator export themselves, and would cost one API call per instance
+per scrape. It measures what only it knows — the OSB inventory; health is
+measured by the operator that runs the service.
+
+**What each of the three open points depends on** — and that is not the same
+thing:
+
+- **Backup and PITR** depend on the target-system run. That is where it is
+  decided where backups go and who administers them; the broker side cannot be
+  sensibly designed without that answer.
+- **Upgrades** do **not** depend on it but on a reconcile loop: a changed
+  definition would have to re-apply to existing instances, and that needs
+  something that runs without a request arriving.
+- **Load and multi-tenancy** are not a feature but a measurement — that needs a
+  target system.
 
 ## What happens to Korifi
 

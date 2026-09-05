@@ -69,10 +69,15 @@ closer to the target platform than Korifi. Classification in
    whether the broker runs as a Kubernetes Deployment beside the platform or as
    a CF app on it. While that is open, any depth work is built on an
    assumption. See [target-platforms.md](target-platforms.md).
-2. **What a managed service needs** — backup and restore, upgrades of existing
-   instances, quotas, per-instance monitoring, deletion protection. The list is
-   in [target-platforms.md](target-platforms.md); since
+2. **What a managed service needs.** Quotas, deletion protection and the
+   inventory breakdown are in place; backup and restore, point-in-time
+   recovery and upgrades of existing instances are open. The list with the
+   state of each is in [target-platforms.md](target-platforms.md); since
    [ADR 0008](adr/0008-depth-over-breadth.md) the effort goes there rather than
    into further catalogue entries.
+
+   **Upgrades do not depend on the target system but on a reconcile loop** — a
+   changed definition would have to re-apply to existing instances, and that
+   needs something that runs without a request arriving.
 3. **`seaweedfs-s3` against a running operator** — the CRD schema says
    `status.conditions` exists, not that the operator writes `Ready` there.

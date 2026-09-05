@@ -140,17 +140,30 @@ Punkt wiegt für einen Betreiber schwerer als ein vierter Dienst im Marketplace.
 
 | | Stand |
 |---|---|
-| **Sicherung und Wiederherstellung** | CloudNativePG kann es (`Backup`, `ScheduledBackup`, Barman) — der Broker bietet es weder als Planmerkmal noch als Service-Key an |
-| **Point-in-Time-Recovery beim Provision** | nicht vorgesehen; eine Instanz entsteht immer leer |
-| **Upgrades bestehender Instanzen** | es gibt keinen Pfad. Definitionen werden beim Start gelesen, eine geänderte Definition fasst bestehende Instanzen nicht an |
-| **Kontingente** | Pläne beschreiben Größen, aber nichts erzwingt sie — ein Benutzerparameter kann sie überschreiten, soweit `allowedParameters` es zulässt |
-| **Monitoring je Instanz** | der Broker misst sich selbst (`osb_*`), nicht die Dienste, die er herstellt |
-| **Löschschutz** | `cf delete-service` löscht die Backing-Ressource sofort; es gibt keine Schonfrist und keinen Papierkorb |
+| **Kontingente** | ✅ `parameterLimits` je Plan, durchgesetzt auf `PUT` und `PATCH` und als OSB-Plan-Schema im Katalog veröffentlicht |
+| **Löschschutz** | ✅ `retainOnDeprovision` je Plan; die Instanz wird aufgegeben, die Daten bleiben und tragen `osb.io/retained-instance` |
+| **Bestandsübersicht** | ✅ `osb_active_instances{service_id,plan_id}` — welches Angebot wie oft genutzt wird |
+| **Sicherung und Wiederherstellung** | offen. CloudNativePG kann es (`Backup`, `ScheduledBackup`, Barman) — der Broker bietet es weder als Planmerkmal noch als Service-Key an |
+| **Point-in-Time-Recovery beim Provision** | offen; eine Instanz entsteht immer leer |
+| **Upgrades bestehender Instanzen** | offen. Definitionen werden beim Start gelesen, eine geänderte Definition fasst bestehende Instanzen nicht an |
 | **Verhalten unter Last, echte Mandantentrennung** | ungeprüft — siehe Verifikationsstand |
 
-Die Reihenfolge dieser Punkte steht noch nicht fest, und sie hängt am
-Zielsystem-Durchlauf: dort entscheidet sich, wie Sicherungen abgelegt werden
-und wer sie verwaltet.
+**Was der Broker bewusst nicht misst: die Gesundheit der Dienste.** Ein Broker,
+der Postgres-Metriken nachbaut, dupliziert, was CloudNativePG und der
+RabbitMQ-Operator selbst exportieren, und kostete je Scrape einen API-Aufruf
+pro Instanz. Er misst, was nur er weiß — den OSB-Bestand; die Gesundheit misst
+der Operator, der den Dienst betreibt.
+
+**Woran die drei offenen Punkte jeweils hängen** — und das ist nicht dasselbe:
+
+- **Sicherung und PITR** hängen am Zielsystem-Durchlauf. Dort entscheidet sich,
+  wohin Sicherungen gehen und wer sie verwaltet; die Broker-Seite ist ohne
+  diese Antwort nicht sinnvoll zu entwerfen.
+- **Upgrades** hängen **nicht** daran, sondern an einem Reconcile-Loop: eine
+  geänderte Definition müsste bestehende Instanzen erneut anwenden, und dafür
+  braucht es etwas, das läuft, ohne dass ein Request kommt.
+- **Last und Mandantentrennung** sind keine Funktion, sondern eine
+  Messung — die braucht ein Zielsystem.
 
 ## Was mit Korifi passiert
 

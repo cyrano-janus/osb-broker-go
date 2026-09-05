@@ -16,6 +16,13 @@ named demand, not along what is possible: a service is added when a concrete
 workload asks for it **and** its operator satisfies the three-part pattern. Why
 that is so is in [ADR 0008](docs/en/adr/0008-depth-over-breadth.md).
 
+The effort therefore goes into depth: a plan **enforces** its sizes
+(`parameterLimits`, published as the plan's OSB schema too), a production plan
+does not lose its data to a keystroke (`retainOnDeprovision`), and the
+inventory is broken down by offering and plan. What is still missing — backup,
+point-in-time recovery, upgrades of existing instances — is stated plainly in
+[target-platforms.md](docs/en/target-platforms.md).
+
 ## What this is built for
 
 | Role | System |

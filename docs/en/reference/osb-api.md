@@ -46,6 +46,10 @@ So that the picture does not come out crooked — these points are conformant an
 tested:
 
 - The catalogue structure, including plans, tags and `bindable`.
+- **Plan schemas** (`schemas.service_instance.create/update.parameters`): every
+  plan publishes which parameters it accepts — derived from
+  `allowedParameters` and `parameterLimits`, that is from what the broker
+  enforces anyway.
 - The negotiation via `X-Broker-API-Version`: the header is **required**, an
   unsupported major version is `412 Precondition Failed`. A newer minor version
   is served — the platform states what it is prepared to speak, and a broker

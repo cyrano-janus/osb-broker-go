@@ -83,6 +83,8 @@ does not come up at all.
 | `description` | no | Catalogue text. |
 | `params` | no | **The sizing knobs.** They arrive in the template as `{{ .plan.<key> }}`. |
 | `allowedParameters` | no | Which of those knobs the user may set themselves. See below. |
+| `parameterLimits` | no | **Quotas.** Bounds for the values they may set. See below. |
+| `retainOnDeprovision` | no | Leaves the operator's resources standing on delete. See below. |
 | `free` | no | Read and **not used** — the catalogue hardcodes `free: true` for every plan. |
 
 **The type of a `params` value matters.** YAML reads `1` as a number and `1Gi`
@@ -106,6 +108,72 @@ list means this plan takes no user parameters.
 `cf create-service pg small db -c '{"storageSize":"5Gi"}'` renders `5Gi`,
 `cf create-service pg small db` renders `1Gi`, and `-c '{"instances":3}'` is a
 `400`.
+
+**`parameterLimits` turns "may set" into a quota.** Without bounds a plan
+describes its sizes but does not enforce them: the `small` plan with 1Gi could
+be provisioned with `10Ti`, and the operator would see it on the bill.
+
+```yaml
+allowedParameters: [storageSize, instances, tier]
+parameterLimits:
+  storageSize: {max: 5Gi}            # quantity
+  instances:   {min: "1", max: "3"}  # number
+  tier:        {oneOf: [bronze, silber]}
+```
+
+Comparison goes through `resource.Quantity` — the same notation covers a plain
+number and a Kubernetes quantity. Numbers arrive from JSON as `float64` and
+from YAML as `int`; both are normalised, otherwise the same bound would bite
+differently depending on where the value came from. A value that cannot be
+compared is **rejected**, not waved through — otherwise `"lots"` would bypass
+every bound.
+
+`oneOf` excludes max/min; both together is a load error. Two further mistakes
+also surface at load time rather than on the first provision: a bound on a key
+that is not in `allowedParameters` (it could never apply and would feign
+protection), and a bound that cannot be read.
+
+**The bounds also appear in the catalogue.** OSB 2.17 provides a `schemas`
+block per plan; a platform can reject with it before the broker is asked, and a
+UI can build a form from it. The broker derives it from `allowedParameters` and
+`parameterLimits` — two sources for the same statement would drift apart:
+
+| Definition | in the plan schema |
+|---|---|
+| `allowedParameters` | `properties` plus `additionalProperties: false` |
+| `oneOf` | `enum` |
+| `max`/`min` as a plain number | `maximum`/`minimum` |
+| `max`/`min` as a quantity | `description` — `10Gi` is not a JSON Schema number |
+
+**`retainOnDeprovision` protects data from a keystroke.** `cf delete-service`
+otherwise removes the backing resource immediately. For a development plan
+that is right; for a production plan it is the irreversible deletion of a
+database — and OSB carries no way to confirm a deprovision. The request has
+neither a body nor a parameter with which a user could say "yes, really".
+**So the plan decides.**
+
+```yaml
+- id: plan-large-0000-0000-000000000002
+  name: large
+  description: "HA, 3 instances. Deleting the service keeps the data."
+  retainOnDeprovision: true
+```
+
+The broker still gives the instance up: the record is removed, deprovision is
+`200`, a second one `410`. OSB knows no "partly deleted", and the platform must
+be able to finish. Only the data stays — and the resources carry
+`osb.io/retained-instance` and `osb.io/retained-at` so an operator can find
+them:
+
+```bash
+kubectl get clusters.postgresql.cnpg.io -A -l osb.io/retained-instance
+```
+
+**Without a record it deletes.** If the broker no longer knows an instance's
+plan it does not retain: that would be an assumption about a plan it does not
+know, and every lost bookkeeping entry would silently pile up resources. And:
+write the intent into the `description` — that is the text a user sees in
+`cf marketplace`.
 
 ## `spec.provision`
 

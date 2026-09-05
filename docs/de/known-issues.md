@@ -70,12 +70,17 @@ Zielplattform näher wäre als Korifi. Einordnung in
    Kubernetes-Deployment neben der Plattform läuft oder als CF-App auf ihr.
    Solange das offen ist, ist jede Tiefenarbeit auf Verdacht gebaut. Siehe
    [target-platforms.md](target-platforms.md).
-2. **Was ein managed Dienst braucht** — Sicherung und Wiederherstellung,
-   Upgrades bestehender Instanzen, Kontingente, Monitoring je Instanz,
-   Löschschutz. Die Liste steht in
+2. **Was ein managed Dienst braucht.** Kontingente, Löschschutz und die
+   Bestandsübersicht stehen; offen sind Sicherung und Wiederherstellung,
+   Point-in-Time-Recovery und Upgrades bestehender Instanzen. Die Liste mit
+   dem jeweiligen Stand steht in
    [target-platforms.md](target-platforms.md); seit
    [ADR 0008](adr/0008-depth-over-breadth.md) geht die Arbeit dorthin und nicht
    in weitere Katalogeinträge.
+
+   **Upgrades hängen nicht am Zielsystem, sondern an einem Reconcile-Loop** —
+   eine geänderte Definition müsste bestehende Instanzen erneut anwenden, und
+   dafür braucht es etwas, das läuft, ohne dass ein Request kommt.
 3. **`seaweedfs-s3` gegen einen laufenden Operator** — das CRD-Schema sagt,
    dass es `status.conditions` gibt, nicht dass der Operator dort `Ready`
    schreibt.

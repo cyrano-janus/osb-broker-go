@@ -242,6 +242,29 @@ cd osb-checker && cp config.yaml configs/config.yaml
 go build -o osb-checker . && ./osb-checker -f configs/config.yaml
 ```
 
+## Adding a field to a definition
+
+The path is short, but there are four places, and a test flags three of them
+if you forget:
+
+1. **The Go type** in `internal/definition/definition.go`.
+2. **The JSON schema** `schemas/service-definition.schema.json` — this is what
+   a user validates their definition against offline, before rolling it out.
+3. **The embedded copy** `internal/handlers/docs/service-definition.schema.json`
+   that the broker serves under `/schemas/…`. A `cp` is enough.
+4. **These docs** — `service-definitions.md`, in both language trees.
+
+`TestSchema_PlanDecktDenGoTyp` and its counterpart check steps 1 and 2 **in
+both directions**: a Go field without a schema entry is flagged, and so is a
+schema key without a Go field — that would be a promise to users the broker
+does not keep. `TestDocsSync_ServiceDefinitionSchemaMatchesEmbeddedCopy` checks
+step 3.
+
+**These guards did not always exist.** `Plan` does not sit under `definitions/`
+in the schema but inline in `offering.properties.plans.items` — which is why it
+went unguarded for a long time and `parameterLimits` slipped past the schema.
+The guard came after that and caught the very next field.
+
 ## The chart stays in step with the repository
 
 `values-kind.yaml` embeds the definitions as strings. Two copies of the same
