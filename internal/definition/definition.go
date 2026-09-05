@@ -56,7 +56,34 @@ type Plan struct {
 	// AllowedParameters lists the parameter keys a consumer may supply in
 	// the provision/update request body. Empty = no user parameters.
 	AllowedParameters []string `json:"allowedParameters,omitempty"`
-	Free              *bool    `json:"free,omitempty"`
+	// ParameterLimits begrenzt die Werte, die ein Konsument setzen darf.
+	//
+	// Ohne sie beschreibt ein Plan zwar Groessen, erzwingt sie aber nicht:
+	// steht ein Schluessel in allowedParameters, ist jeder Wert dafuer
+	// erlaubt. Ein Plan "small" mit 1Gi liesse sich mit 10Ti provisionieren,
+	// und der Betreiber saehe es an der Rechnung.
+	//
+	// Die Grenzen gelten fuer Provision und Update gleichermassen und werden
+	// zusaetzlich als OSB-Plan-Schema im Katalog veroeffentlicht.
+	ParameterLimits map[string]ParameterLimit `json:"parameterLimits,omitempty"`
+	Free            *bool                     `json:"free,omitempty"`
+}
+
+// ParameterLimit begrenzt einen einzelnen Benutzerparameter.
+//
+// Max und Min sind Zeichenketten, damit sowohl Zahlen ("3") als auch
+// Kubernetes-Mengenangaben ("10Gi") in derselben Form stehen koennen; beide
+// werden ueber resource.Quantity verglichen. OneOf schliesst alles aus, was
+// nicht aufgezaehlt ist.
+type ParameterLimit struct {
+	Max   string   `json:"max,omitempty"`
+	Min   string   `json:"min,omitempty"`
+	OneOf []string `json:"oneOf,omitempty"`
+}
+
+// HasBounds meldet, ob die Grenze ueberhaupt etwas einschraenkt.
+func (l ParameterLimit) HasBounds() bool {
+	return l.Max != "" || l.Min != "" || len(l.OneOf) > 0
 }
 
 // ValidatePlanParameters validates user-supplied parameters against the
@@ -88,7 +115,9 @@ func ValidatePlanParams(plan *Plan, parameters map[string]interface{}) error {
 			return fmt.Errorf("%w: parameter %q is not allowed in plan %q", ErrParameterNotAllowed, key, plan.Name)
 		}
 	}
-	return nil
+	// Erlaubt heisst nicht unbegrenzt: der Plan darf Grenzen fuer die Werte
+	// nennen, sonst beschreibt er Groessen, ohne sie zu erzwingen.
+	return checkLimits(plan, parameters)
 }
 
 // Provision describes the custom resource to create per instance.
@@ -204,6 +233,11 @@ func (sd *ServiceDefinition) Validate() error {
 			return fmt.Errorf("spec.offering.plans[%d]: duplicate id %q", i, p.ID)
 		}
 		seenPlanIDs[p.ID] = true
+		// Grenzen beim Laden pruefen, nicht beim ersten Provision: eine
+		// Grenze, die nie greifen kann, taeuscht Schutz vor.
+		if err := p.validateLimits(); err != nil {
+			return fmt.Errorf("spec.offering.plans[%d]: %w", i, err)
+		}
 	}
 	if sd.Spec.Provision.APIVersion == "" || sd.Spec.Provision.Kind == "" {
 		return fmt.Errorf("spec.provision.apiVersion and kind are required")

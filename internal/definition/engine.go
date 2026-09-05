@@ -94,6 +94,10 @@ type CatalogPlan struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
+	// Schemas beschreibt die Parameter, die dieser Plan annimmt - abgeleitet
+	// aus allowedParameters und parameterLimits, also aus dem, was der Broker
+	// ohnehin durchsetzt.
+	Schemas *PlanSchemas `json:"schemas,omitempty"`
 }
 
 // Catalog converts all definitions into catalog entries.
@@ -108,10 +112,17 @@ func (e *Engine) Catalog() []CatalogEntry {
 			Tags:        d.Spec.Offering.Tags,
 		}
 		for _, p := range d.Spec.Offering.Plans {
+			schema := p.ParameterSchema()
 			entry.Plans = append(entry.Plans, CatalogPlan{
 				ID:          p.ID,
 				Name:        p.Name,
 				Description: p.Description,
+				// Dasselbe Schema fuer create und update: die Allowlist und
+				// die Grenzen gelten fuer beide Wege gleichermassen.
+				Schemas: &PlanSchemas{ServiceInstance: InstanceSchemas{
+					Create: SchemaHolder{Parameters: schema},
+					Update: SchemaHolder{Parameters: schema},
+				}},
 			})
 		}
 		out = append(out, entry)

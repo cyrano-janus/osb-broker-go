@@ -67,6 +67,11 @@ definitions:
               # Jeder Schluessel, der hier nicht steht, ist 400. Ein gesetzter Wert
               # ueberschreibt den gleichnamigen Planwert; alles Uebrige bleibt.
               allowedParameters: [storageSize]
+              # Erlaubt heisst nicht unbegrenzt. Ohne diese Grenze liesse sich der
+              # Plan "small" mit 10Ti provisionieren, und der Betreiber saehe es an
+              # der Rechnung. Steht auch als Plan-Schema im Katalog.
+              parameterLimits:
+                storageSize: {max: 5Gi}
             - id: plan-large-0000-0000-000000000002
               name: large
               description: "HA, 3 instances, 10Gi storage"
@@ -74,6 +79,8 @@ definitions:
                 storageSize: 10Gi
                 instances: 3
               allowedParameters: [storageSize]
+              parameterLimits:
+                storageSize: {max: 50Gi}
 
         provision:
           apiVersion: postgresql.cnpg.io/v1
@@ -125,12 +132,16 @@ definitions:
               # Jeder Schluessel, der hier nicht steht, ist 400. Ein gesetzter Wert
               # ueberschreibt den gleichnamigen Planwert; alles Uebrige bleibt.
               allowedParameters: [storageSize]
+              parameterLimits:
+                storageSize: {max: 5Gi}
             - id: plan-rabbit-prod-0000-0000-000000000002
               name: prod
               description: "3-node HA cluster, 10Gi storage"
               params:
                 replicas: 3
                 storageSize: 10Gi
+              parameterLimits:
+                storageSize: {max: 50Gi}
               allowedParameters: [storageSize]
 
         provision:

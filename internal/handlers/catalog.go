@@ -25,6 +25,12 @@ func (h *Handlers) definitionServices() []map[string]interface{} {
 			if p.Description != "" {
 				plan["description"] = p.Description
 			}
+			// OSB 2.17: ein Plan darf beschreiben, welche Parameter er
+			// annimmt. Die Plattform kann dann ablehnen, bevor der Broker
+			// gefragt wird - abgeleitet aus dem, was er ohnehin durchsetzt.
+			if p.Schemas != nil {
+				plan["schemas"] = p.Schemas
+			}
 			plans = append(plans, plan)
 		}
 		svc := map[string]interface{}{

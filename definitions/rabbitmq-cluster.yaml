@@ -24,12 +24,16 @@ spec:
         # Jeder Schluessel, der hier nicht steht, ist 400. Ein gesetzter Wert
         # ueberschreibt den gleichnamigen Planwert; alles Uebrige bleibt.
         allowedParameters: [storageSize]
+        parameterLimits:
+          storageSize: {max: 5Gi}
       - id: plan-rabbit-prod-0000-0000-000000000002
         name: prod
         description: "3-node HA cluster, 10Gi storage"
         params:
           replicas: 3
           storageSize: 10Gi
+        parameterLimits:
+          storageSize: {max: 50Gi}
         allowedParameters: [storageSize]
 
   provision:

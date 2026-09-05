@@ -137,6 +137,55 @@
                 },
                 "description": "Whitelist of parameter keys a consumer may send in provision/update requests. Unknown keys are rejected with 400. Empty/absent = no user parameters allowed."
               },
+              "parameterLimits": {
+                "type": "object",
+                "description": "Bounds for the values a consumer may set. Each key must also appear in allowedParameters - a limit on a key nobody may set could never apply. Enforced on provision and update alike, and published as the plan's OSB schema in the catalogue.",
+                "additionalProperties": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "max": {
+                      "type": "string",
+                      "description": "Upper bound, compared as a Kubernetes quantity. Plain numbers work too.",
+                      "examples": [
+                        "10Gi",
+                        "3"
+                      ]
+                    },
+                    "min": {
+                      "type": "string",
+                      "description": "Lower bound, same form as max.",
+                      "examples": [
+                        "1"
+                      ]
+                    },
+                    "oneOf": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "Exhaustive list of permitted values. Cannot be combined with max/min.",
+                      "examples": [
+                        [
+                          "bronze",
+                          "silber"
+                        ]
+                      ]
+                    }
+                  }
+                },
+                "examples": [
+                  {
+                    "storageSize": {
+                      "max": "20Gi"
+                    },
+                    "instances": {
+                      "min": "1",
+                      "max": "3"
+                    }
+                  }
+                ]
+              },
               "free": {
                 "type": "boolean",
                 "default": true

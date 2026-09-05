@@ -68,6 +68,39 @@ func TestSchema_MappingDecktDenGoTyp(t *testing.T) {
 	}
 }
 
+// Plan steckt nicht unter definitions/, sondern inline in
+// offering.properties.plans.items. Ohne eigenen Waechter rutscht dort jedes
+// neue Feld am Schema vorbei - `parameterLimits` hat genau das getan.
+func TestSchema_PlanDecktDenGoTyp(t *testing.T) {
+	schema := loadDefinitionSchema(t)
+	defs := schema["definitions"].(map[string]interface{})
+	offering := defs["offering"].(map[string]interface{})
+	plans := offering["properties"].(map[string]interface{})["plans"].(map[string]interface{})
+	props := plans["items"].(map[string]interface{})["properties"].(map[string]interface{})
+
+	for _, field := range structJSONFields(t, Plan{}) {
+		assert.Contains(t, props, field, "plans[].%s fehlt im JSON-Schema", field)
+	}
+}
+
+// Und andersherum: ein Schluessel im Schema, den der Go-Typ nicht kennt, ist
+// eine Zusage an Anwender, die der Broker nicht einloest.
+func TestSchema_PlanVerspricht_NichtsUnbekanntes(t *testing.T) {
+	schema := loadDefinitionSchema(t)
+	defs := schema["definitions"].(map[string]interface{})
+	offering := defs["offering"].(map[string]interface{})
+	plans := offering["properties"].(map[string]interface{})["plans"].(map[string]interface{})
+	props := plans["items"].(map[string]interface{})["properties"].(map[string]interface{})
+
+	known := map[string]bool{}
+	for _, field := range structJSONFields(t, Plan{}) {
+		known[field] = true
+	}
+	for key := range props {
+		assert.True(t, known[key], "das Schema nennt plans[].%s, der Go-Typ kennt es nicht", key)
+	}
+}
+
 func TestSchema_CredentialsFromSecretIstNichtMehrPflicht(t *testing.T) {
 	// Mit provisionedService gibt es einen zweiten, gleichwertigen Weg. Ein
 	// Schema, das credentialsFromSecret weiter erzwingt, wuerde gueltige
