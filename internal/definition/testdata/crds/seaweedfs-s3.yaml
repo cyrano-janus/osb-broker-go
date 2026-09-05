@@ -1,0 +1,129 @@
+_comment: 'Auszug aus dem CRD des Operators: Gruppe, Kind und das status-Schema. Mehr liest die Pruefung
+  nicht, und die vollstaendigen CRDs sind bis zu 5 MB gross.'
+_source: https://raw.githubusercontent.com/seaweedfs/seaweedfs-operator/master/config/crd/bases/seaweed.seaweedfs.com_seaweeds.yaml
+group: seaweed.seaweedfs.com
+kind: Seaweed
+versions:
+- name: v1
+  status:
+    properties:
+      admin:
+        properties:
+          readyReplicas:
+            minimum: 0
+            type: integer
+          replicas:
+            minimum: 0
+            type: integer
+        type: object
+      backupMirrors:
+        items:
+          properties:
+            deploymentName:
+              type: string
+            ready:
+              type: boolean
+            storageName:
+              type: string
+          required:
+          - storageName
+          type: object
+        type: array
+        x-kubernetes-list-map-keys:
+        - storageName
+        x-kubernetes-list-type: map
+      conditions:
+        items:
+          properties:
+            lastTransitionTime:
+              format: date-time
+              type: string
+            message:
+              maxLength: 32768
+              type: string
+            observedGeneration:
+              minimum: 0
+              type: integer
+            reason:
+              maxLength: 1024
+              minLength: 1
+              pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+              type: string
+            status:
+              enum:
+              - 'True'
+              - 'False'
+              - Unknown
+              type: string
+            type:
+              maxLength: 316
+              pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+              type: string
+          required:
+          - lastTransitionTime
+          - message
+          - reason
+          - status
+          - type
+          type: object
+        type: array
+        x-kubernetes-list-map-keys:
+        - type
+        x-kubernetes-list-type: map
+      filer:
+        properties:
+          readyReplicas:
+            minimum: 0
+            type: integer
+          replicas:
+            minimum: 0
+            type: integer
+        type: object
+      master:
+        properties:
+          readyReplicas:
+            minimum: 0
+            type: integer
+          replicas:
+            minimum: 0
+            type: integer
+        type: object
+      observedGeneration:
+        type: integer
+      s3:
+        properties:
+          readyReplicas:
+            minimum: 0
+            type: integer
+          replicas:
+            minimum: 0
+            type: integer
+        type: object
+      sftp:
+        properties:
+          readyReplicas:
+            minimum: 0
+            type: integer
+          replicas:
+            minimum: 0
+            type: integer
+        type: object
+      volume:
+        properties:
+          readyReplicas:
+            minimum: 0
+            type: integer
+          replicas:
+            minimum: 0
+            type: integer
+        type: object
+      worker:
+        properties:
+          readyReplicas:
+            minimum: 0
+            type: integer
+          replicas:
+            minimum: 0
+            type: integer
+        type: object
+    type: object

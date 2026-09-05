@@ -47,8 +47,18 @@ spec:
         requestCert: false
         prometheusOperator: false
   readiness:
-    statusJSONPath: 'status.conditions.#(type=="Ready").status'
-    expectedValue: "True"
+    # Der Tenant fuehrt KEINE conditions. Sein CRD kennt unter status nur
+    # currentState, healthStatus, availableReplicas und Aehnliches - ein Pfad
+    # auf conditions haette nie zutreffen koennen und jede Instanz ins
+    # Zeitlimit laufen lassen.
+    #
+    # currentState ist die Zustandsmaschine des Operators; "Initialized" ist
+    # ihr Endzustand (StatusInitialized in pkg/controller des Operators, auch
+    # als Spalte "State" im CRD gefuehrt). healthStatus waere die Alternative,
+    # nennt aber die Guete des laufenden Tenants (green/yellow/red) und nicht,
+    # ob er fertig hergestellt ist.
+    statusJSONPath: 'status.currentState'
+    expectedValue: "Initialized"
     timeoutSeconds: 600
 
   bind:

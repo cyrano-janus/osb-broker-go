@@ -16,7 +16,10 @@ func TestAllShippedDefinitionsParse(t *testing.T) {
 	for _, d := range defs {
 		names[d.Metadata.Name] = true
 	}
-	for _, want := range []string{"cnpg-postgresql", "redis-standalone", "minio-objectstorage"} {
+	// redis-standalone steht bewusst nicht mehr dabei: der Operator fuehrt
+	// keinen auswertbaren Status, die Definition liegt unter
+	// definitions/unsupported/ und wird nicht geladen.
+	for _, want := range []string{"cnpg-postgresql", "rabbitmq-cluster", "minio-objectstorage"} {
 		if !names[want] {
 			t.Errorf("missing shipped definition %q (got %v)", want, names)
 		}

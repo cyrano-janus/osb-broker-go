@@ -1,0 +1,117 @@
+_comment: 'Auszug aus dem im Cluster installierten CRD des Operators: Gruppe, Kind und das status-Schema.'
+_source: kubectl get crd rabbitmqclusters.rabbitmq.com -o json (Operator im Entwicklungscluster installiert)
+group: rabbitmq.com
+kind: RabbitmqCluster
+versions:
+- name: v1beta1
+  status:
+    description: Status presents the observed state of RabbitmqCluster
+    properties:
+      binding:
+        description: 'Binding exposes a secret containing the binding information for this
+
+          RabbitmqCluster. It implements the service binding Provisioned Service
+
+          duck type. See: https://github.com/servicebinding/spec#provisioned-service'
+        properties:
+          name:
+            default: ''
+            description: 'Name of the referent.
+
+              This field is effectively required, but due to backwards compatibility is
+
+              allowed to be empty. Instances of this type with an empty value here are
+
+              almost certainly wrong.
+
+              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names'
+            type: string
+        type: object
+        x-kubernetes-map-type: atomic
+      conditions:
+        description: Set of Conditions describing the current state of the RabbitmqCluster
+        items:
+          properties:
+            lastTransitionTime:
+              description: The last time this Condition type changed.
+              format: date-time
+              type: string
+            message:
+              description: Full text reason for current status of the condition.
+              type: string
+            reason:
+              description: One word, camel-case reason for current status of the condition.
+              type: string
+            status:
+              description: True, False, or Unknown
+              type: string
+            type:
+              description: Type indicates the scope of RabbitmqCluster status addressed by the condition.
+              type: string
+          required:
+          - status
+          - type
+          type: object
+        type: array
+      defaultUser:
+        description: Identifying information on internal resources
+        properties:
+          secretReference:
+            description: 'Reference to the Kubernetes Secret containing the credentials of the default
+
+              user.'
+            properties:
+              keys:
+                additionalProperties:
+                  type: string
+                description: Key-value pairs in the Secret corresponding to `username`, `password`, `host`,
+                  and `port`
+                type: object
+              name:
+                description: Name of the Secret containing the default user credentials
+                type: string
+              namespace:
+                description: Namespace of the Secret containing the default user credentials
+                type: string
+            required:
+            - keys
+            - name
+            - namespace
+            type: object
+          serviceReference:
+            description: Reference to the Kubernetes Service serving the cluster.
+            properties:
+              name:
+                description: Name of the Service serving the cluster
+                type: string
+              namespace:
+                description: Namespace of the Service serving the cluster
+                type: string
+            required:
+            - name
+            - namespace
+            type: object
+        type: object
+      deprecatedFeaturesUsed:
+        description: DeprecatedFeaturesUsed exposes whether there are deprecated features in-use in a
+          RabbitMQ server.
+        items:
+          type: string
+        type: array
+      observedGeneration:
+        description: 'observedGeneration is the most recent successful generation observed for this RabbitmqCluster.
+          It corresponds to the
+
+          RabbitmqCluster''s generation, which is updated on mutation by the API Server.'
+        format: int64
+        type: integer
+      quorumStatus:
+        description: "QuorumStatus indicates whether any node in the cluster is quorum critical.\nFormat:\
+          \ \"<status> [(<details>)]\"\nExamples:\n  - \"ok\" - no nodes are quorum critical\n  - \"ok\
+          \ (1 unavailable)\" - no critical nodes, but 1 node unreachable\n  - \"quorum-critical: pod-0\"\
+          \ - pod-0 is quorum critical\n  - \"quorum-critical: pod-0, pod-2 (1 unavailable)\" - multiple\
+          \ critical pods\n  - \"unavailable\" - all nodes unreachable or StatefulSet not ready"
+        type: string
+    required:
+    - conditions
+    type: object

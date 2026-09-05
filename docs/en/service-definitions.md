@@ -199,6 +199,35 @@ its time. The difference becomes visible in `cf service <name>`.
 **The path is determined on the live object**, not from the operator's
 documentation — see [how-to/add-a-service.md](how-to/add-a-service.md).
 
+### The readiness path must fit the operator's CRD
+
+For every shipped definition there is a `status` excerpt from its operator's
+CRD under `internal/definition/testdata/crds/`, and `readiness_crd_test.go`
+computes the path against it. A new definition without that excerpt does not
+pass the test.
+
+**Why that was needed:** five definitions carried the same copied path on
+`type=="Ready"`, and three of them could never match — provable from the
+schema, without starting an operator. MinIO's `Tenant` carries no `conditions`
+at all (it has `currentState`), Redpanda's `Cluster` enumerates exactly one
+condition type (`ClusterConfigured`), and the opstree operator's `Redis` has a
+`status` with **no** properties at all — the API server prunes everything the
+operator tries to write there.
+
+What the test does and does not do: a schema says what is **possible**, not
+what the operator **does**. It rules out the provably impossible. Computed
+against a real CR are only `cnpg-postgresql` and `rabbitmq-cluster`.
+
+The excerpt is produced from the operator's CRD — from the cluster:
+
+```bash
+kubectl get crd <plural>.<group> -o json | \
+  python3 -c 'import json,sys,yaml; d=json.load(sys.stdin); yaml.safe_dump({
+    "group": d["spec"]["group"], "kind": d["spec"]["names"]["kind"],
+    "versions": [{"name": v["name"], "status": v["schema"]["openAPIV3Schema"]["properties"].get("status")}
+                 for v in d["spec"]["versions"]]}, sys.stdout, sort_keys=False)'
+```
+
 ## `spec.bind`
 
 | Field | Required | Effect |

@@ -20,17 +20,16 @@ None of the open points currently blocks a target platform.
 
 ## Definitions and deployment
 
-**The readiness paths of five definitions are unverified.**
-`minio-objectstorage`, `redis-standalone`, `valkey-cluster`, `redpanda-cluster`
-and `seaweedfs-s3` all name `status.conditions.#(type=="Ready").status` without
-ever having been held against a CR of the respective operator — those operators
-are not installed in the development platform. Only `cnpg-postgresql` and
-`rabbitmq-cluster` are backed by evidence.
+**Two readiness paths are checked against their operator's CRD, not against a
+running operator.** `valkey-cluster` and `seaweedfs-s3` carry
+`status.conditions` according to the schema — whether the operator really
+writes `Ready` there is something a schema does not say. Computed against a real
+CR are only `cnpg-postgresql` and `rabbitmq-cluster`, whose operators run in the
+development platform.
 
 When a path misses, `last_operation` reports the reason together with the
-condition names the operator actually publishes, thanks to the diagnostic in
-`EvaluateReadiness`. The provisioning operation still runs into the platform's
-timeout; the difference is that afterwards you know why.
+condition names the operator actually publishes, and the run ends in `failed`
+after `timeoutSeconds` instead of an endless poll.
 
 **The `Dockerfile` declares `EXPOSE 8080`** while the chart with TLS listens on
 8443. Harmless, but misleading.
@@ -67,11 +66,9 @@ closer to the target platform than Korifi. Classification in
 The points are connected; worked through in this order each one makes the next
 visible or cheaper.
 
-1. **The five unverified readiness paths** — create one CR per operator and
-   compute the path against it. Needs the operators in the cluster. Now that
-   the deadline is enforced, a wrong path ends in `failed` after ten minutes
-   instead of an endless poll — it still only becomes visible when somebody
-   looks.
+1. **`valkey-cluster` and `seaweedfs-s3` against a running operator** — the
+   CRD schema says `status.conditions` exists, not that the operator writes
+   `Ready` there. Needs those operators in the cluster.
 2. **A run against a target system** — everything up to here is evidence from
    the development platform, and that is not the same as being deployable. See
    [target-platforms.md](target-platforms.md).

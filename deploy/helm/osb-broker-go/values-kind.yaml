@@ -34,7 +34,6 @@ tls:
 
 # GENERIERT aus definitions/ - nicht von Hand bearbeiten.
 #
-# Erzeugen: go test ./internal/chart/ -update
 # Gesichert: internal/chart/sync_test.go vergleicht zeichengleich gegen
 # definitions/. Eine Kopie, die driftet, ist eine Auslieferung, die sich
 # anders verhaelt als das Repo - und das faellt sonst erst beim Kunden auf.
@@ -149,8 +148,18 @@ definitions:
               requestCert: false
               prometheusOperator: false
         readiness:
-          statusJSONPath: 'status.conditions.#(type=="Ready").status'
-          expectedValue: "True"
+          # Der Tenant fuehrt KEINE conditions. Sein CRD kennt unter status nur
+          # currentState, healthStatus, availableReplicas und Aehnliches - ein Pfad
+          # auf conditions haette nie zutreffen koennen und jede Instanz ins
+          # Zeitlimit laufen lassen.
+          #
+          # currentState ist die Zustandsmaschine des Operators; "Initialized" ist
+          # ihr Endzustand (StatusInitialized in pkg/controller des Operators, auch
+          # als Spalte "State" im CRD gefuehrt). healthStatus waere die Alternative,
+          # nennt aber die Guete des laufenden Tenants (green/yellow/red) und nicht,
+          # ob er fertig hergestellt ist.
+          statusJSONPath: 'status.currentState'
+          expectedValue: "Initialized"
           timeoutSeconds: 600
 
         bind:
@@ -258,63 +267,6 @@ definitions:
               from: port
             - name: uri
               value: "amqp://{{ .credentials.username }}:{{ .credentials.password }}@{{ .credentials.host }}:{{ .credentials.port }}/"
-    redis-standalone.yaml: |
-      apiVersion: broker.osb.io/v1alpha1
-      kind: ServiceDefinition
-      metadata:
-        name: redis-standalone
-      spec:
-        offering:
-          id: b7c2d3e4-redis-0000-0000-000000000001
-          name: redis-standalone
-          description: "Redis via Redis Operator (ot-container-kit)"
-          tags: [redis, cache, in-memory]
-          plans:
-            - id: plan-redis-dev-0000-0000-000000000001
-              name: dev
-              description: "Single node, 128Mi"
-              params:
-                capacity: 128Mi
-                replicas: 1
-            - id: plan-redis-prod-0000-0000-000000000002
-              name: prod
-              description: "Leader + 2 followers, 1Gi"
-              params:
-                capacity: 1Gi
-                replicas: 3
-
-        provision:
-          apiVersion: redis.redis.opstreelabs.in/v1beta2
-          kind: Redis
-          template: |
-            apiVersion: redis.redis.opstreelabs.in/v1beta2
-            kind: Redis
-            metadata:
-              name: {{ .instanceID }}
-              labels:
-                app.kubernetes.io/managed-by: osb-broker-go
-            spec:
-              mode: standalone
-              kubernetesConfig:
-                image: quay.io/opstree/redis:v7.0.15
-                redisExporter:
-                  enabled: false
-              storage:
-                volumeClaimTemplate:
-                  spec:
-                    resources:
-                      requests:
-                        storage: {{ .plan.capacity }}
-        readiness:
-          statusJSONPath: 'status.conditions.#(type=="Ready").status'
-          expectedValue: "True"
-          timeoutSeconds: 300
-
-        bind:
-          # Der Opstree-Operator legt kein Credentials-Secret an; der Broker
-          # erwartet daher, dass ein Platform-Admin das Secret vor dem ersten
-          # Bind erzeugt (oder ein Sidecar dies tut). Konvention: <id>-redis.
-          credentialsFromSecret: "{{ .instanceID }}-redis"
     redpanda-cluster.yaml: |
       apiVersion: broker.osb.io/v1alpha1
       kind: ServiceDefinition
@@ -389,7 +341,9 @@ definitions:
                 capacity: {{ .plan.storageSize }}
 
         readiness:
-          statusJSONPath: 'status.conditions.#(type=="Ready").status'
+          # Das CRD enumeriert conditions[].type mit genau EINEM Wert:
+          # ClusterConfigured. Ein Pfad auf "Ready" haette nie zutreffen koennen.
+          statusJSONPath: 'status.conditions.#(type=="ClusterConfigured").status'
           expectedValue: "True"
           timeoutSeconds: 600
 

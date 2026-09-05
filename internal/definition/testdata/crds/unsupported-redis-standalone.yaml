@@ -1,0 +1,10 @@
+_comment: 'Auszug aus dem CRD des Operators: Gruppe, Kind und das status-Schema. Mehr liest die Pruefung
+  nicht, und die vollstaendigen CRDs sind bis zu 5 MB gross.'
+_source: https://raw.githubusercontent.com/OT-CONTAINER-KIT/redis-operator/master/config/crd/bases/redis.redis.opstreelabs.in_redis.yaml
+group: redis.redis.opstreelabs.in
+kind: Redis
+versions:
+- name: v1beta2
+  status:
+    description: RedisStatus defines the observed state of Redis
+    type: object

@@ -202,6 +202,35 @@ Zeit lassen. Sichtbar wird der Unterschied in `cf service <name>`.
 Operators — siehe
 [how-to/add-a-service.md](how-to/add-a-service.md).
 
+### Der Readiness-Pfad muss zum CRD des Operators passen
+
+Zu jeder mitgelieferten Definition liegt unter
+`internal/definition/testdata/crds/` der `status`-Ausschnitt aus dem CRD ihres
+Operators, und `readiness_crd_test.go` rechnet den Pfad dagegen. Eine neue
+Definition ohne diesen Ausschnitt lässt der Test nicht durch.
+
+**Warum das nötig war:** fünf Definitionen trugen denselben kopierten Pfad auf
+`type=="Ready"`, und drei davon konnten nie zutreffen — beweisbar am Schema,
+ohne einen Operator zu starten. MinIOs `Tenant` führt gar keine `conditions`
+(sondern `currentState`), Redpandas `Cluster` enumeriert genau einen
+Condition-Typ (`ClusterConfigured`), und der `Redis` der opstree-Operators hat
+einen `status` ganz **ohne** Eigenschaften — der API-Server schneidet dort
+alles weg, was der Operator hineinschreiben will.
+
+Was der Test leistet und was nicht: ein Schema sagt, was **möglich** ist, nicht
+was der Operator **tut**. Er schließt das nachweislich Unmögliche aus. Gegen
+einen echten CR gerechnet sind nur `cnpg-postgresql` und `rabbitmq-cluster`.
+
+Den Ausschnitt erzeugt man aus dem CRD des Operators — aus dem Cluster:
+
+```bash
+kubectl get crd <plural>.<gruppe> -o json | \
+  python3 -c 'import json,sys,yaml; d=json.load(sys.stdin); yaml.safe_dump({
+    "group": d["spec"]["group"], "kind": d["spec"]["names"]["kind"],
+    "versions": [{"name": v["name"], "status": v["schema"]["openAPIV3Schema"]["properties"].get("status")}
+                 for v in d["spec"]["versions"]]}, sys.stdout, sort_keys=False)'
+```
+
 ## `spec.bind`
 
 | Feld | Pflicht | Wirkung |

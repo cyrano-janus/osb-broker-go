@@ -107,14 +107,11 @@ rbac:
     # zwar erst beim Kunden. internal/chart/sync_test.go haelt Liste und
     # definitions/ jetzt zusammen - in beide Richtungen, denn ein Recht auf
     # eine Gruppe, die niemand anfasst, ist clusterweit eines zu viel.
+    # Der Plural einer CRD laesst sich aus dem Kind nicht sicher ableiten -
+    # deshalb wird diese Liste von Hand gepflegt und nur ihre Vollstaendigkeit
+    # geprueft (internal/chart/sync_test.go), in beide Richtungen.
     - group: minio.min.io
       resources: [tenants]
-      verbs: [create, get, list, update, delete]
-    - group: redis.redis.opstreelabs.in
-      # Der Plural der CRD ist "redis", nicht "redises". Deshalb wird die
-      # Liste von Hand gepflegt und nur ihre Vollstaendigkeit geprueft: aus
-      # dem Kind laesst sich der Ressourcenname nicht sicher ableiten.
-      resources: [redis]
       verbs: [create, get, list, update, delete]
     - group: rabbitmq.com
       resources: [rabbitmqclusters]

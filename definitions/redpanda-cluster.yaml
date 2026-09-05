@@ -71,7 +71,9 @@ spec:
           capacity: {{ .plan.storageSize }}
 
   readiness:
-    statusJSONPath: 'status.conditions.#(type=="Ready").status'
+    # Das CRD enumeriert conditions[].type mit genau EINEM Wert:
+    # ClusterConfigured. Ein Pfad auf "Ready" haette nie zutreffen koennen.
+    statusJSONPath: 'status.conditions.#(type=="ClusterConfigured").status'
     expectedValue: "True"
     timeoutSeconds: 600
 

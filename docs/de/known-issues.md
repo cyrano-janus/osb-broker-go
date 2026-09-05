@@ -20,17 +20,16 @@ Keiner der offenen Punkte blockiert derzeit eine Zielplattform.
 
 ## Definitionen und Deployment
 
-**Die Readiness-Pfade von fünf Definitionen sind ungeprüft.**
-`minio-objectstorage`, `redis-standalone`, `valkey-cluster`, `redpanda-cluster`
-und `seaweedfs-s3` nennen alle `status.conditions.#(type=="Ready").status`, ohne
-dass je ein CR des jeweiligen Operators dagegen gehalten wurde — die Operatoren
-sind in der Entwicklungsplattform nicht installiert. Belegt sind nur
-`cnpg-postgresql` und `rabbitmq-cluster`.
+**Zwei Readiness-Pfade sind gegen das CRD ihres Operators geprüft, nicht gegen
+einen laufenden Operator.** `valkey-cluster` und `seaweedfs-s3` führen laut
+Schema `status.conditions` — ob der Operator dort wirklich `Ready` schreibt,
+sagt ein Schema nicht. Gegen einen echten CR gerechnet sind nur
+`cnpg-postgresql` und `rabbitmq-cluster`; deren Operatoren laufen in der
+Entwicklungsplattform.
 
-Trifft ein Pfad daneben, meldet `last_operation` seit der Diagnose in
-`EvaluateReadiness` den Grund samt der Condition-Namen, die der Operator
-tatsächlich führt. Der Provisioning-Vorgang läuft trotzdem in das Zeitlimit der
-Plattform; der Unterschied ist, dass man danach weiß, warum.
+Trifft ein Pfad daneben, meldet `last_operation` den Grund samt der
+Condition-Namen, die der Operator tatsächlich führt, und der Vorgang endet nach
+`timeoutSeconds` in `failed` statt in einer endlosen Abfrage.
 
 **`Dockerfile` gibt `EXPOSE 8080` an**, während das Chart mit TLS auf 8443
 lauscht. Folgenlos, aber irreführend.
@@ -67,11 +66,9 @@ Zielplattform näher wäre als Korifi. Einordnung in
 Die Punkte hängen zusammen; in dieser Reihenfolge abgearbeitet macht jeder den
 nächsten sichtbar oder billiger.
 
-1. **Die fünf ungeprüften Readiness-Pfade** — je Operator einmal ein CR
-   anlegen und den Pfad dagegen rechnen. Braucht die Operatoren im Cluster.
-   Seit das Zeitlimit greift, endet ein falscher Pfad nach zehn Minuten in
-   `failed` statt in einer endlosen Abfrage — sichtbar ist er trotzdem erst,
-   wenn jemand hinsieht.
+1. **`valkey-cluster` und `seaweedfs-s3` gegen einen laufenden Operator** —
+   das CRD-Schema sagt, dass es `status.conditions` gibt, nicht dass der
+   Operator dort `Ready` schreibt. Braucht diese Operatoren im Cluster.
 2. **Ein Durchlauf gegen ein Zielsystem** — bis hierhin ist alles auf der
    Entwicklungsplattform belegt, und das ist nicht dasselbe wie einsatzfähig.
    Siehe [target-platforms.md](target-platforms.md).

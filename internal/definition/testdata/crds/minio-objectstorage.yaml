@@ -1,0 +1,157 @@
+_comment: 'Auszug aus dem CRD des Operators: Gruppe, Kind und das status-Schema. Mehr liest die Pruefung
+  nicht, und die vollstaendigen CRDs sind bis zu 5 MB gross.'
+_source: https://raw.githubusercontent.com/minio/operator/master/resources/base/crds/minio.min.io_tenants.yaml
+group: minio.min.io
+kind: Tenant
+versions:
+- name: v2
+  status:
+    properties:
+      availableReplicas:
+        format: int32
+        type: integer
+      certificates:
+        nullable: true
+        properties:
+          autoCertEnabled:
+            nullable: true
+            type: boolean
+          customCertificates:
+            nullable: true
+            properties:
+              client:
+                items:
+                  properties:
+                    certName:
+                      type: string
+                    domains:
+                      items:
+                        type: string
+                      type: array
+                    expiresIn:
+                      type: string
+                    expiry:
+                      type: string
+                    serialNo:
+                      type: string
+                  type: object
+                type: array
+              minio:
+                items:
+                  properties:
+                    certName:
+                      type: string
+                    domains:
+                      items:
+                        type: string
+                      type: array
+                    expiresIn:
+                      type: string
+                    expiry:
+                      type: string
+                    serialNo:
+                      type: string
+                  type: object
+                type: array
+              minioCAs:
+                items:
+                  properties:
+                    certName:
+                      type: string
+                    domains:
+                      items:
+                        type: string
+                      type: array
+                    expiresIn:
+                      type: string
+                    expiry:
+                      type: string
+                    serialNo:
+                      type: string
+                  type: object
+                type: array
+            type: object
+        type: object
+      currentState:
+        type: string
+      drivesHealing:
+        format: int32
+        type: integer
+      drivesOffline:
+        format: int32
+        type: integer
+      drivesOnline:
+        format: int32
+        type: integer
+      healthMessage:
+        type: string
+      healthStatus:
+        type: string
+      pools:
+        items:
+          properties:
+            legacySecurityContext:
+              type: boolean
+            ssName:
+              type: string
+            state:
+              type: string
+          required:
+          - ssName
+          - state
+          type: object
+        nullable: true
+        type: array
+      provisionedBuckets:
+        type: boolean
+      provisionedUsers:
+        type: boolean
+      revision:
+        format: int32
+        type: integer
+      syncVersion:
+        type: string
+      usage:
+        properties:
+          capacity:
+            format: int64
+            type: integer
+          rawCapacity:
+            format: int64
+            type: integer
+          rawUsage:
+            format: int64
+            type: integer
+          tiers:
+            items:
+              properties:
+                Name:
+                  type: string
+                Type:
+                  type: string
+                totalSize:
+                  format: int64
+                  type: integer
+              required:
+              - Name
+              - totalSize
+              type: object
+            type: array
+          usage:
+            format: int64
+            type: integer
+        type: object
+      waitingOnReady:
+        format: date-time
+        type: string
+      writeQuorum:
+        format: int32
+        type: integer
+    required:
+    - availableReplicas
+    - certificates
+    - currentState
+    - pools
+    - revision
+    - syncVersion
+    type: object

@@ -1,0 +1,920 @@
+_comment: 'Auszug aus dem im Cluster installierten CRD des Operators: Gruppe, Kind und das status-Schema.'
+_source: kubectl get crd clusters.postgresql.cnpg.io -o json (Operator im Entwicklungscluster installiert)
+group: postgresql.cnpg.io
+kind: Cluster
+versions:
+- name: v1
+  status:
+    description: 'Most recently observed status of the cluster. This data may not be up
+
+      to date. Populated by the system. Read-only.
+
+      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status'
+    properties:
+      availableArchitectures:
+        description: AvailableArchitectures reports the available architectures of a cluster
+        items:
+          description: AvailableArchitecture represents the state of a cluster's architecture
+          properties:
+            goArch:
+              description: GoArch is the name of the executable architecture
+              type: string
+            hash:
+              description: Hash is the hash of the executable
+              type: string
+          required:
+          - goArch
+          - hash
+          type: object
+        type: array
+      certificates:
+        description: The configuration for the CA and related certificates, initialized with defaults.
+        properties:
+          clientCASecret:
+            description: 'The secret containing the Client CA certificate. If not defined, a new secret
+              will be created
+
+              with a self-signed CA and will be used to generate all the client certificates.<br />
+
+              <br />
+
+              Contains:<br />
+
+              <br />
+
+              - `ca.crt`: CA that should be used to validate the client certificates,
+
+              used as `ssl_ca_file` of all the instances.<br />
+
+              - `ca.key`: key used to generate client certificates, if ReplicationTLSSecret is provided,
+
+              this can be omitted.<br />'
+            type: string
+          expirations:
+            additionalProperties:
+              type: string
+            description: Expiration dates for all certificates.
+            type: object
+          replicationTLSSecret:
+            description: 'The secret of type kubernetes.io/tls containing the client certificate to authenticate
+              as
+
+              the `streaming_replica` user.
+
+              If not defined, ClientCASecret must provide also `ca.key`, and a new secret will be
+
+              created using the provided CA.'
+            type: string
+          serverAltDNSNames:
+            description: The list of the server alternative DNS names to be added to the generated server
+              TLS certificates, when required.
+            items:
+              type: string
+            type: array
+          serverCASecret:
+            description: 'The secret containing the Server CA certificate. If not defined, a new secret
+              will be created
+
+              with a self-signed CA and will be used to generate the TLS certificate ServerTLSSecret.<br
+              />
+
+              <br />
+
+              Contains:<br />
+
+              <br />
+
+              - `ca.crt`: CA that should be used to validate the server certificate,
+
+              used as `sslrootcert` in client connection strings.<br />
+
+              - `ca.key`: key used to generate Server SSL certs, if ServerTLSSecret is provided,
+
+              this can be omitted.<br />'
+            type: string
+          serverTLSSecret:
+            description: 'The secret of type kubernetes.io/tls containing the server TLS certificate and
+              key that will be set as
+
+              `ssl_cert_file` and `ssl_key_file` so that clients can connect to postgres securely.
+
+              If not defined, ServerCASecret must provide also `ca.key` and a new secret will be
+
+              created using the provided CA.'
+            type: string
+        type: object
+      cloudNativePGCommitHash:
+        description: The commit hash number of which this operator running
+        type: string
+      cloudNativePGOperatorHash:
+        description: The hash of the binary of the operator
+        type: string
+      conditions:
+        description: Conditions for cluster object
+        items:
+          description: Condition contains details for one aspect of the current state of this API Resource.
+          properties:
+            lastTransitionTime:
+              description: 'lastTransitionTime is the last time the condition transitioned from one status
+                to another.
+
+                This should be when the underlying condition changed.  If that is not known, then using
+                the time when the API field changed is acceptable.'
+              format: date-time
+              type: string
+            message:
+              description: 'message is a human readable message indicating details about the transition.
+
+                This may be an empty string.'
+              maxLength: 32768
+              type: string
+            observedGeneration:
+              description: 'observedGeneration represents the .metadata.generation that the condition
+                was set based upon.
+
+                For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration
+                is 9, the condition is out of date
+
+                with respect to the current state of the instance.'
+              format: int64
+              minimum: 0
+              type: integer
+            reason:
+              description: 'reason contains a programmatic identifier indicating the reason for the condition''s
+                last transition.
+
+                Producers of specific condition types may define expected values and meanings for this
+                field,
+
+                and whether the values are considered a guaranteed API.
+
+                The value should be a CamelCase string.
+
+                This field may not be empty.'
+              maxLength: 1024
+              minLength: 1
+              pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+              type: string
+            status:
+              description: status of the condition, one of True, False, Unknown.
+              enum:
+              - 'True'
+              - 'False'
+              - Unknown
+              type: string
+            type:
+              description: type of condition in CamelCase or in foo.example.com/CamelCase.
+              maxLength: 316
+              pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+              type: string
+          required:
+          - lastTransitionTime
+          - message
+          - reason
+          - status
+          - type
+          type: object
+        type: array
+      configMapResourceVersion:
+        description: 'The list of resource versions of the configmaps,
+
+          managed by the operator. Every change here is done in the
+
+          interest of the instance manager, which will refresh the
+
+          configmap data'
+        properties:
+          metrics:
+            additionalProperties:
+              type: string
+            description: 'A map with the versions of all the config maps used to pass metrics.
+
+              Map keys are the config map names, map values are the versions'
+            type: object
+        type: object
+      currentPrimary:
+        description: Current primary instance
+        type: string
+      currentPrimaryFailingSinceTimestamp:
+        description: 'The timestamp when the primary was detected to be unhealthy
+
+          This field is reported when `.spec.failoverDelay` is populated or during online upgrades'
+        type: string
+      currentPrimaryTimestamp:
+        description: The timestamp when the last actual promotion to primary has occurred
+        type: string
+      danglingPVC:
+        description: 'List of all the PVCs created by this cluster and still available
+
+          which are not attached to a Pod'
+        items:
+          type: string
+        type: array
+      demotionToken:
+        description: 'DemotionToken is a JSON token containing the information
+
+          from pg_controldata such as Database system identifier, Latest checkpoint''s
+
+          TimeLineID, Latest checkpoint''s REDO location, Latest checkpoint''s REDO
+
+          WAL file, and Time of latest checkpoint'
+        type: string
+      firstRecoverabilityPoint:
+        description: 'The first recoverability point, stored as a date in RFC3339 format.
+
+          This field is calculated from the content of FirstRecoverabilityPointByMethod.
+
+
+          Deprecated: the field is not set for backup plugins.'
+        type: string
+      firstRecoverabilityPointByMethod:
+        additionalProperties:
+          format: date-time
+          type: string
+        description: 'The first recoverability point, stored as a date in RFC3339 format, per backup method
+          type.
+
+
+          Deprecated: the field is not set for backup plugins.'
+        type: object
+      healthyPVC:
+        description: List of all the PVCs not dangling nor initializing
+        items:
+          type: string
+        type: array
+      image:
+        description: Image contains the image name used by the pods
+        type: string
+      initializingPVC:
+        description: List of all the PVCs that are being initialized by this cluster
+        items:
+          type: string
+        type: array
+      instanceNames:
+        description: List of instance names in the cluster
+        items:
+          type: string
+        type: array
+      instances:
+        description: The total number of PVC Groups detected in the cluster. It may differ from the number
+          of existing instance pods.
+        type: integer
+      instancesReportedState:
+        additionalProperties:
+          description: InstanceReportedState describes the last reported state of an instance during a
+            reconciliation loop
+          properties:
+            ip:
+              description: IP address of the instance
+              type: string
+            isPrimary:
+              description: indicates if an instance is the primary one
+              type: boolean
+            timeLineID:
+              description: indicates on which TimelineId the instance is
+              type: integer
+          required:
+          - isPrimary
+          type: object
+        description: The reported state of the instances during the last reconciliation loop
+        type: object
+      instancesStatus:
+        additionalProperties:
+          items:
+            type: string
+          type: array
+        description: InstancesStatus indicates in which status the instances are
+        type: object
+      jobCount:
+        description: How many Jobs have been created by this cluster
+        format: int32
+        type: integer
+      lastFailedBackup:
+        description: 'Last failed backup, stored as a date in RFC3339 format.
+
+
+          Deprecated: the field is not set for backup plugins.'
+        type: string
+      lastPromotionToken:
+        description: 'LastPromotionToken is the last verified promotion token that
+
+          was used to promote a replica cluster'
+        type: string
+      lastSuccessfulBackup:
+        description: 'Last successful backup, stored as a date in RFC3339 format.
+
+          This field is calculated from the content of LastSuccessfulBackupByMethod.
+
+
+          Deprecated: the field is not set for backup plugins.'
+        type: string
+      lastSuccessfulBackupByMethod:
+        additionalProperties:
+          format: date-time
+          type: string
+        description: 'Last successful backup, stored as a date in RFC3339 format, per backup method type.
+
+
+          Deprecated: the field is not set for backup plugins.'
+        type: object
+      latestGeneratedNode:
+        description: 'ID of the latest generated node (used to avoid node name clashing)
+
+
+          Deprecated: this field is not set anymore'
+        type: integer
+      managedRolesStatus:
+        description: ManagedRolesStatus reports the state of the managed roles in the cluster
+        properties:
+          byStatus:
+            additionalProperties:
+              items:
+                type: string
+              type: array
+            description: ByStatus gives the list of roles in each state
+            type: object
+          cannotReconcile:
+            additionalProperties:
+              items:
+                type: string
+              type: array
+            description: 'CannotReconcile lists roles that cannot be reconciled, with an
+
+              explanation of the cause. Failures may originate in PostgreSQL
+
+              (e.g. dropping a role that owns objects) or in Kubernetes (e.g.
+
+              the referenced password Secret cannot be fetched).'
+            type: object
+          passwordStatus:
+            additionalProperties:
+              description: PasswordState represents the state of the password of a managed RoleConfiguration
+              properties:
+                resourceVersion:
+                  description: the resource version of the password secret
+                  type: string
+                transactionID:
+                  description: the last transaction ID to affect the role definition in PostgreSQL
+                  format: int64
+                  type: integer
+              type: object
+            description: PasswordStatus gives the last transaction id and password secret version for
+              each managed role
+            type: object
+        type: object
+      onlineUpdateEnabled:
+        description: OnlineUpdateEnabled shows if the online upgrade is enabled inside the cluster
+        type: boolean
+      operatorCertificateFingerprint:
+        description: 'OperatorCertificateFingerprint is the SHA256 fingerprint of the operator''s
+
+          in-memory client certificate public key. The instance manager pins this
+
+          fingerprint to authenticate requests from the operator.'
+        type: string
+      pgDataImageInfo:
+        description: PGDataImageInfo contains the details of the latest image that has run on the current
+          data directory.
+        properties:
+          extensions:
+            description: Extensions contains the container image extensions available for the current
+              Image
+            items:
+              description: 'ExtensionConfiguration is the configuration used to add
+
+                PostgreSQL extensions to the Cluster.'
+              properties:
+                bin_path:
+                  description: 'A list of directories within the image to be appended to the
+
+                    PostgreSQL process''s `PATH` environment variable.'
+                  items:
+                    type: string
+                  type: array
+                dynamic_library_path:
+                  description: 'The list of directories inside the image which should be added to dynamic_library_path.
+
+                    If not defined, defaults to "/lib".'
+                  items:
+                    type: string
+                  type: array
+                env:
+                  description: 'Env is a list of custom environment variables to be set in the
+
+                    PostgreSQL process for this extension. It is the responsibility of the
+
+                    cluster administrator to ensure the variables are correct for the
+
+                    specific extension. Note that changes to these variables require
+
+                    a manual cluster restart to take effect.'
+                  items:
+                    description: 'ExtensionEnvVar defines an environment variable for a specific extension
+
+                      image volume.'
+                    properties:
+                      name:
+                        description: 'Name of the environment variable to be injected into the
+
+                          PostgreSQL process.'
+                        minLength: 1
+                        pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
+                        type: string
+                      value:
+                        description: 'Value of the environment variable. CloudNativePG performs a direct
+
+                          replacement of this value, with support for placeholder expansion.
+
+                          The ${`image_root`} placeholder resolves to the absolute mount path
+
+                          of the extension''s volume (e.g., `/extensions/my-extension`). This
+
+                          is particularly useful for allowing applications or libraries to
+
+                          locate specific directories within the mounted image.
+
+                          Unrecognized placeholders are rejected. To include a literal ${...}
+
+                          in the value, escape it as $${...}.'
+                        minLength: 1
+                        type: string
+                    required:
+                    - name
+                    - value
+                    type: object
+                  type: array
+                  x-kubernetes-list-map-keys:
+                  - name
+                  x-kubernetes-list-type: map
+                extension_control_path:
+                  description: 'The list of directories inside the image which should be added to extension_control_path.
+
+                    If not defined, defaults to "/share".'
+                  items:
+                    type: string
+                  type: array
+                image:
+                  description: The image containing the extension.
+                  properties:
+                    pullPolicy:
+                      description: 'Policy for pulling OCI objects. Possible values are:
+
+                        Always: the kubelet always attempts to pull the reference. Container creation
+                        will fail If the pull fails.
+
+                        Never: the kubelet never pulls the reference and only uses a local image or artifact.
+                        Container creation will fail if the reference isn''t present.
+
+                        IfNotPresent: the kubelet pulls if the reference isn''t already present on disk.
+                        Container creation will fail if the reference isn''t present and the pull fails.
+
+                        Defaults to Always if :latest tag is specified, or IfNotPresent otherwise.'
+                      type: string
+                    reference:
+                      description: 'Required: Image or artifact reference to be used.
+
+                        Behaves in the same way as pod.spec.containers[*].image.
+
+                        Pull secrets will be assembled in the same way as for the container image by looking
+                        up node credentials, SA image pull secrets, and pod spec image pull secrets.
+
+                        More info: https://kubernetes.io/docs/concepts/containers/images
+
+                        This field is optional to allow higher level config management to default or override
+
+                        container images in workload controllers like Deployments and StatefulSets.'
+                      type: string
+                  type: object
+                ld_library_path:
+                  description: The list of directories inside the image which should be added to ld_library_path.
+                  items:
+                    type: string
+                  type: array
+                name:
+                  description: 'The name of the extension, required. The limit of 59 characters
+
+                    leaves room for the prefix the operator adds when deriving the
+
+                    extension''s Kubernetes Volume name (capped at 63 characters).'
+                  maxLength: 59
+                  minLength: 1
+                  pattern: ^[a-z0-9]([-a-z0-9_]*[a-z0-9])?$
+                  type: string
+              required:
+              - name
+              type: object
+            type: array
+          image:
+            description: Image is the image name
+            type: string
+          majorVersion:
+            description: MajorVersion is the major version of the image
+            type: integer
+        required:
+        - image
+        - majorVersion
+        type: object
+      phase:
+        description: Current phase of the cluster
+        type: string
+      phaseReason:
+        description: Reason for the current phase
+        type: string
+      pluginStatus:
+        description: PluginStatus is the status of the loaded plugins
+        items:
+          description: PluginStatus is the status of a loaded plugin
+          properties:
+            backupCapabilities:
+              description: 'BackupCapabilities are the list of capabilities of the
+
+                plugin regarding the Backup management'
+              items:
+                type: string
+              type: array
+            capabilities:
+              description: 'Capabilities are the list of capabilities of the
+
+                plugin'
+              items:
+                type: string
+              type: array
+            name:
+              description: Name is the name of the plugin
+              type: string
+            operatorCapabilities:
+              description: 'OperatorCapabilities are the list of capabilities of the
+
+                plugin regarding the reconciler'
+              items:
+                type: string
+              type: array
+            restoreJobHookCapabilities:
+              description: 'RestoreJobHookCapabilities are the list of capabilities of the
+
+                plugin regarding the RestoreJobHook management'
+              items:
+                type: string
+              type: array
+            status:
+              description: Status contain the status reported by the plugin through the SetStatusInCluster
+                interface
+              type: string
+            version:
+              description: 'Version is the version of the plugin loaded by the
+
+                latest reconciliation loop'
+              type: string
+            walCapabilities:
+              description: 'WALCapabilities are the list of capabilities of the
+
+                plugin regarding the WAL management'
+              items:
+                type: string
+              type: array
+          required:
+          - name
+          - version
+          type: object
+        type: array
+      podSelectorRefs:
+        description: 'PodSelectorRefs contains the resolved pod IPs for each named selector
+
+          defined in spec.podSelectorRefs.'
+        items:
+          description: PodSelectorRefStatus contains the resolved pod IPs for a named selector.
+          properties:
+            ips:
+              description: 'IPs is the list of pod IPs matching the selector.
+
+                Each IP is a single address (no CIDR notation).'
+              items:
+                type: string
+              type: array
+            name:
+              description: Name corresponds to the name in the spec's PodSelectorRef.
+              type: string
+          required:
+          - name
+          type: object
+        type: array
+        x-kubernetes-list-map-keys:
+        - name
+        x-kubernetes-list-type: map
+      poolerIntegrations:
+        description: The integration needed by poolers referencing the cluster
+        properties:
+          pgBouncerIntegration:
+            description: PgBouncerIntegrationStatus encapsulates the needed integration for the pgbouncer
+              poolers referencing the cluster
+            properties:
+              secrets:
+                items:
+                  type: string
+                type: array
+            type: object
+        type: object
+      pvcCount:
+        description: How many PVCs have been created by this cluster
+        format: int32
+        type: integer
+      readService:
+        description: Current list of read pods
+        type: string
+      readyInstances:
+        description: The total number of ready instances in the cluster. It is equal to the number of
+          ready instance pods.
+        type: integer
+      resizingPVC:
+        description: List of all the PVCs that have ResizingPVC condition.
+        items:
+          type: string
+        type: array
+      secretsResourceVersion:
+        description: 'The list of resource versions of the secrets
+
+          managed by the operator. Every change here is done in the
+
+          interest of the instance manager, which will refresh the
+
+          secret data'
+        properties:
+          applicationSecretVersion:
+            description: The resource version of the "app" user secret
+            type: string
+          barmanEndpointCA:
+            description: The resource version of the Barman Endpoint CA if provided
+            type: string
+          caSecretVersion:
+            description: Unused. Retained for compatibility with old versions.
+            type: string
+          clientCaSecretVersion:
+            description: The resource version of the PostgreSQL client-side CA secret version
+            type: string
+          externalClusterSecretVersion:
+            additionalProperties:
+              type: string
+            description: The resource versions of the external cluster secrets
+            type: object
+          managedRoleSecretVersion:
+            additionalProperties:
+              type: string
+            description: The resource versions of the managed roles secrets
+            type: object
+          metrics:
+            additionalProperties:
+              type: string
+            description: 'A map with the versions of all the secrets used to pass metrics.
+
+              Map keys are the secret names, map values are the versions'
+            type: object
+          replicationSecretVersion:
+            description: The resource version of the "streaming_replica" user secret
+            type: string
+          serverCaSecretVersion:
+            description: The resource version of the PostgreSQL server-side CA secret version
+            type: string
+          serverSecretVersion:
+            description: The resource version of the PostgreSQL server-side secret version
+            type: string
+          superuserSecretVersion:
+            description: The resource version of the "postgres" user secret
+            type: string
+        type: object
+      selector:
+        description: 'Selector is the serialized form of the label selector that identifies
+
+          the pods managed by this cluster. Populated by the operator and exposed
+
+          through the scale sub-resource so an autoscaler (such as HPA or VPA)
+
+          can discover the managed instance pods.'
+        type: string
+      switchReplicaClusterStatus:
+        description: SwitchReplicaClusterStatus is the status of the switch to replica cluster
+        properties:
+          inProgress:
+            description: InProgress indicates if there is an ongoing procedure of switching a cluster
+              to a replica cluster.
+            type: boolean
+        type: object
+      systemID:
+        description: SystemID is the latest detected PostgreSQL SystemID
+        type: string
+      tablespacesStatus:
+        description: TablespacesStatus reports the state of the declarative tablespaces in the cluster
+        items:
+          description: TablespaceState represents the state of a tablespace in a cluster
+          properties:
+            error:
+              description: Error is the reconciliation error, if any
+              type: string
+            name:
+              description: Name is the name of the tablespace
+              type: string
+            owner:
+              description: Owner is the PostgreSQL user owning the tablespace
+              type: string
+            state:
+              description: State is the latest reconciliation state
+              type: string
+          required:
+          - name
+          - state
+          type: object
+        type: array
+      targetPgDataImageInfo:
+        description: 'TargetPGDataImageInfo contains the details of the target image for an
+
+          in-progress major upgrade. It is set before the upgrade Job is created,
+
+          and cleared on successful completion or when the upgrade is rolled back.'
+        properties:
+          extensions:
+            description: Extensions contains the container image extensions available for the current
+              Image
+            items:
+              description: 'ExtensionConfiguration is the configuration used to add
+
+                PostgreSQL extensions to the Cluster.'
+              properties:
+                bin_path:
+                  description: 'A list of directories within the image to be appended to the
+
+                    PostgreSQL process''s `PATH` environment variable.'
+                  items:
+                    type: string
+                  type: array
+                dynamic_library_path:
+                  description: 'The list of directories inside the image which should be added to dynamic_library_path.
+
+                    If not defined, defaults to "/lib".'
+                  items:
+                    type: string
+                  type: array
+                env:
+                  description: 'Env is a list of custom environment variables to be set in the
+
+                    PostgreSQL process for this extension. It is the responsibility of the
+
+                    cluster administrator to ensure the variables are correct for the
+
+                    specific extension. Note that changes to these variables require
+
+                    a manual cluster restart to take effect.'
+                  items:
+                    description: 'ExtensionEnvVar defines an environment variable for a specific extension
+
+                      image volume.'
+                    properties:
+                      name:
+                        description: 'Name of the environment variable to be injected into the
+
+                          PostgreSQL process.'
+                        minLength: 1
+                        pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
+                        type: string
+                      value:
+                        description: 'Value of the environment variable. CloudNativePG performs a direct
+
+                          replacement of this value, with support for placeholder expansion.
+
+                          The ${`image_root`} placeholder resolves to the absolute mount path
+
+                          of the extension''s volume (e.g., `/extensions/my-extension`). This
+
+                          is particularly useful for allowing applications or libraries to
+
+                          locate specific directories within the mounted image.
+
+                          Unrecognized placeholders are rejected. To include a literal ${...}
+
+                          in the value, escape it as $${...}.'
+                        minLength: 1
+                        type: string
+                    required:
+                    - name
+                    - value
+                    type: object
+                  type: array
+                  x-kubernetes-list-map-keys:
+                  - name
+                  x-kubernetes-list-type: map
+                extension_control_path:
+                  description: 'The list of directories inside the image which should be added to extension_control_path.
+
+                    If not defined, defaults to "/share".'
+                  items:
+                    type: string
+                  type: array
+                image:
+                  description: The image containing the extension.
+                  properties:
+                    pullPolicy:
+                      description: 'Policy for pulling OCI objects. Possible values are:
+
+                        Always: the kubelet always attempts to pull the reference. Container creation
+                        will fail If the pull fails.
+
+                        Never: the kubelet never pulls the reference and only uses a local image or artifact.
+                        Container creation will fail if the reference isn''t present.
+
+                        IfNotPresent: the kubelet pulls if the reference isn''t already present on disk.
+                        Container creation will fail if the reference isn''t present and the pull fails.
+
+                        Defaults to Always if :latest tag is specified, or IfNotPresent otherwise.'
+                      type: string
+                    reference:
+                      description: 'Required: Image or artifact reference to be used.
+
+                        Behaves in the same way as pod.spec.containers[*].image.
+
+                        Pull secrets will be assembled in the same way as for the container image by looking
+                        up node credentials, SA image pull secrets, and pod spec image pull secrets.
+
+                        More info: https://kubernetes.io/docs/concepts/containers/images
+
+                        This field is optional to allow higher level config management to default or override
+
+                        container images in workload controllers like Deployments and StatefulSets.'
+                      type: string
+                  type: object
+                ld_library_path:
+                  description: The list of directories inside the image which should be added to ld_library_path.
+                  items:
+                    type: string
+                  type: array
+                name:
+                  description: 'The name of the extension, required. The limit of 59 characters
+
+                    leaves room for the prefix the operator adds when deriving the
+
+                    extension''s Kubernetes Volume name (capped at 63 characters).'
+                  maxLength: 59
+                  minLength: 1
+                  pattern: ^[a-z0-9]([-a-z0-9_]*[a-z0-9])?$
+                  type: string
+              required:
+              - name
+              type: object
+            type: array
+          image:
+            description: Image is the image name
+            type: string
+          majorVersion:
+            description: MajorVersion is the major version of the image
+            type: integer
+        required:
+        - image
+        - majorVersion
+        type: object
+      targetPrimary:
+        description: 'Target primary instance, this is different from the previous one
+
+          during a switchover or a failover'
+        type: string
+      targetPrimaryTimestamp:
+        description: The timestamp when the last request for a new primary has occurred
+        type: string
+      timelineID:
+        description: The timeline of the Postgres cluster
+        type: integer
+      topology:
+        description: Instances topology.
+        properties:
+          instances:
+            additionalProperties:
+              additionalProperties:
+                type: string
+              description: PodTopologyLabels represent the topology of a Pod. map[labelName]labelValue
+              type: object
+            description: Instances contains the pod topology of the instances
+            type: object
+          nodesUsed:
+            description: 'NodesUsed represents the count of distinct nodes accommodating the instances.
+
+              A value of ''1'' suggests that all instances are hosted on a single node,
+
+              implying the absence of High Availability (HA). Ideally, this value should
+
+              be the same as the number of instances in the Postgres HA cluster, implying
+
+              shared nothing architecture on the compute side.'
+            format: int32
+            type: integer
+          successfullyExtracted:
+            description: 'SuccessfullyExtracted indicates if the topology data was extract. It is useful
+              to enact fallback behaviors
+
+              in synchronous replica election in case of failures'
+            type: boolean
+        type: object
+      unusablePVC:
+        description: List of all the PVCs that are unusable because another PVC is missing
+        items:
+          type: string
+        type: array
+      writeService:
+        description: Current write pod
+        type: string
+    type: object
