@@ -54,6 +54,7 @@ func TestDocsRoutes_UnauthenticatedButOSBAuthUntouched(t *testing.T) {
 
 	getCode := func(path string, withAuth bool) int {
 		req, _ := http.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("X-Broker-API-Version", "2.17")
 		if withAuth {
 			req.SetBasicAuth("u", "p")
 		}

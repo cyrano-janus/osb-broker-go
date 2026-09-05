@@ -39,6 +39,7 @@ func TestMetrics_RequestsCounted(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest(http.MethodGet, "/v2/catalog", nil)
+		req.Header.Set("X-Broker-API-Version", "2.17")
 		router.ServeHTTP(w, req)
 		require.Equal(t, http.StatusOK, w.Code)
 	}
@@ -63,6 +64,7 @@ func TestMetrics_UnauthenticatedRequestsCounted(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodGet, "/v2/catalog", nil)
+	req.Header.Set("X-Broker-API-Version", "2.17")
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusUnauthorized, w.Code)
 

@@ -46,7 +46,14 @@ Foundry folgenlos, für einen Marketplace, der den Link anbietet, nicht.
 Damit das Bild nicht schief wird — diese Punkte sind konform und geprüft:
 
 - Die Katalogstruktur, inklusive Plänen, Tags und `bindable`.
-- Die Aushandlung über `X-Broker-API-Version`.
+- Die Aushandlung über `X-Broker-API-Version`: der Header ist **Pflicht**, eine
+  fremde Hauptversion ist `412 Precondition Failed`. Eine neuere Nebenversion
+  wird bedient — die Plattform nennt, was sie zu sprechen bereit ist, und ein
+  Broker, der weniger kann, antwortet mit dem, was er kann. Frei bleiben
+  `/healthz`, `/metrics`, `/openapi.yaml` und `/schemas`.
+- `409 Conflict`, wenn dieselbe `instance_id` mit abweichendem Service, Plan
+  oder abweichenden Parametern wiederholt wird.
+- Jede Fehlerantwort trägt `error` und `description`.
 - Idempotentes Provision und Bind, soweit der Zustand bekannt ist.
 - `410 Gone` beim Deprovision einer unbekannten Instanz.
 - Ein Pfad ohne Rückfallebene: eine unbekannte `service_id` ist `400`, kein

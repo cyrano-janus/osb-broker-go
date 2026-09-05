@@ -103,8 +103,4 @@ nächsten sichtbar oder billiger.
    Seit das Zeitlimit greift, endet ein falscher Pfad nach zehn Minuten in
    `failed` statt in einer endlosen Abfrage — sichtbar ist er trotzdem erst,
    wenn jemand hinsieht.
-2. **Die Prüfungen, die beiden Werkzeugen fehlen** — Versionsaushandlung
-   (fehlender `X-Broker-API-Version` → 412), `409 Conflict` bei abweichenden
-   Parametern, Unbind einer unbekannten Binding → 410, und die Prüfung des
-   Fehlerkörpers auf `error` und `description`. Jede neue Prüfung kommt mit
-   ihrer Mutation, sonst ist sie selbst ungeprüft.
+2. **`osb_active_instances` und `osb_active_bindings`** melden dauerhaft 0.

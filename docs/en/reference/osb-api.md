@@ -46,7 +46,14 @@ So that the picture does not come out crooked — these points are conformant an
 tested:
 
 - The catalogue structure, including plans, tags and `bindable`.
-- The negotiation via `X-Broker-API-Version`.
+- The negotiation via `X-Broker-API-Version`: the header is **required**, an
+  unsupported major version is `412 Precondition Failed`. A newer minor version
+  is served — the platform states what it is prepared to speak, and a broker
+  that can do less answers with what it can. `/healthz`, `/metrics`,
+  `/openapi.yaml` and `/schemas` stay free.
+- `409 Conflict` when the same `instance_id` is repeated with a differing
+  service, plan or parameters.
+- Every error response carries `error` and `description`.
 - Idempotent provision and bind, as far as the state is known.
 - `410 Gone` when deprovisioning an unknown instance.
 - One path with no fallback: an unknown `service_id` is `400`, not a silent

@@ -25,9 +25,15 @@ func newAuthTestRouter(user, pass string) *gin.Engine {
 	return h.SetupRouter()
 }
 
+// perform schickt eine Anfrage wie eine echte Plattform: mit
+// X-Broker-API-Version. Ohne den Header antwortet der Broker seit der
+// Versionsaushandlung mit 412, und jeder Test pruefte nur noch die
+// Middleware. Wer den Header gezielt weglassen will, uebergibt ihn leer -
+// siehe apiversion_test.go.
 func perform(r *gin.Engine, path string, headers map[string]string) *httptest.ResponseRecorder {
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", path, nil)
+	req.Header.Set("X-Broker-API-Version", "2.17")
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}

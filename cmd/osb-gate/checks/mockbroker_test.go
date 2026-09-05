@@ -57,6 +57,10 @@ type mutation struct {
 	updateDropsParams    bool // PATCH nimmt parameters an und verwirft sie
 	unbindStatus         int  // statt 200
 	bindingTypeNotString bool // credentials.type ist keine Zeichenkette
+	noVersionCheck       bool // fehlender X-Broker-API-Version wird nicht abgelehnt
+	wrongVersionAccepted bool // eine fremde Hauptversion wird bedient
+	conflictStatus       int  // statt 409 bei abweichenden Attributen
+	errorBodyEmpty       bool // Fehlerantwort ohne error/description
 }
 
 const (
@@ -78,6 +82,7 @@ type mockBroker struct {
 }
 
 func newMockBroker(m mutation) *mockBroker {
+	errBodyEmpty = m.errorBodyEmpty
 	b := &mockBroker{
 		instances: map[string][2]string{},
 		params:    map[string]map[string]interface{}{},
@@ -103,6 +108,20 @@ func (b *mockBroker) route(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(http.StatusOK)
 		return
+	}
+
+	// Versionsaushandlung: der Header ist Pflicht, eine fremde Hauptversion
+	// ist 412. Vor der Auth, damit die Reihenfolge der Pruefungen nicht
+	// mitentscheidet.
+	if !b.mut.noVersionCheck {
+		v := r.Header.Get("X-Broker-API-Version")
+		bad := v == "" || (!strings.HasPrefix(v, "2.") && !b.mut.wrongVersionAccepted)
+		if v == "" || (bad && !b.mut.wrongVersionAccepted) {
+			if v == "" || !strings.HasPrefix(v, "2.") {
+				writeErr(w, 412, "PreconditionFailed", "X-Broker-API-Version header is required")
+				return
+			}
+		}
 	}
 
 	if !b.mut.authNotEnforced && !b.authOK(r) {
@@ -181,7 +200,7 @@ func (b *mockBroker) instance(w http.ResponseWriter, r *http.Request, id string)
 		}
 		if known, ok := b.instances[id]; ok {
 			if known[0] != req.ServiceID || known[1] != req.PlanID {
-				writeErr(w, 409, "Conflict", "instance exists with other attributes")
+				writeErr(w, orDefault(b.mut.conflictStatus, 409), "Conflict", "instance exists with other attributes")
 				return
 			}
 			writeJSON(w, orDefault(b.mut.reprovisionStatus, 200), map[string]interface{}{
@@ -340,7 +359,13 @@ func writeJSON(w http.ResponseWriter, status int, body interface{}) {
 	_ = json.NewEncoder(w).Encode(body)
 }
 
+var errBodyEmpty bool
+
 func writeErr(w http.ResponseWriter, status int, kind, desc string) {
+	if errBodyEmpty {
+		writeJSON(w, status, map[string]string{})
+		return
+	}
 	writeJSON(w, status, map[string]string{"error": kind, "description": desc})
 }
 
@@ -419,6 +444,10 @@ func TestMock_JedeMutationWirdBemerkt(t *testing.T) {
 		{"PATCH nimmt parameters an und verwirft sie", mutation{updateDropsParams: true}, "update-parameters"},
 		{"Unbind antwortet 500", mutation{unbindStatus: 500}, "lifecycle-unbind"},
 		{"credentials.type ist eine Zahl", mutation{bindingTypeNotString: true}, "service-binding-spec"},
+		{"fehlender Versionsheader wird bedient", mutation{noVersionCheck: true}, "version-negotiation"},
+		{"fremde Hauptversion wird bedient", mutation{wrongVersionAccepted: true}, "version-negotiation"},
+		{"abweichende Attribute ergeben 200 statt 409", mutation{conflictStatus: 200}, "provision-conflict"},
+		{"Fehlerantwort ohne error/description", mutation{errorBodyEmpty: true}, "error-body"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := withBroker(t, tc.mut)

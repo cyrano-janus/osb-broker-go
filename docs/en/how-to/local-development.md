@@ -223,6 +223,8 @@ broker as conformant.
 go test ./cmd/osb-gate/checks/ -run TestMock -v
 ```
 
+Currently: **26 mutations**, 34 assertions against a conformant broker.
+
 Whoever adds a check adds its mutation. Otherwise the check itself is unchecked.
 
 The checker repository is public; CI clones it without credentials and without

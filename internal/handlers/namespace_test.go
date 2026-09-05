@@ -30,6 +30,8 @@ const spaceNS = "space-11111111-2222-3333-4444-555555555555"
 func getJSON(router *gin.Engine, path string) *httptest.ResponseRecorder {
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", path, nil)
+	// Wie eine echte Plattform: ohne den Header ist die Antwort 412.
+	req.Header.Set("X-Broker-API-Version", "2.17")
 	router.ServeHTTP(w, req)
 	return w
 }

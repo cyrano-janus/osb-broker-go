@@ -113,6 +113,8 @@ func operatorSecret(t *testing.T, oc *definition.OperatorClient, instanceID stri
 func deleteJSON(router *gin.Engine, path string) *httptest.ResponseRecorder {
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("DELETE", path, nil)
+	// Wie eine echte Plattform: ohne den Header ist die Antwort 412.
+	req.Header.Set("X-Broker-API-Version", "2.17")
 	router.ServeHTTP(w, req)
 	return w
 }

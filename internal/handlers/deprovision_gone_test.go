@@ -20,6 +20,7 @@ func TestDeprovisionNonexistentDefinitionInstanceGone(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("DELETE", "/v2/service_instances/no-such-inst?service_id=def-svc-0001&plan_id=def-plan-free", nil)
+	req.Header.Set("X-Broker-API-Version", "2.17")
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusGone, w.Code, "body: %s", w.Body.String())
 }
@@ -33,6 +34,7 @@ func TestDeprovisionNonexistentLegacyInstanceGone(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("DELETE", "/v2/service_instances/no-such-legacy?service_id="+legacyServiceIDFixture+"&plan_id="+legacyPlanIDFixture, nil)
+	req.Header.Set("X-Broker-API-Version", "2.17")
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusGone, w.Code)
 }

@@ -203,7 +203,32 @@ func (c *client) do(method, path string, body interface{}) (int, []byte) {
 		req.SetBasicAuth(c.cfg.User, c.cfg.Pass)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Broker-API-Version", "2.17")
+	req.Header.Set("X-Broker-API-Version", apiVersion)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return -1, nil
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, data
+}
+
+// apiVersion ist die Version, die dieser Pruefer zu sprechen erklaert.
+const apiVersion = "2.17"
+
+// doVersion schickt dieselbe Anfrage mit einem abweichenden oder fehlendem
+// Versionsheader. Leerer Wert heisst: Header weglassen.
+func (c *client) doVersion(method, path, version string) (int, []byte) {
+	req, err := http.NewRequest(method, strings.TrimSuffix(c.cfg.BaseURL, "/")+path, nil)
+	if err != nil {
+		return -1, nil
+	}
+	if c.cfg.User != "" || c.cfg.Pass != "" {
+		req.SetBasicAuth(c.cfg.User, c.cfg.Pass)
+	}
+	if version != "" {
+		req.Header.Set("X-Broker-API-Version", version)
+	}
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return -1, nil
@@ -282,8 +307,10 @@ func RunReport(cfg Config) *Report {
 	c := &client{http: authed, anon: anon, cfg: cfg, rep: rep}
 
 	c.checkAuthEnforcement()
+	c.checkVersionNegotiation()
 	svcs := c.checkCatalogStructure()
 	c.checkErrorMapping(svcs)
+	c.checkErrorBody(svcs)
 
 	// Full lifecycle + fetch + update audit (mirrors the standalone
 	// osb-checker's provision/bind/update/fetch categories).
@@ -293,6 +320,7 @@ func RunReport(cfg Config) *Report {
 	} else {
 		inst := runLifecycleAudit(c, serviceID, planID)
 		if inst != "" {
+			c.checkProvisionConflict(inst, serviceID, planID, svcs)
 			runFetchAudit(c, inst, serviceID, planID)
 			runUpdateAudit(c, inst, serviceID, planID)
 			cleanupAudit(c, inst, serviceID, planID)
@@ -549,6 +577,108 @@ func (c *client) checkErrorMapping(svcs []catalogService) {
 	} else {
 		c.pass(check, "deprovision nonexistent -> 410 Gone")
 	}
+}
+
+// checkVersionNegotiation prueft die Aushandlung aus OSB 2.17: der Header
+// `X-Broker-API-Version` ist Pflicht, und eine Version, die der Broker nicht
+// bedienen kann, ist `412 Precondition Failed`.
+//
+// Ohne diese Pruefung faellt ein Broker nicht auf, der den Header ignoriert.
+// Er antwortet dann nach seiner eigenen Version auf Anfragen, auf die sich
+// niemand geeinigt hat - und das faellt erst auf, wenn sich eine Bedeutung
+// zwischen zwei Nebenversionen aendert.
+func (c *client) checkVersionNegotiation() {
+	const check = "version-negotiation"
+
+	if status, body := c.doVersion("GET", "/v2/catalog", ""); status != 412 {
+		c.fail(check, "request without X-Broker-API-Version -> expected 412, got %d: %s",
+			status, truncate(body))
+	} else {
+		c.pass(check, "request without X-Broker-API-Version -> 412")
+	}
+
+	// Eine andere Hauptversion ist eine andere Schnittstelle. Eine neuere
+	// NEBENversion wird bewusst nicht geprueft: die Plattform nennt, was sie
+	// zu sprechen bereit ist, und ein Broker, der weniger kann, darf trotzdem
+	// antworten.
+	if status, body := c.doVersion("GET", "/v2/catalog", "3.0"); status != 412 {
+		c.fail(check, "X-Broker-API-Version 3.0 -> expected 412, got %d: %s",
+			status, truncate(body))
+	} else {
+		c.pass(check, "unsupported major version -> 412")
+	}
+
+	if status, _ := c.doVersion("GET", "/v2/catalog", apiVersion); status != 200 {
+		c.fail(check, "X-Broker-API-Version %s -> expected 200, got %d", apiVersion, status)
+	} else {
+		c.pass(check, "supported version %s -> 200", apiVersion)
+	}
+}
+
+// checkProvisionConflict prueft, dass eine bestehende Instanz nicht still
+// ueberschrieben wird: dieselbe instance_id mit anderem Plan ist 409.
+//
+// Ohne diese Zusage koennte eine Plattform, die einen Request wiederholt und
+// dabei etwas anderes schickt, die Instanz eines Kunden umbauen, ohne dass es
+// jemand bemerkt.
+func (c *client) checkProvisionConflict(instanceID, serviceID, planID string, svcs []catalogService) {
+	const check = "provision-conflict"
+
+	other := otherPlan(svcs, serviceID, planID)
+	if other == "" {
+		c.skip(check, "der Service hat nur einen Plan - ein Konflikt ist nicht erzeugbar")
+		return
+	}
+	status, body := c.do("PUT", "/v2/service_instances/"+instanceID+"?accepts_incomplete=true",
+		map[string]interface{}{"service_id": serviceID, "plan_id": other})
+	if status != 409 {
+		c.fail(check, "re-provision with a different plan -> expected 409, got %d: %s",
+			status, truncate(body))
+		return
+	}
+	c.pass(check, "re-provision with a different plan -> 409")
+}
+
+// otherPlan liefert einen Plan desselben Service, der nicht der geprueste ist.
+func otherPlan(svcs []catalogService, serviceID, planID string) string {
+	for _, s := range svcs {
+		if s.ID != serviceID {
+			continue
+		}
+		for _, p := range s.Plans {
+			if p.ID != planID {
+				return p.ID
+			}
+		}
+	}
+	return ""
+}
+
+// checkErrorBody prueft, dass eine Fehlerantwort `error` und `description`
+// traegt.
+//
+// OSB verlangt das, damit eine Plattform dem Benutzer sagen kann, was schief
+// ging. Ein leerer Koerper zwingt sie, den Statuscode zu raten - und aus
+// "der Plan erlaubt diesen Parameter nicht" wird "irgendwas mit 400".
+func (c *client) checkErrorBody(svcs []catalogService) {
+	const check = "error-body"
+
+	// Eine Anfrage, die sicher scheitert: Provision ohne service_id.
+	_, body := c.do("PUT", "/v2/service_instances/"+c.cfg.IDPrefix+"-errbody",
+		map[string]interface{}{"plan_id": "x"})
+	var resp struct {
+		Error       string `json:"error"`
+		Description string `json:"description"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		c.fail(check, "error response is not valid JSON: %s", truncate(body))
+		return
+	}
+	if resp.Error == "" || resp.Description == "" {
+		c.fail(check, "error response must carry error and description, got: %s", truncate(body))
+		return
+	}
+	c.pass(check, "error response carries error %q and a description", resp.Error)
 }
 
 // anyServiceAndPlan liefert irgendeinen Service mit Plan aus dem Katalog.

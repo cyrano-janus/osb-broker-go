@@ -108,6 +108,8 @@ func sendJSON(router *gin.Engine, method, path string, body interface{}) *httpte
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(method, path, bytes.NewBuffer(b))
 	req.Header.Set("Content-Type", "application/json")
+	// Wie eine echte Plattform: ohne den Header ist die Antwort 412.
+	req.Header.Set("X-Broker-API-Version", "2.17")
 	router.ServeHTTP(w, req)
 	return w
 }
@@ -150,6 +152,7 @@ func TestIntegration_DefinitionLifecycleOverHTTP(t *testing.T) {
 	// 3. LastOperation: in progress (no status yet)
 	w = httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/v2/service_instances/inst-int-1/last_operation?service_id=def-svc-0001&operation=provision", nil)
+	req.Header.Set("X-Broker-API-Version", "2.17")
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 	var lo struct {
@@ -166,6 +169,7 @@ func TestIntegration_DefinitionLifecycleOverHTTP(t *testing.T) {
 
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest("GET", "/v2/service_instances/inst-int-1/last_operation?service_id=def-svc-0001&operation=provision", nil)
+	req.Header.Set("X-Broker-API-Version", "2.17")
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &lo))
@@ -193,11 +197,13 @@ func TestIntegration_DefinitionLifecycleOverHTTP(t *testing.T) {
 	// 6. Unbind + Deprovision
 	w = httptest.NewRecorder()
 	delReq, _ := http.NewRequest("DELETE", "/v2/service_instances/inst-int-1/service_bindings/bind-int-1?service_id=def-svc-0001&plan_id=def-plan-free", nil)
+	delReq.Header.Set("X-Broker-API-Version", "2.17")
 	router.ServeHTTP(w, delReq)
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	w = httptest.NewRecorder()
 	delReq, _ = http.NewRequest("DELETE", "/v2/service_instances/inst-int-1?service_id=def-svc-0001&plan_id=def-plan-free", nil)
+	delReq.Header.Set("X-Broker-API-Version", "2.17")
 	router.ServeHTTP(w, delReq)
 	assert.Equal(t, http.StatusOK, w.Code)
 
@@ -231,6 +237,7 @@ func TestIntegration_DefinitionUpdateOverHTTP(t *testing.T) {
 	})
 	w = httptest.NewRecorder()
 	req, _ := http.NewRequest("PATCH", "/v2/service_instances/inst-upd-http", bytes.NewReader(patchBody))
+	req.Header.Set("X-Broker-API-Version", "2.17")
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
@@ -250,6 +257,7 @@ func TestIntegration_DefinitionUpdateOverHTTP(t *testing.T) {
 	})
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest("PATCH", "/v2/service_instances/inst-upd-http", bytes.NewReader(badBody))
+	req.Header.Set("X-Broker-API-Version", "2.17")
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())

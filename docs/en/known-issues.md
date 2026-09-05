@@ -103,8 +103,4 @@ visible or cheaper.
    the deadline is enforced, a wrong path ends in `failed` after ten minutes
    instead of an endless poll — it still only becomes visible when somebody
    looks.
-2. **The checks both tools lack** — version negotiation (a missing
-   `X-Broker-API-Version` → 412), `409 Conflict` on differing parameters,
-   unbind of an unknown binding → 410, and checking the error body for `error`
-   and `description`. Every new check comes with its mutation, otherwise the
-   check itself is unchecked.
+2. **`osb_active_instances` and `osb_active_bindings`** permanently report 0.

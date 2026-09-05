@@ -225,6 +225,8 @@ unerreichbaren Broker als konform.
 go test ./cmd/osb-gate/checks/ -run TestMock -v
 ```
 
+Stand: **26 Mutationen**, 34 Prüfzusagen gegen einen konformen Broker.
+
 Wer eine Prüfung hinzufügt, fügt ihre Mutation dazu. Sonst ist die Prüfung
 selbst ungeprüft.
 
