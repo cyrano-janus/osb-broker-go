@@ -70,7 +70,7 @@ spec:
       serviceAccountName: osb-broker-go
       containers:
       - name: broker
-        image: osb-broker-go:v14
+        image: osb-broker-go:v9
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080

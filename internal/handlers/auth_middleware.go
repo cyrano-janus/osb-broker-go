@@ -3,7 +3,7 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/example/osb-broker/internal/auth"
+	"github.com/cyrano-janus/osb-broker-go/internal/auth"
 	"github.com/gin-gonic/gin"
 )
 

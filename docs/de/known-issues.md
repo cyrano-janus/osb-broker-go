@@ -32,14 +32,6 @@ Trifft ein Pfad daneben, meldet `last_operation` seit der Diagnose in
 tatsächlich führt. Der Provisioning-Vorgang läuft trotzdem in das Zeitlimit der
 Plattform; der Unterschied ist, dass man danach weiß, warum.
 
-**Die Image-Version ist uneinheitlich gepinnt.** `deploy/k8s/broker.yaml` nennt
-`v14`, `Chart.yaml` hat `appVersion: v9`, `values-kind.yaml` pinnt `v9`.
-
-**Der Modulpfad ist ein Platzhalter.** `go.mod` sagt
-`github.com/example/osb-broker`, während `schemas/service-definition.schema.json`
-(`$id`), `docs/openapi.yaml` (`contact.url`) und die Image-Referenz des Charts
-auf `github.com/cyrano-janus/osb-broker-go` zeigen.
-
 **`Dockerfile` gibt `EXPOSE 8080` an**, während das Chart mit TLS auf 8443
 lauscht. Folgenlos, aber irreführend.
 
@@ -80,6 +72,6 @@ nächsten sichtbar oder billiger.
    Seit das Zeitlimit greift, endet ein falscher Pfad nach zehn Minuten in
    `failed` statt in einer endlosen Abfrage — sichtbar ist er trotzdem erst,
    wenn jemand hinsieht.
-2. **Platzhalter und uneinheitliche Pins** — der Modulpfad ist
-   `github.com/example/osb-broker`, die Image-Version steht an drei Stellen
-   unterschiedlich.
+2. **Ein Durchlauf gegen ein Zielsystem** — bis hierhin ist alles auf der
+   Entwicklungsplattform belegt, und das ist nicht dasselbe wie einsatzfähig.
+   Siehe [target-platforms.md](target-platforms.md).

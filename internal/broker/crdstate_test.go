@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	osbv1 "github.com/example/osb-broker/internal/apis/v1alpha1"
+	osbv1 "github.com/cyrano-janus/osb-broker-go/internal/apis/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"

@@ -1,4 +1,4 @@
-module github.com/example/osb-broker
+module github.com/cyrano-janus/osb-broker-go
 
 go 1.26.0
 

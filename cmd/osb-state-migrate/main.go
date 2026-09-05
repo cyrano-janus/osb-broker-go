@@ -16,8 +16,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/example/osb-broker/internal/broker"
-	"github.com/example/osb-broker/internal/migrate"
+	"github.com/cyrano-janus/osb-broker-go/internal/broker"
+	"github.com/cyrano-janus/osb-broker-go/internal/migrate"
 	k8sconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 

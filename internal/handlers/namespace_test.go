@@ -9,7 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/example/osb-broker/internal/definition"
+	"github.com/cyrano-janus/osb-broker-go/internal/definition"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	k8scorev1 "k8s.io/api/core/v1"

@@ -3,8 +3,8 @@ package broker
 import (
 	"errors"
 
-	osbv1 "github.com/example/osb-broker/internal/apis/v1alpha1"
-	"github.com/example/osb-broker/internal/definition"
+	osbv1 "github.com/cyrano-janus/osb-broker-go/internal/apis/v1alpha1"
+	"github.com/cyrano-janus/osb-broker-go/internal/definition"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"

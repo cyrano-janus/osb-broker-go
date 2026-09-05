@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/example/osb-broker/internal/config"
+	"github.com/cyrano-janus/osb-broker-go/internal/config"
 )
 
 // CertReloader serves the broker's TLS material and picks up rotations

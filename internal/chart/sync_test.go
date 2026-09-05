@@ -265,3 +265,45 @@ func TestChart_JederConfigWertErreichtDenBroker(t *testing.T) {
 			"config.%s wird von keinem Template gerendert - der Schalter waere wirkungslos", key)
 	}
 }
+
+// Die Image-Version stand an drei Stellen und war an zweien verschieden:
+// deploy/k8s/broker.yaml nannte v14, Chart.yaml appVersion v9, values-kind.yaml
+// pinnte v9. Welche gilt, sieht man dann erst am laufenden Pod.
+//
+// Eine Quelle: Chart.yaml appVersion. Das Deployment-Template setzt
+// `.Values.image.tag | default .Chart.AppVersion`, eine Wertedatei darf also
+// schweigen - und tut sie es nicht, muss sie dasselbe sagen.
+func TestChart_DieImageVersionStehtAnEinerStelle(t *testing.T) {
+	appVersion := regexp.MustCompile(`(?m)^appVersion:\s*"?([^"\n]+)"?`).
+		FindStringSubmatch(read(t, filepath.Join(chartDir, "Chart.yaml")))
+	require.Len(t, appVersion, 2, "Chart.yaml muss appVersion nennen")
+	want := strings.TrimSpace(appVersion[1])
+
+	// Rohmanifest: dieselbe Version, sonst deployt wer es benutzt etwas anderes
+	// als wer das Chart benutzt.
+	raw := read(t, "deploy/k8s/broker.yaml")
+	if m := regexp.MustCompile(`image: osb-broker-go:(\S+)`).FindStringSubmatch(raw); m != nil {
+		assert.Equal(t, want, m[1],
+			"deploy/k8s/broker.yaml nennt eine andere Version als Chart.yaml appVersion")
+	}
+
+	// Wertedateien: entweder schweigen oder dasselbe sagen.
+	//
+	// values-ci.yaml ist ausgenommen und pinnt "pr": die CI deployt das Image,
+	// das sie gerade gebaut hat, und das traegt keine Release-Version. Ein
+	// Gleichlauf mit appVersion waere dort nicht nur unnoetig, sondern falsch.
+	for _, f := range []string{"values-kind.yaml"} {
+		path := filepath.Join(repoRoot, chartDir, f)
+		if _, err := os.Stat(path); err != nil {
+			continue
+		}
+		body := read(t, filepath.Join(chartDir, f))
+		m := regexp.MustCompile(`(?m)^  tag:\s*"?([^"\n#]+)"?`).FindStringSubmatch(body)
+		if m == nil {
+			continue // erbt aus Chart.yaml - genau richtig
+		}
+		if v := strings.TrimSpace(m[1]); v != "" {
+			assert.Equal(t, want, v, "%s pinnt eine andere Version als Chart.yaml appVersion", f)
+		}
+	}
+}

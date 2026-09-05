@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/example/osb-broker/internal/auth"
-	"github.com/example/osb-broker/internal/broker"
+	"github.com/cyrano-janus/osb-broker-go/internal/auth"
+	"github.com/cyrano-janus/osb-broker-go/internal/broker"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

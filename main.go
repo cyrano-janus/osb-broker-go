@@ -12,11 +12,11 @@ import (
 	"crypto/tls"
 	"log"
 
-	"github.com/example/osb-broker/internal/auth"
-	"github.com/example/osb-broker/internal/broker"
-	"github.com/example/osb-broker/internal/config"
-	"github.com/example/osb-broker/internal/handlers"
-	"github.com/example/osb-broker/internal/server"
+	"github.com/cyrano-janus/osb-broker-go/internal/auth"
+	"github.com/cyrano-janus/osb-broker-go/internal/broker"
+	"github.com/cyrano-janus/osb-broker-go/internal/config"
+	"github.com/cyrano-janus/osb-broker-go/internal/handlers"
+	"github.com/cyrano-janus/osb-broker-go/internal/server"
 	k8sconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 

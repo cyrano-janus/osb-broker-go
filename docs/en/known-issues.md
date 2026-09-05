@@ -32,14 +32,6 @@ condition names the operator actually publishes, thanks to the diagnostic in
 `EvaluateReadiness`. The provisioning operation still runs into the platform's
 timeout; the difference is that afterwards you know why.
 
-**The image version is pinned inconsistently.** `deploy/k8s/broker.yaml` says
-`v14`, `Chart.yaml` has `appVersion: v9`, `values-kind.yaml` pins `v9`.
-
-**The module path is a placeholder.** `go.mod` says
-`github.com/example/osb-broker`, while `schemas/service-definition.schema.json`
-(`$id`), `docs/openapi.yaml` (`contact.url`) and the chart's image reference
-point at `github.com/cyrano-janus/osb-broker-go`.
-
 **The `Dockerfile` declares `EXPOSE 8080`** while the chart with TLS listens on
 8443. Harmless, but misleading.
 
@@ -80,6 +72,6 @@ visible or cheaper.
    the deadline is enforced, a wrong path ends in `failed` after ten minutes
    instead of an endless poll — it still only becomes visible when somebody
    looks.
-2. **Placeholders and inconsistent pins** — the module path is
-   `github.com/example/osb-broker`, the image version differs in three
-   places.
+2. **A run against a target system** — everything up to here is evidence from
+   the development platform, and that is not the same as being deployable. See
+   [target-platforms.md](target-platforms.md).

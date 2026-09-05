@@ -5,8 +5,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/example/osb-broker/internal/broker"
-	"github.com/example/osb-broker/internal/definition"
+	"github.com/cyrano-janus/osb-broker-go/internal/broker"
+	"github.com/cyrano-janus/osb-broker-go/internal/definition"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 

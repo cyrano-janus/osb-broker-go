@@ -21,7 +21,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/example/osb-broker/cmd/osb-gate/checks"
+	"github.com/cyrano-janus/osb-broker-go/cmd/osb-gate/checks"
 )
 
 func main() {

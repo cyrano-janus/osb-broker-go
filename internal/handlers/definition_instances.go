@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/example/osb-broker/internal/broker"
-	"github.com/example/osb-broker/internal/definition"
+	"github.com/cyrano-janus/osb-broker-go/internal/broker"
+	"github.com/cyrano-janus/osb-broker-go/internal/definition"
 )
 
 // definitionFor loest die ServiceDefinition zu einer service_id auf.

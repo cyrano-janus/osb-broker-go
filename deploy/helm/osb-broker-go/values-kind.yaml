@@ -1,7 +1,9 @@
 # Werte für das lokale Korifi/kind-Setup (entspricht deploy/k8s/*)
 image:
   repository: osb-broker-go
-  tag: v9
+  # Kein tag: die Version steht in Chart.yaml unter appVersion, und zwar dort
+  # allein. Ein zweiter Pin hier war schon einmal eine andere Version als der
+  # im Chart - und welche gilt, sieht man erst am laufenden Pod.
   pullPolicy: IfNotPresent
 
 auth:

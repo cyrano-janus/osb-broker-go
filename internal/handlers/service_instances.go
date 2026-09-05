@@ -3,8 +3,8 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/example/osb-broker/internal/broker"
-	"github.com/example/osb-broker/internal/definition"
+	"github.com/cyrano-janus/osb-broker-go/internal/broker"
+	"github.com/cyrano-janus/osb-broker-go/internal/definition"
 	"github.com/gin-gonic/gin"
 )
 

@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"regexp"
 
-	osbv1 "github.com/example/osb-broker/internal/apis/v1alpha1"
+	osbv1 "github.com/cyrano-janus/osb-broker-go/internal/apis/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
