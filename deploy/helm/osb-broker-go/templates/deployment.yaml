@@ -40,6 +40,8 @@ spec:
           value: {{ .Values.metrics.enabled | quote }}
         - name: STORE_BACKEND
           value: {{ .Values.config.storeBackend | quote }}
+        - name: LOG_REQUESTS
+          value: {{ .Values.config.logRequests | quote }}
         {{- if eq .Values.config.storeBackend "crd" }}
         # Der CRD-Store legt seine Objekte in diesem Namespace an.
         - name: POD_NAMESPACE

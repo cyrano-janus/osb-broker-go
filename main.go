@@ -71,6 +71,10 @@ func main() {
 	h := handlers.New(b)
 	h.SetEngine(engineHolder)
 
+	// Zugriffsprotokoll (LOG_REQUESTS). Standard an - ein Broker, der stumm
+	// laeuft, ist im Fehlerfall nicht nachvollziehbar.
+	h.SetLogRequests(cfg.LogRequests)
+
 	// Prometheus metrics (Phase 4.3). Enabled by default; METRICS_ENABLED=0
 	// turns collection and the /metrics endpoint off.
 	if cfg.MetricsEnabled {

@@ -32,26 +32,6 @@ Trifft ein Pfad daneben, meldet `last_operation` seit der Diagnose in
 tatsächlich führt. Der Provisioning-Vorgang läuft trotzdem in das Zeitlimit der
 Plattform; der Unterschied ist, dass man danach weiß, warum.
 
-**`values-kind.yaml` ist von `definitions/` abgedriftet.** Die Datei dupliziert
-alle Definitionen als eingebettete YAML-Strings. Die eingebettete
-RabbitMQ-Definition fehlen `provisionedService`, `mapping` und `type` — ein
-Deployment damit liefert stillschweigend ungeformte Bindings. Außerdem kommen drei
-Schlüssel doppelt vor (`cnpg-postgresql.yaml`, `minio-objectstorage.yaml`,
-`redis-standalone.yaml`), und die Valkey-Definition nennt eine andere CRD-Gruppe
-als die Datei unter `definitions/`. **Nichts prüft diese Datei.**
-*FINDINGS #21.*
-
-**`rbac.operatorCRDs` deckt nicht alle mitgelieferten Definitionen ab.** Es
-fehlen `minio.min.io/tenants` und `redis.redis.opstreelabs.in/redis`; beide
-Services bekämen beim Provision einen 403.
-
-**Das Chart rendert mit seinen Vorgaben nicht.** `tls.certManager.enabled: true`
-trifft auf einen leeren `issuerRef.name` und damit auf ein `{{ required }}`.
-Beabsichtigt, aber unerwartet.
-
-**`config.logRequests` wird von keinem Template gelesen** und hat keine
-entsprechende Umgebungsvariable.
-
 **Die Image-Version ist uneinheitlich gepinnt.** `deploy/k8s/broker.yaml` nennt
 `v14`, `Chart.yaml` hat `appVersion: v9`, `values-kind.yaml` pinnt `v9`.
 
@@ -100,6 +80,6 @@ nächsten sichtbar oder billiger.
    Seit das Zeitlimit greift, endet ein falscher Pfad nach zehn Minuten in
    `failed` statt in einer endlosen Abfrage — sichtbar ist er trotzdem erst,
    wenn jemand hinsieht.
-2. **Die Auslieferung** — `values-kind.yaml` driftet von `definitions/` ab,
-   `rbac.operatorCRDs` deckt nicht alle mitgelieferten Definitionen ab, und
-   der Modulpfad ist noch ein Platzhalter.
+2. **Platzhalter und uneinheitliche Pins** — der Modulpfad ist
+   `github.com/example/osb-broker`, die Image-Version steht an drei Stellen
+   unterschiedlich.

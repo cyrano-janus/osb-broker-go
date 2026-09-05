@@ -77,6 +77,9 @@ config:
   #          kubectl apply -f deploy/crds/
   # memory = geht beim Neustart verloren, nur fuer lokale Laeufe.
   storeBackend: crd
+  # Eine Protokollzeile je Request (LOG_REQUESTS). Standard an: ein Broker, der
+  # stumm laeuft, ist im Fehlerfall nicht nachvollziehbar. Abschaltbar, weil
+  # das bei hoher Last teuer wird und manche Betreiber es am Ingress fuehren.
   logRequests: true
 
 # ServiceDefinitions als ConfigMap gerendert.
@@ -99,8 +102,19 @@ rbac:
     - group: hyperspike.io
       resources: [valkeys]
       verbs: [create, get, list, update, delete]
-    - group: valkey.io
-      resources: [valkeyclusters]
+    # minio.min.io und redis.redis.opstreelabs.in fehlten hier, obwohl beide
+    # Definitionen mitgeliefert werden: jedes Provision endete mit 403, und
+    # zwar erst beim Kunden. internal/chart/sync_test.go haelt Liste und
+    # definitions/ jetzt zusammen - in beide Richtungen, denn ein Recht auf
+    # eine Gruppe, die niemand anfasst, ist clusterweit eines zu viel.
+    - group: minio.min.io
+      resources: [tenants]
+      verbs: [create, get, list, update, delete]
+    - group: redis.redis.opstreelabs.in
+      # Der Plural der CRD ist "redis", nicht "redises". Deshalb wird die
+      # Liste von Hand gepflegt und nur ihre Vollstaendigkeit geprueft: aus
+      # dem Kind laesst sich der Ressourcenname nicht sicher ableiten.
+      resources: [redis]
       verbs: [create, get, list, update, delete]
     - group: rabbitmq.com
       resources: [rabbitmqclusters]

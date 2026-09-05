@@ -15,7 +15,7 @@ auth:
     required: false
     caSecretName: osb-broker-clientca
     allowedCNs:
-      - osb-checker
+      - osb-gate
 
 # HTTPS im kind-Cluster. Voraussetzung: cert-manager läuft und ein
 # CA-ClusterIssuer existiert; dessen Root-CA muss in den Trust-Stores der
@@ -30,9 +30,14 @@ tls:
       kind: ClusterIssuer
       name: osb-ca-issuer
 
+# GENERIERT aus definitions/ - nicht von Hand bearbeiten.
+#
+# Erzeugen: go test ./internal/chart/ -update
+# Gesichert: internal/chart/sync_test.go vergleicht zeichengleich gegen
+# definitions/. Eine Kopie, die driftet, ist eine Auslieferung, die sich
+# anders verhaelt als das Repo - und das faellt sonst erst beim Kunden auf.
 definitions:
   create: true
-  # Gebündelte Definitionen aus definitions/ des Repos
   files:
     cnpg-postgresql.yaml: |
       apiVersion: broker.osb.io/v1alpha1
@@ -56,6 +61,10 @@ definitions:
               params:
                 storageSize: 1Gi
                 instances: 1
+              # Was der Benutzer setzen darf:
+              #   cf create-service ... -c '{"storageSize":"5Gi"}'
+              # Jeder Schluessel, der hier nicht steht, ist 400. Ein gesetzter Wert
+              # ueberschreibt den gleichnamigen Planwert; alles Uebrige bleibt.
               allowedParameters: [storageSize]
             - id: plan-large-0000-0000-000000000002
               name: large
@@ -97,7 +106,7 @@ definitions:
         offering:
           id: c9d8e7f6-minio-0000-0000-000000000001
           name: minio-objectstorage
-          description: "MinIO S3-compatible object storage via minio-operator"
+          description: "[DEPRECATED — MinIO Community EOL, minio-operator deprecated. Nachfolger: seaweedfs-s3] MinIO S3-compatible object storage via minio-operator"
           tags: [s3, objectstorage, minio]
           plans:
             - id: plan-minio-small-0000-0000-000000000001
@@ -146,6 +155,107 @@ definitions:
           # Der MinIO-Operator legt pro Tenant ein Secret "<tenant>-secret" mit
           # accessKey/secretKey an.
           credentialsFromSecret: "{{ .instanceID }}-secret"
+    rabbitmq-cluster.yaml: |
+      apiVersion: broker.osb.io/v1alpha1
+      kind: ServiceDefinition
+      metadata:
+        name: rabbitmq-cluster
+      spec:
+        offering:
+          id: d9e6f7a8-rabb-0000-0000-000000000001
+          name: rabbitmq-cluster
+          description: "RabbitMQ clusters via rabbitmq/cluster-operator"
+          bindable: true
+          tags:
+            - rabbitmq
+            - amqp
+            - messaging
+          plans:
+            - id: plan-rabbit-dev-0000-0000-000000000001
+              name: dev
+              description: "Single node, 1Gi storage"
+              params:
+                replicas: 1
+                storageSize: 1Gi
+              # Was der Benutzer setzen darf:
+              #   cf create-service ... -c '{"storageSize":"5Gi"}'
+              # Jeder Schluessel, der hier nicht steht, ist 400. Ein gesetzter Wert
+              # ueberschreibt den gleichnamigen Planwert; alles Uebrige bleibt.
+              allowedParameters: [storageSize]
+            - id: plan-rabbit-prod-0000-0000-000000000002
+              name: prod
+              description: "3-node HA cluster, 10Gi storage"
+              params:
+                replicas: 3
+                storageSize: 10Gi
+              allowedParameters: [storageSize]
+
+        provision:
+          apiVersion: rabbitmq.com/v1beta1
+          kind: RabbitmqCluster
+          template: |
+            apiVersion: rabbitmq.com/v1beta1
+            kind: RabbitmqCluster
+            metadata:
+              name: {{ .safeName }}
+              labels:
+                app.kubernetes.io/managed-by: osb-broker-go
+                osb.io/instance-id: {{ .instanceID }}
+            spec:
+              replicas: {{ .plan.replicas }}
+              resources:
+                requests:
+                  cpu: 250m
+                  memory: 512Mi
+                limits:
+                  cpu: "1"
+                  memory: 1Gi
+              persistence:
+                storage: {{ .plan.storageSize }}
+
+        readiness:
+          statusJSONPath: 'status.conditions.#(type=="AllReplicasReady").status'
+          expectedValue: "True"
+          timeoutSeconds: 600
+
+        bind:
+          # Der cluster-operator implementiert den Provisioned-Service-Duck-Type der
+          # CNCF Service Binding Specification: er nennt sein Credentials-Secret
+          # selbst in status.binding.name. Damit muss die Definition kein
+          # Namensschema mehr nachbauen.
+          provisionedService: true
+          # Rueckfallebene fuer aeltere Operator-Versionen, die status.binding noch
+          # nicht fuellen - das ist der bisherige Weg, unveraendert.
+          credentialsFromSecret: "{{ .safeName }}-default-user"
+
+          type: rabbitmq
+          provider: rabbitmq-cluster-operator
+
+          # Legt dieselben Credentials zusaetzlich als spec-konformes Secret im
+          # Ziel-Namespace ab. Cloud Foundry braucht das nicht - es bekommt sie in
+          # der OSB-Antwort -, aber ein Kubernetes-Workload sieht diese Antwort nie
+          # und kommt nur ueber ein Secret an sein Binding.
+          #
+          # ACHTUNG: braucht Schreibrechte auf Secrets im Ziel-Namespace. Im
+          # Helm-Chart ist das rbac.projectedBindingSecrets=true. Ohne die
+          # Berechtigung schlaegt der Bind fehl - mit einer Meldung, die genau sie
+          # benennt.
+          projectSecret: true
+
+          # Ohne mapping reicht der Broker alle Keys des Secrets durch - inklusive
+          # default_user.conf, einer Konfigurationsdatei, die in einem Binding
+          # nichts zu suchen hat (FINDINGS #23). Das mapping gibt die Zielform vor.
+          mapping:
+            - name: username
+              from: username
+            - name: password
+              from: password
+            - name: host
+              from: host
+            - name: port
+              from: port
+            - name: uri
+              value: "amqp://{{ .credentials.username }}:{{ .credentials.password }}@{{ .credentials.host }}:{{ .credentials.port }}/"
     redis-standalone.yaml: |
       apiVersion: broker.osb.io/v1alpha1
       kind: ServiceDefinition
@@ -203,133 +313,13 @@ definitions:
           # erwartet daher, dass ein Platform-Admin das Secret vor dem ersten
           # Bind erzeugt (oder ein Sidecar dies tut). Konvention: <id>-redis.
           credentialsFromSecret: "{{ .instanceID }}-redis"
-    valkey-cluster.yaml: |
-      apiVersion: broker.osb.io/v1alpha1
-      kind: ServiceDefinition
-      metadata:
-        name: valkey-cluster
-      spec:
-        offering:
-          id: c8d4e5f6-valk-0000-0000-000000000001
-          name: valkey-cluster
-          description: "Valkey via valkey-io/valkey-operator"
-          tags: [valkey, cache, in-memory, redis-compatible]
-          plans:
-            - id: plan-valkey-dev-0000-0000-000000000001
-              name: dev
-              description: "Single shard, 256Mi"
-              params:
-                shards: 1
-                replicas: 0
-                memory: 256Mi
-            - id: plan-valkey-prod-0000-0000-000000000002
-              name: prod
-              description: "3 shards x 1 replica, 512Mi pro Pod"
-              params:
-                shards: 3
-                replicas: 1
-                memory: 512Mi
-
-        provision:
-          apiVersion: valkey.io/v1alpha1
-          kind: ValkeyCluster
-          template: |
-            apiVersion: valkey.io/v1alpha1
-            kind: ValkeyCluster
-            metadata:
-              name: {{ .safeName }}
-              labels:
-                app.kubernetes.io/managed-by: osb-broker-go
-                osb.io/instance-id: {{ .instanceID }}
-            spec:
-              shards: {{ .plan.shards }}
-              replicas: {{ .plan.replicas }}
-              resources:
-                requests:
-                  memory: {{ .plan.memory }}
-                  cpu: 100m
-                limits:
-                  memory: {{ .plan.memory }}
-                  cpu: 500m
-
-        readiness:
-          statusJSONPath: 'status.conditions.#(type=="Ready").status'
-          expectedValue: "True"
-          timeoutSeconds: 300
-
-        bind:
-          # Der valkey-operator legt kein Credentials-Secret an; Konvention wie bei
-          # Redis: Platform-Admin erzeugt das Secret vor dem ersten Bind.
-          credentialsFromSecret: "{{ .safeName }}-valkey"
-    rabbitmq-cluster.yaml: |
-      apiVersion: broker.osb.io/v1alpha1
-      kind: ServiceDefinition
-      metadata:
-        name: rabbitmq-cluster
-      spec:
-        offering:
-          id: d9e6f7a8-rabb-0000-0000-000000000001
-          name: rabbitmq-cluster
-          description: "RabbitMQ clusters via rabbitmq/cluster-operator"
-          bindable: true
-          tags:
-            - rabbitmq
-            - amqp
-            - messaging
-          plans:
-            - id: plan-rabbit-dev-0000-0000-000000000001
-              name: dev
-              description: "Single node, 1Gi storage"
-              params:
-                replicas: 1
-                storageSize: 1Gi
-              allowedParameters: [storageSize]
-            - id: plan-rabbit-prod-0000-0000-000000000002
-              name: prod
-              description: "3-node HA cluster, 10Gi storage"
-              params:
-                replicas: 3
-                storageSize: 10Gi
-              allowedParameters: [storageSize]
-
-        provision:
-          apiVersion: rabbitmq.com/v1beta1
-          kind: RabbitmqCluster
-          template: |
-            apiVersion: rabbitmq.com/v1beta1
-            kind: RabbitmqCluster
-            metadata:
-              name: {{ .safeName }}
-              labels:
-                app.kubernetes.io/managed-by: osb-broker-go
-                osb.io/instance-id: {{ .instanceID }}
-            spec:
-              replicas: {{ .plan.replicas }}
-              resources:
-                requests:
-                  cpu: 250m
-                  memory: 512Mi
-                limits:
-                  cpu: "1"
-                  memory: 1Gi
-              persistence:
-                storage: {{ .plan.storageSize }}
-
-        readiness:
-          statusJSONPath: 'status.conditions.#(type=="AllReplicasReady").status'
-          expectedValue: "True"
-          timeoutSeconds: 600
-
-        bind:
-          # Der cluster-operator legt pro RabbitmqCluster automatisch ein
-          # Default-User-Secret an (<name>-default-user mit username/password)
-          # und referenziert es in status.binding.
-          credentialsFromSecret: "{{ .safeName }}-default-user"
     redpanda-cluster.yaml: |
       apiVersion: broker.osb.io/v1alpha1
       kind: ServiceDefinition
       metadata:
         name: redpanda-cluster
+        annotations:
+          broker.osb.io/status: blocked-on-multi-doc-templates
       spec:
         offering:
           id: e7f5a8b9-redp-0000-0000-000000000001
@@ -357,7 +347,9 @@ definitions:
                 memory: 2Gi
 
         provision:
-          # Legacy-CRD des Operators (einzelnes CR mit voller Spec).
+          # Legacy-CRD des Operators (einzelnes CR mit voller Spec). Der neue
+          # cluster.redpanda.com/v1alpha1 "Redpanda"-CR ist ein Helm-Chart-Wrapper
+          # ohne direkte Spec-Felder und passt nicht ins Ein-Manifest-Muster.
           apiVersion: redpanda.vectorized.io/v1alpha1
           kind: Cluster
           template: |
@@ -400,7 +392,9 @@ definitions:
           timeoutSeconds: 600
 
         bind:
-          # Kein automatisches Credentials-Secret; Konvention wie bei Redis/Valkey.
+          # Der Operator legt kein automatisches Credentials-Secret an (SASL ist
+          # optional); Konvention wie bei Redis/Valkey: Platform-Admin erzeugt das
+          # Secret vor dem ersten Bind. Konvention: <name>-redpanda.
           credentialsFromSecret: "{{ .safeName }}-redpanda"
     seaweedfs-s3.yaml: |
       apiVersion: broker.osb.io/v1alpha1
@@ -468,176 +462,66 @@ definitions:
           timeoutSeconds: 600
 
         bind:
-          # S3Credentials/S3Identities-CRDs vorhanden; Konvention: Platform-Admin
-          # legt vor dem ersten Bind ein Secret mit den S3-Credentials an.
+          # Der Operator stellt S3Credentials/S3Identities-CRDs bereit; das
+          # S3-Gateway liest Identities aus einem configSecret (seaweedfs_s3_config.json).
+          # Konvention: Platform-Admin legt vor dem ersten Bind ein Secret mit den
+          # S3-Credentials an. Konvention: <name>-seaweed.
           credentialsFromSecret: "{{ .safeName }}-seaweed"
-    cnpg-postgresql.yaml: |
+    valkey-cluster.yaml: |
       apiVersion: broker.osb.io/v1alpha1
       kind: ServiceDefinition
       metadata:
-        name: cnpg-postgresql
+        name: valkey-cluster
+        annotations:
+          broker.osb.io/status: experimental-operator-incompatible
       spec:
         offering:
-          id: f48a9e21-cnpg-0000-0000-000000000001
-          name: cnpg-postgresql
-          description: "CloudNativePG PostgreSQL clusters"
-          bindable: true
-          tags:
-            - postgresql
-            - database
-            - cnpg
+          id: c8d4e5f6-valk-0000-0000-000000000001
+          name: valkey-cluster
+          description: "Valkey via valkey-io/valkey-operator"
+          tags: [valkey, cache, in-memory, redis-compatible]
           plans:
-            - id: plan-small-0000-0000-000000000001
-              name: small
-              description: "Single instance, 1Gi storage"
+            - id: plan-valkey-dev-0000-0000-000000000001
+              name: dev
+              description: "Single shard, 256Mi"
               params:
-                storageSize: 1Gi
-                instances: 1
-              allowedParameters: [storageSize]
-            - id: plan-large-0000-0000-000000000002
-              name: large
-              description: "HA, 3 instances, 10Gi storage"
+                shards: 1
+                replicas: 0
+                memory: 256Mi
+            - id: plan-valkey-prod-0000-0000-000000000002
+              name: prod
+              description: "3 shards x 1 replica, 512Mi pro Pod"
               params:
-                storageSize: 10Gi
-                instances: 3
-              allowedParameters: [storageSize]
+                shards: 3
+                replicas: 1
+                memory: 512Mi
 
         provision:
-          apiVersion: postgresql.cnpg.io/v1
-          kind: Cluster
+          apiVersion: hyperspike.io/v1
+          kind: Valkey
           template: |
-            apiVersion: postgresql.cnpg.io/v1
-            kind: Cluster
+            apiVersion: hyperspike.io/v1
+            kind: Valkey
             metadata:
               name: {{ .safeName }}
               labels:
                 app.kubernetes.io/managed-by: osb-broker-go
                 osb.io/instance-id: {{ .instanceID }}
             spec:
-              instances: {{ .plan.instances }}
+              image: docker.io/valkey/valkey:8.1-alpine
+              nodes: {{ .plan.shards }}
+              replicas: {{ .plan.replicas }}
               storage:
-                size: {{ .plan.storageSize }}
+                resources:
+                  requests:
+                    storage: {{ .plan.memory }}
 
-        readiness:
-          statusJSONPath: 'status.conditions.#(type=="Ready").status'
-          expectedValue: "True"
-          timeoutSeconds: 600
-
-        bind:
-          credentialsFromSecret: "{{ .safeName }}-app"
-    minio-objectstorage.yaml: |
-      apiVersion: broker.osb.io/v1alpha1
-      kind: ServiceDefinition
-      metadata:
-        name: minio-objectstorage
-      spec:
-        offering:
-          id: c9d8e7f6-minio-0000-0000-000000000001
-          name: minio-objectstorage
-          description: "MinIO S3-compatible object storage via minio-operator"
-          tags: [s3, objectstorage, minio]
-          plans:
-            - id: plan-minio-small-0000-0000-000000000001
-              name: small
-              description: "Single tenant, 10Gi"
-              params:
-                servers: 1
-                volumesPerServer: 1
-                size: 10Gi
-            - id: plan-minio-large-0000-0000-000000000002
-              name: large
-              description: "4 servers x 2 volumes, 50Gi each (erasure coded)"
-              params:
-                servers: 4
-                volumesPerServer: 2
-                size: 50Gi
-
-        provision:
-          apiVersion: minio.min.io/v2
-          kind: Tenant
-          template: |
-            apiVersion: minio.min.io/v2
-            kind: Tenant
-            metadata:
-              name: {{ .instanceID }}
-              labels:
-                app.kubernetes.io/managed-by: osb-broker-go
-            spec:
-              pools:
-                - servers: {{ .plan.servers }}
-                  volumesPerServer: {{ .plan.volumesPerServer }}
-                  volumeClaimTemplate:
-                    spec:
-                      accessModes: [ReadWriteOnce]
-                      resources:
-                        requests:
-                          storage: {{ .plan.size }}
-              requestCert: false
-              prometheusOperator: false
-        readiness:
-          statusJSONPath: 'status.conditions.#(type=="Ready").status'
-          expectedValue: "True"
-          timeoutSeconds: 600
-
-        bind:
-          # Der MinIO-Operator legt pro Tenant ein Secret "<tenant>-secret" mit
-          # accessKey/secretKey an.
-          credentialsFromSecret: "{{ .instanceID }}-secret"
-    redis-standalone.yaml: |
-      apiVersion: broker.osb.io/v1alpha1
-      kind: ServiceDefinition
-      metadata:
-        name: redis-standalone
-      spec:
-        offering:
-          id: b7c2d3e4-redis-0000-0000-000000000001
-          name: redis-standalone
-          description: "Redis via Redis Operator (ot-container-kit)"
-          tags: [redis, cache, in-memory]
-          plans:
-            - id: plan-redis-dev-0000-0000-000000000001
-              name: dev
-              description: "Single node, 128Mi"
-              params:
-                capacity: 128Mi
-                replicas: 1
-            - id: plan-redis-prod-0000-0000-000000000002
-              name: prod
-              description: "Leader + 2 followers, 1Gi"
-              params:
-                capacity: 1Gi
-                replicas: 3
-
-        provision:
-          apiVersion: redis.redis.opstreelabs.in/v1beta2
-          kind: Redis
-          template: |
-            apiVersion: redis.redis.opstreelabs.in/v1beta2
-            kind: Redis
-            metadata:
-              name: {{ .instanceID }}
-              labels:
-                app.kubernetes.io/managed-by: osb-broker-go
-            spec:
-              mode: standalone
-              kubernetesConfig:
-                image: quay.io/opstree/redis:v7.0.15
-                redisExporter:
-                  enabled: false
-              storage:
-                volumeClaimTemplate:
-                  spec:
-                    resources:
-                      requests:
-                        storage: {{ .plan.capacity }}
         readiness:
           statusJSONPath: 'status.conditions.#(type=="Ready").status'
           expectedValue: "True"
           timeoutSeconds: 300
 
         bind:
-          # Der Opstree-Operator legt kein Credentials-Secret an; der Broker
-          # erwartet daher, dass ein Platform-Admin das Secret vor dem ersten
-          # Bind erzeugt (oder ein Sidecar dies tut). Konvention: <id>-redis.
-          credentialsFromSecret: "{{ .instanceID }}-redis"
-
+          # Der valkey-operator legt kein Credentials-Secret an; Konvention wie bei
+          # Redis: Platform-Admin erzeugt das Secret vor dem ersten Bind.
+          credentialsFromSecret: "{{ .safeName }}-valkey"

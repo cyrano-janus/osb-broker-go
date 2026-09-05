@@ -245,6 +245,30 @@ cd osb-checker && cp config.yaml configs/config.yaml
 go build -o osb-checker . && ./osb-checker -f configs/config.yaml
 ```
 
+## Das Chart bleibt mit dem Repo zusammen
+
+`values-kind.yaml` bettet die Definitionen als Zeichenketten ein. Zwei Kopien
+desselben Inhalts driften auseinander, sobald jemand nur eine anfasst — deshalb
+ist die Datei **erzeugt**, nicht handgepflegt:
+
+```bash
+go test ./internal/chart/          # prüft
+```
+
+`internal/chart/sync_test.go` hält vier Zusagen: die eingebetteten Kopien sind
+zeichengleich mit `definitions/`, kein Schlüssel kommt doppelt vor (der
+YAML-Parser verschluckt das sonst), `rbac.operatorCRDs` deckt **genau** die
+CRD-Gruppen ab, die die Definitionen anfassen — eine fehlende ist `403` beim
+Provision, eine überflüssige ein clusterweites Recht zu viel —, und jeder Wert
+unter `config` kommt als Umgebungsvariable im Pod an.
+
+Dazu zwei Render-Prüfungen: jede mitgelieferte Wertedatei muss rendern, und die
+Vorgaben müssen mit Ansage scheitern. Letzteres ist Absicht — der Aussteller des
+Broker-Zertifikats ist standortabhängig, und ein `{{ required }}` ist die Art,
+wie Helm „das musst du entscheiden" ausdrückt. Ein stilles Rendern mit leerem
+Aussteller wäre schlimmer: das Deployment ginge durch und der Broker bekäme nie
+ein Zertifikat.
+
 ## Konventionen
 
 - **Sprache:** Kommentare, Commit-Nachrichten und neue Testnamen auf Deutsch.

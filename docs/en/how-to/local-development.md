@@ -242,6 +242,30 @@ cd osb-checker && cp config.yaml configs/config.yaml
 go build -o osb-checker . && ./osb-checker -f configs/config.yaml
 ```
 
+## The chart stays in step with the repository
+
+`values-kind.yaml` embeds the definitions as strings. Two copies of the same
+content drift apart as soon as somebody touches only one — which is why the
+file is **generated**, not hand-maintained:
+
+```bash
+go test ./internal/chart/          # checks it
+```
+
+`internal/chart/sync_test.go` holds four promises: the embedded copies are
+byte-identical to `definitions/`, no key appears twice (the YAML parser would
+swallow that), `rbac.operatorCRDs` covers **exactly** the CRD groups the
+definitions touch — a missing one is a `403` on provision, a superfluous one is
+a cluster-wide right too many — and every value under `config` arrives in the
+pod as an environment variable.
+
+Plus two rendering checks: every shipped values file must render, and the
+defaults must fail with a clear message. The latter is deliberate — the issuer
+of the broker certificate is site-specific, and a `{{ required }}` is how Helm
+says "you have to decide this". Rendering silently with an empty issuer would be
+worse: the deployment would go through and the broker would never get a
+certificate.
+
 ## Conventions
 
 - **Language:** comments, commit messages and new test names in German.

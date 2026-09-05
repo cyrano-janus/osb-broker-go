@@ -270,3 +270,19 @@ func joined(ws []string) string {
 	}
 	return out
 }
+
+// LOG_REQUESTS war im Helm-Chart als `config.logRequests` dokumentiert, von
+// keinem Template gerendert und vom Broker nie gelesen: ein Schalter, den
+// jemand umlegt und der nichts tut.
+func TestConfig_LogRequestsIstStandardmaessigAn(t *testing.T) {
+	c, err := LoadFrom(env(nil))
+	require.NoError(t, err)
+	assert.True(t, c.LogRequests,
+		"ohne Angabe wird protokolliert - ein Broker, der stumm laeuft, ist im Fehlerfall nicht nachvollziehbar")
+}
+
+func TestConfig_LogRequestsLaesstSichAbschalten(t *testing.T) {
+	c, err := LoadFrom(env(map[string]string{"LOG_REQUESTS": "false"}))
+	require.NoError(t, err)
+	assert.False(t, c.LogRequests)
+}

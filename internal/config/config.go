@@ -40,6 +40,8 @@ type Config struct {
 	PodNamespace   string
 	DefinitionsDir string
 	MetricsEnabled bool
+	// LogRequests schaltet das Zugriffsprotokoll. Standardmaessig an.
+	LogRequests bool
 
 	Server ServerConfig
 	TLS    TLSConfig
@@ -119,6 +121,11 @@ func LoadFrom(get func(string) string) (*Config, error) {
 		// exactly "0". Deliberately not ParseBool - "false" kept metrics on
 		// before this package existed and must keep doing so.
 		MetricsEnabled: get("METRICS_ENABLED") != "0",
+		// Standardmaessig an: ein Broker, der stumm laeuft, ist im Fehlerfall
+		// nicht nachvollziehbar. Abschaltbar, weil ein Zugriffsprotokoll je
+		// Request bei hoher Last teuer wird und manche Betreiber es ohnehin
+		// am Ingress fuehren.
+		LogRequests: l.boolean("LOG_REQUESTS", true),
 
 		Server: ServerConfig{
 			ReadHeaderTimeout: l.duration("SERVER_READ_HEADER_TIMEOUT", 10*time.Second),

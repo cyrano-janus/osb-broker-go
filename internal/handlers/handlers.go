@@ -16,6 +16,8 @@ type Handlers struct {
 	broker *broker.Broker
 	// engine provides definition-based services (Phase 2); nil = disabled.
 	engine *EngineHolder
+	// logRequests schaltet das Zugriffsprotokoll; Vorgabe an, siehe New.
+	logRequests bool
 	// authChain holds the configured authentication methods (Phase 4.5).
 	// nil or empty = authentication disabled (backwards compatibility).
 	// main() builds it from the configuration; SetBasicAuthCredentials
@@ -33,6 +35,9 @@ func (h *Handlers) SetEngine(e *EngineHolder) {
 
 // SetMetrics enables Prometheus metrics collection and registers the
 // /metrics endpoint (unauthenticated).
+// SetLogRequests schaltet das Zugriffsprotokoll. Ohne Aufruf ist es an.
+func (h *Handlers) SetLogRequests(on bool) { h.logRequests = on }
+
 func (h *Handlers) SetMetrics(m *Metrics) {
 	h.metrics = m
 	// Die Bestandsmetriken zaehlen den Zustandsspeicher beim Abholen. Kann er
@@ -46,6 +51,9 @@ func (h *Handlers) SetMetrics(m *Metrics) {
 func New(b *broker.Broker) *Handlers {
 	return &Handlers{
 		broker: b,
+		// Protokollieren ist die Vorgabe: wer den Broker ohne Konfiguration
+		// startet, soll sehen, was passiert.
+		logRequests: true,
 	}
 }
 
@@ -58,7 +66,13 @@ func (h *Handlers) Healthz(c *gin.Context) {
 func (h *Handlers) SetupRouter() *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Recovery())
-	router.Use(structuredLoggingMiddleware())
+	// Das Zugriffsprotokoll ist abschaltbar (LOG_REQUESTS=false): je Request
+	// eine Zeile wird bei hoher Last teuer, und manche Betreiber fuehren es
+	// ohnehin am Ingress. Standard ist an - ein Broker, der stumm laeuft, ist
+	// im Fehlerfall nicht nachvollziehbar.
+	if h.logRequests {
+		router.Use(structuredLoggingMiddleware())
+	}
 
 	// Health check (outside API version middleware, no X-Broker-API-Version required)
 	router.GET("/healthz", h.Healthz)

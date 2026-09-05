@@ -32,26 +32,6 @@ condition names the operator actually publishes, thanks to the diagnostic in
 `EvaluateReadiness`. The provisioning operation still runs into the platform's
 timeout; the difference is that afterwards you know why.
 
-**`values-kind.yaml` has drifted away from `definitions/`.** The file duplicates
-all definitions as embedded YAML strings. The embedded RabbitMQ definition is
-missing `provisionedService`, `mapping` and `type` — deploying with it silently
-yields unshaped bindings.
-On top of that three keys appear twice (`cnpg-postgresql.yaml`,
-`minio-objectstorage.yaml`, `redis-standalone.yaml`), and the Valkey definition
-names a different CRD group than the file under `definitions/`. **Nothing tests
-this file.** *FINDINGS #21.*
-
-**`rbac.operatorCRDs` does not cover all shipped definitions.**
-`minio.min.io/tenants` and `redis.redis.opstreelabs.in/redis` are missing; both
-services would get a 403 on provision.
-
-**The chart does not render with its own defaults.**
-`tls.certManager.enabled: true` meets an empty `issuerRef.name` and therefore a
-`{{ required }}`. Intended, but surprising.
-
-**`config.logRequests` is read by no template** and has no corresponding
-environment variable.
-
 **The image version is pinned inconsistently.** `deploy/k8s/broker.yaml` says
 `v14`, `Chart.yaml` has `appVersion: v9`, `values-kind.yaml` pins `v9`.
 
@@ -100,6 +80,6 @@ visible or cheaper.
    the deadline is enforced, a wrong path ends in `failed` after ten minutes
    instead of an endless poll — it still only becomes visible when somebody
    looks.
-2. **Delivery** — `values-kind.yaml` has drifted from `definitions/`,
-   `rbac.operatorCRDs` does not cover every shipped definition, and the module
-   path is still a placeholder.
+2. **Placeholders and inconsistent pins** — the module path is
+   `github.com/example/osb-broker`, the image version differs in three
+   places.
