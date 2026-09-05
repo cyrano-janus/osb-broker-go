@@ -3,6 +3,7 @@ package definition
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -231,6 +232,16 @@ func (e *Engine) LastOperation(ctx context.Context, sd *ServiceDefinition, names
 	}
 	if done {
 		return "succeeded", "der Dienst ist bereit", nil
+	}
+	// Ein Operator, der die Bedingung nie erfuellt, ist ein Fehlschlag und kein
+	// laufender Vorgang. Ohne diesen Zweig pollte die Plattform bis in ihr
+	// eigenes Zeitlimit und meldete dem Benutzer am Ende nichts Brauchbares.
+	// Der urspruengliche Grund bleibt in der Meldung stehen - er sagt, woran
+	// es haengt, das Zeitlimit sagt nur, dass es lange haengt.
+	if exceeded, waited := readinessDeadlineExceeded(sd, cr, time.Now()); exceeded {
+		return "failed", fmt.Sprintf(
+			"das Zeitlimit von %s ist ueberschritten (%s gewartet): %s",
+			ReadinessTimeout(sd), waited.Round(time.Second), reason), nil
 	}
 	return "in progress", reason, nil
 }

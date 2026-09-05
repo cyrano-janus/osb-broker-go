@@ -16,11 +16,6 @@ in [target-platforms.md](target-platforms.md).
 
 Keiner der offenen Punkte blockiert derzeit eine Zielplattform.
 
-**`readiness.timeoutSeconds` wird nie durchgesetzt.** Ein hängender Operator
-lässt die Instanz ewig `in progress` melden. `last_operation` meldet `failed`
-nur, wenn der Datensatz da ist und das Objekt fehlt — ein Operator, der die
-Readiness-Bedingung nie erfüllt, ist davon nicht erfasst.
-
 **Fehlgeschlagenes Provision hinterlässt verwaiste CRs.** Bricht das Anwenden
 zwischen zwei Dokumenten ab, bleibt das erste stehen, ohne dass ein Datensatz
 darauf verweist. *FINDINGS #6.*
@@ -114,15 +109,12 @@ Zielplattform näher wäre als Korifi. Einordnung in
 Die Punkte hängen zusammen; in dieser Reihenfolge abgearbeitet macht jeder den
 nächsten sichtbar oder billiger.
 
-1. **Benutzerparameter** — `cf create-service -c` bleibt wirkungslos, solange
-   `TemplateData.Parameters` von keinem Aufrufer gefüllt wird. Die Prüfung
-   gegen `allowedParameters` steht bereits, sie hat nur noch nichts zu prüfen.
-2. **`readiness.timeoutSeconds` durchsetzen** — bis dahin meldet ein hängender
-   Operator `in progress`, bis die Plattform selbst aufgibt. Erst danach ist
-   ein falscher Readiness-Pfad auch dann sichtbar, wenn niemand hinsieht.
-3. **Die fünf ungeprüften Readiness-Pfade** — je Operator einmal ein CR
+1. **Die fünf ungeprüften Readiness-Pfade** — je Operator einmal ein CR
    anlegen und den Pfad dagegen rechnen. Braucht die Operatoren im Cluster.
-4. **Verwaiste CRs nach fehlgeschlagenem Provision** — hängt an 2., weil beide
-   den Abbruchpfad der Engine betreffen.
-5. **Mutationssuite für `cmd/osb-checker`** — der eigenständige Checker hat
+   Seit das Zeitlimit greift, endet ein falscher Pfad nach zehn Minuten in
+   `failed` statt in einer endlosen Abfrage — sichtbar ist er trotzdem erst,
+   wenn jemand hinsieht.
+2. **Verwaiste CRs nach fehlgeschlagenem Provision** — der Abbruchpfad der
+   Engine räumt nicht auf.
+3. **Mutationssuite für `cmd/osb-checker`** — der eigenständige Checker hat
    eine, und sie hat beim ersten Lauf zwei wirkungslose Prüfungen gefunden.

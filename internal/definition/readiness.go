@@ -4,10 +4,54 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/tidwall/gjson"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
+
+// DefaultReadinessTimeout gilt, wenn eine Definition kein Zeitlimit nennt.
+// Der Wert ist keine Erfindung: er steht seit jeher als `default` im
+// Definitionsschema, wurde vom Go-Typ aber nie angewendet.
+const DefaultReadinessTimeout = 600 * time.Second
+
+// ReadinessTimeout liefert das Zeitlimit, innerhalb dessen der Operator die
+// Readiness-Bedingung erfuellt haben muss.
+//
+// Fehlt die Angabe, gilt DefaultReadinessTimeout - "kein Wert" darf nicht
+// "unbegrenzt" heissen, sonst haengt jede Definition, die das Feld vergisst.
+// Wer wirklich kein Limit will, sagt das mit einem negativen Wert.
+func ReadinessTimeout(sd *ServiceDefinition) time.Duration {
+	switch n := sd.Spec.Readiness.TimeoutSeconds; {
+	case n < 0:
+		return 0
+	case n == 0:
+		return DefaultReadinessTimeout
+	default:
+		return time.Duration(n) * time.Second
+	}
+}
+
+// readinessDeadlineExceeded meldet, ob der Operator laenger gebraucht hat als
+// erlaubt, und wie lange gewartet wurde.
+//
+// Gemessen wird ab `metadata.creationTimestamp` des CR: das ist der Zeitpunkt,
+// ab dem der Operator die Aufgabe hatte, er kommt vom API-Server und er
+// ueberlebt einen Neustart des Brokers - anders als jede Uhr im Prozess. Fehlt
+// der Zeitstempel, gibt es keine Grundlage fuer eine Frist; dann wird
+// weitergewartet, statt eine Instanz faelschlich als gescheitert zu melden.
+func readinessDeadlineExceeded(sd *ServiceDefinition, cr *unstructured.Unstructured, now time.Time) (bool, time.Duration) {
+	limit := ReadinessTimeout(sd)
+	created := cr.GetCreationTimestamp().Time
+	if created.IsZero() {
+		return false, 0
+	}
+	waited := now.Sub(created)
+	if limit <= 0 {
+		return false, waited
+	}
+	return waited > limit, waited
+}
 
 // EvaluateReadiness applies the definition's statusJSONPath to the CR and
 // compares against expectedValue. Returns true when the instance is ready,

@@ -41,12 +41,6 @@ Ohne Authentifizierung erreichbar, absichtlich:
 Jede Instanz bekommt `https://dashboard.example.com/instances/<id>`. Für Cloud
 Foundry folgenlos, für einen Marketplace, der den Link anbietet, nicht.
 
-### `readiness.timeoutSeconds` wird gelesen und nie durchgesetzt
-
-Ein Operator, der die Readiness-Bedingung nie erfüllt, lässt `last_operation`
-unbegrenzt `in progress` melden. Die Beschreibung nennt seit der
-Readiness-Diagnose den Grund, der Zustand wechselt aber nicht auf `failed`.
-
 ## Was korrekt ist
 
 Damit das Bild nicht schief wird — diese Punkte sind konform und geprüft:

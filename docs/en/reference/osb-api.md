@@ -40,12 +40,6 @@ Reachable without authentication, deliberately:
 Every instance gets `https://dashboard.example.com/instances/<id>`. Without
 consequence for Cloud Foundry, not so for a marketplace that offers the link.
 
-### `readiness.timeoutSeconds` is read and never enforced
-
-An operator that never satisfies the readiness condition makes `last_operation`
-report `in progress` indefinitely. Since the readiness diagnostic the
-description names the reason, but the state does not switch to `failed`.
-
 ## What is correct
 
 So that the picture does not come out crooked — these points are conformant and

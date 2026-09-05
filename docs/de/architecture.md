@@ -183,9 +183,15 @@ nicht liest, ändern den Zustand der Instanz, nicht aber ihre Objekte.
 
 **Readiness** ist **gjson**, nicht JSONPath. Der Pfad läuft über das ganze CR,
 nicht nur über `status`, ein führender Punkt wird abgeschnitten, und ein nicht
-vorhandener Pfad heißt *noch nicht bereit* — nie *Fehler*. Einen Zustand
-`failed` gibt es in der Engine nicht, und `timeoutSeconds` wird gelesen, aber
-nie durchgesetzt.
+vorhandener Pfad heißt *noch nicht bereit* — nie *Fehler*.
+
+Aus *noch nicht bereit* wird *gescheitert*, wenn die Frist abgelaufen ist:
+`timeoutSeconds` wird ab `creationTimestamp` des CR gemessen, ohne Angabe gilt
+der Schemawert 600, ein negativer Wert schaltet die Frist ab. Der Zeitstempel
+kommt vom API-Server und überlebt einen Neustart des Brokers — eine Uhr im
+Prozess täte das nicht. Die Meldung nennt weiter den Grund aus der
+Readiness-Prüfung: das Zeitlimit sagt, *dass* es hängt, der Grund sagt,
+*woran*.
 
 ### `internal/broker` — zwei Dinge in einem Paket
 

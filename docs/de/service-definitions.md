@@ -171,7 +171,7 @@ später nicht wieder löschen.
 |---|---|---|
 | `statusJSONPath` | ja | **gjson**-Pfad über das gesamte CR. |
 | `expectedValue` | nein | Vorgabe `"True"`, Vergleich ohne Rücksicht auf Groß-/Kleinschreibung. |
-| `timeoutSeconds` | nein | Wird gelesen und **nie durchgesetzt**. |
+| `timeoutSeconds` | nein | Frist für den Operator, gemessen ab `creationTimestamp` des CR. Ohne Angabe **600**; ein negativer Wert schaltet die Frist ab. Nach Ablauf meldet `last_operation` `failed`. |
 
 **Es ist gjson, nicht JSONPath.** Kein führendes `$`, Array-Filter in der Form
 `#(type=="Ready")`:
@@ -335,7 +335,6 @@ Damit niemand Zeit damit verliert:
 
 | Feld | Was man erwartet | Was passiert |
 |---|---|---|
-| `readiness.timeoutSeconds` | Abbruch nach Ablauf | wird gelesen, nie ausgewertet |
 | `plan.free` | freier oder kostenpflichtiger Plan | Katalog setzt hart `free: true` |
 | `metadata.annotations` | Steuerung des Verhaltens | der Go-Typ kennt nur `name` |
 

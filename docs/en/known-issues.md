@@ -16,11 +16,6 @@ target platform or only the development platform?** What separates the two is in
 
 None of the open points currently blocks a target platform.
 
-**`readiness.timeoutSeconds` is never enforced.** A stuck operator makes the
-instance report `in progress` forever. `last_operation` only reports `failed`
-when the record exists and the object is gone — an operator that never satisfies
-the readiness condition is not covered by it.
-
 **A failed provision leaves orphaned CRs behind.** If applying breaks between
 two documents, the first one stays without any record pointing at it.
 *FINDINGS #6.*

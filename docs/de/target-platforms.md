@@ -117,7 +117,6 @@ nicht. Die Langfassung je Punkt steht in
 
 | Abweichung | auf Korifi | auf produktivem CF / TAS |
 |---|---|---|
-| `readiness.timeoutSeconds` wird nie durchgesetzt | unauffällig, die Testservices sind schnell | ein hängender Operator meldet `in progress`, bis die Plattform selbst aufgibt |
 | Fünf Readiness-Pfade sind ungeprüft | die Operatoren sind gar nicht installiert | ein danebenliegender Pfad kostet ein Plattform-Zeitlimit je Instanz |
 
 Keine dieser Abweichungen ist ein Ausschlusskriterium. Die Punkte, die es waren,

@@ -175,8 +175,15 @@ change the state of the instance without changing its objects.
 
 **Readiness** is **gjson**, not JSONPath. The path runs over the whole CR, not
 just `status`, a leading dot is stripped, and a path that is not found means
-*not ready yet* — never *error*. There is no `failed` state in the engine, and
-`timeoutSeconds` is read but never enforced.
+*not ready yet* — never *error*.
+
+*Not ready yet* turns into *failed* once the deadline has passed:
+`timeoutSeconds` is measured from the CR's `creationTimestamp`, an absent value
+means the schema default of 600, a negative value switches the deadline off.
+The timestamp comes from the API server and survives a broker restart — a clock
+inside the process would not. The message still carries the reason from the
+readiness check: the timeout says *that* it is stuck, the reason says *what
+on*.
 
 ### `internal/broker` — two things in one package
 

@@ -169,7 +169,7 @@ deleted later.
 |---|---|---|
 | `statusJSONPath` | yes | **gjson** path over the entire CR. |
 | `expectedValue` | no | Defaults to `"True"`, compared case-insensitively. |
-| `timeoutSeconds` | no | Read and **never enforced**. |
+| `timeoutSeconds` | no | Deadline for the operator, measured from the CR's `creationTimestamp`. Absent means **600**; a negative value switches the deadline off. Once it elapses, `last_operation` reports `failed`. |
 
 **It is gjson, not JSONPath.** No leading `$`, array filters written as
 `#(type=="Ready")`:
@@ -331,7 +331,6 @@ So that nobody loses time over them:
 
 | Field | What you expect | What happens |
 |---|---|---|
-| `readiness.timeoutSeconds` | abort after it elapses | read, never evaluated |
 | `plan.free` | free or paid plan | the catalogue hardcodes `free: true` |
 | `metadata.annotations` | control over behaviour | the Go type only knows `name` |
 
