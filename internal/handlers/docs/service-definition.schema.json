@@ -95,6 +95,25 @@
             "type": "string"
           }
         },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Display block a marketplace renders. Without it a tile shows the technical name and nothing else. OSB prescribes no keys; the conventional ones are displayName, imageUrl, longDescription, providerDisplayName, documentationUrl and supportUrl.",
+          "examples": [
+            {
+              "displayName": "PostgreSQL",
+              "longDescription": "A managed PostgreSQL cluster run by CloudNativePG.",
+              "providerDisplayName": "Platform Team",
+              "documentationUrl": "https://cloudnative-pg.io/documentation/",
+              "supportUrl": "https://example.invalid/support"
+            }
+          ]
+        },
+        "planUpdateable": {
+          "type": "boolean",
+          "default": false,
+          "description": "Declare that a consumer may switch plans (cf update-service -p). The broker can do it - a PATCH with a new plan_id re-renders the manifest - but only the definition knows whether the operator goes along: CNPG grows storage and cannot shrink it. Absent means not promised, and CF rejects the plan change before the broker is asked."
+        },
         "plans": {
           "type": "array",
           "minItems": 1,
@@ -194,6 +213,20 @@
               "free": {
                 "type": "boolean",
                 "default": true
+              },
+              "metadata": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Display block for this plan. Conventional keys are displayName, bullets and costs.",
+                "examples": [
+                  {
+                    "displayName": "Small",
+                    "bullets": [
+                      "1 instance",
+                      "5Gi storage"
+                    ]
+                  }
+                ]
               }
             }
           }

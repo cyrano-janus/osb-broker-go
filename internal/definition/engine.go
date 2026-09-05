@@ -80,13 +80,31 @@ func NewEngine(op *OperatorClient, defs ...*ServiceDefinition) *Engine {
 }
 
 // CatalogEntry is a minimal view for building the OSB catalog.
+//
+// Der Katalog ist das Einzige, was ein Marktplatz vom Broker sieht, bevor er
+// ihn benutzt. Was hier fehlt, bleibt ungenutzt: eine Faehigkeit, die der
+// Broker hat und nicht anmeldet, lehnt die Plattform ab, bevor der Broker
+// gefragt wird.
 type CatalogEntry struct {
-	ID          string        `json:"id"`
-	Name        string        `json:"name"`
-	Description string        `json:"description"`
-	Bindable    bool          `json:"bindable"`
-	Tags        []string      `json:"tags,omitempty"`
-	Plans       []CatalogPlan `json:"plans"`
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Bindable    bool     `json:"bindable"`
+	Tags        []string `json:"tags,omitempty"`
+	// Metadata ist der Anzeigeblock des Marktplatzes, unveraendert aus der
+	// Definition uebernommen.
+	Metadata map[string]interface{} `json:"metadata,omitempty"`
+	// PlanUpdateable stammt aus der Definition: nur sie weiss, ob der
+	// Operator einen Planwechsel mitmacht.
+	PlanUpdateable bool `json:"plan_updateable"`
+	// InstancesRetrievable und BindingsRetrievable sind Aussagen ueber den
+	// Broker, nicht ueber den Operator - die GET-Endpunkte sind fuer jede
+	// Definition registriert. Sie sind deshalb fest und stehen nicht in der
+	// Definition; TestKatalogzusage_* in internal/handlers haelt sie gegen
+	// die Routen.
+	InstancesRetrievable bool          `json:"instances_retrievable"`
+	BindingsRetrievable  bool          `json:"bindings_retrievable"`
+	Plans                []CatalogPlan `json:"plans"`
 }
 
 // CatalogPlan is the plan entry inside a CatalogEntry.
@@ -94,6 +112,18 @@ type CatalogPlan struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
+	// Free wird immer ausgegeben, auch als false. Fehlt das Feld, gilt laut
+	// OSB 2.17 `true` - ein weggelassenes false bewirbt einen
+	// kostenpflichtigen Plan als kostenlos.
+	Free bool `json:"free"`
+	// Metadata ist der Anzeigeblock des Plans - bullets, costs, displayName.
+	Metadata map[string]interface{} `json:"metadata,omitempty"`
+	// MaximumPollingDuration sagt der Plattform, wie lange sie last_operation
+	// abfragen soll. Die Zahl ist die Bereitschaftsfrist des Brokers: fragt
+	// die Plattform laenger, wartet sie auf eine Antwort, die nicht mehr
+	// kommt; hoert sie frueher auf, meldet sie einen Fehlschlag, den der
+	// Broker nicht sieht.
+	MaximumPollingDuration int `json:"maximum_polling_duration,omitempty"`
 	// Schemas beschreibt die Parameter, die dieser Plan annimmt - abgeleitet
 	// aus allowedParameters und parameterLimits, also aus dem, was der Broker
 	// ohnehin durchsetzt.
@@ -110,13 +140,24 @@ func (e *Engine) Catalog() []CatalogEntry {
 			Description: d.Spec.Offering.Description,
 			Bindable:    d.Spec.Offering.Bindable == nil || *d.Spec.Offering.Bindable,
 			Tags:        d.Spec.Offering.Tags,
+			Metadata:    d.Spec.Offering.Metadata,
+			// Ohne Angabe gilt die Zusage als nicht gegeben: was der Operator
+			// nicht nachweislich kann, darf der Katalog nicht versprechen.
+			PlanUpdateable:       d.Spec.Offering.PlanUpdateable != nil && *d.Spec.Offering.PlanUpdateable,
+			InstancesRetrievable: true,
+			BindingsRetrievable:  true,
 		}
+		polling := int(ReadinessTimeout(d).Seconds())
 		for _, p := range d.Spec.Offering.Plans {
 			schema := p.ParameterSchema()
 			entry.Plans = append(entry.Plans, CatalogPlan{
 				ID:          p.ID,
 				Name:        p.Name,
 				Description: p.Description,
+				// Ohne Angabe ist ein Plan laut OSB kostenlos.
+				Free:                   p.Free == nil || *p.Free,
+				Metadata:               p.Metadata,
+				MaximumPollingDuration: polling,
 				// Dasselbe Schema fuer create und update: die Allowlist und
 				// die Grenzen gelten fuer beide Wege gleichermassen.
 				Schemas: &PlanSchemas{ServiceInstance: InstanceSchemas{

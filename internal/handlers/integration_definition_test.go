@@ -30,6 +30,10 @@ spec:
     id: def-svc-0001
     name: test-db
     description: "Test DB via definition"
+    metadata:
+      displayName: "Test-Datenbank"
+      documentationUrl: "https://example.invalid/docs"
+    planUpdateable: true
     plans:
       - id: def-plan-free
         name: free
@@ -38,6 +42,9 @@ spec:
           size: small
       - id: def-plan-paid
         name: paid
+        free: false
+        metadata:
+          bullets: ["mehr Speicher"]
         params:
           size: large
   provision:
@@ -80,12 +87,17 @@ func newDefinitionRouter(t *testing.T) (*gin.Engine, *definition.OperatorClient)
 	// Der zuletzt gebaute Broker, damit Tests den gespeicherten Datensatz
 	// pruefen koennen.
 	testBroker = b
+	testEngine = engine
 
 	return h.SetupRouter(), oc
 }
 
 // testBroker haelt den Broker der zuletzt gebauten Testroute.
 var testBroker *broker.Broker
+
+// testEngine haelt die Engine derselben Route, damit ein Test den Katalog
+// ueber die Leitung gegen den der Engine halten kann.
+var testEngine *definition.Engine
 
 func putJSON(router *gin.Engine, path string, body interface{}) *httptest.ResponseRecorder {
 	return sendJSON(router, "PUT", path, body)

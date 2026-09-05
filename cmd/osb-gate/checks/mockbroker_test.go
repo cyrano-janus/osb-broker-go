@@ -61,6 +61,13 @@ type mutation struct {
 	wrongVersionAccepted bool // eine fremde Hauptversion wird bedient
 	conflictStatus       int  // statt 409 bei abweichenden Attributen
 	errorBodyEmpty       bool // Fehlerantwort ohne error/description
+
+	// Zusagen des Katalogs gegen das Verhalten
+	retrievableNotDeclared bool // die Abrufbarkeit wird nicht angemeldet
+	planUpdateableNotHeld  bool // plan_updateable zugesagt, Planwechsel abgelehnt
+	planUpdateableFalse    bool // plan_updateable verneint, Planwechsel trotzdem vollzogen
+	metadataNotObject      bool // metadata ist eine Zeichenkette statt eines Blocks
+	pollingNegative        bool // maximum_polling_duration ist negativ
 }
 
 const (
@@ -158,6 +165,33 @@ func (b *mockBroker) catalog(w http.ResponseWriter) {
 	if b.mut.duplicatePlanID {
 		secondPlanID = mockPlan
 	}
+	var meta interface{} = map[string]interface{}{"displayName": "Real Service"}
+	if b.mut.metadataNotObject {
+		meta = "Real Service"
+	}
+	polling := 60
+	if b.mut.pollingNegative {
+		polling = -1
+	}
+	plan := func(id, name, desc string) map[string]interface{} {
+		return map[string]interface{}{
+			"id": id, "name": name, "description": desc,
+			"free": true, "maximum_polling_duration": polling,
+		}
+	}
+	real := map[string]interface{}{
+		"id": mockRealService, "name": "real", "description": desc,
+		"bindable": true, "plan_updateable": !b.mut.planUpdateableFalse,
+		"metadata": meta,
+		"plans": []map[string]interface{}{
+			plan(mockPlan, "small", "s"),
+			plan(secondPlanID, "large", "l"),
+		},
+	}
+	if !b.mut.retrievableNotDeclared {
+		real["instances_retrievable"] = true
+		real["bindings_retrievable"] = true
+	}
 	writeJSON(w, 200, map[string]interface{}{"services": []map[string]interface{}{
 		// Das Demo-Angebot steht bewusst vorn: der Audit muss es
 		// ueberspringen und den echten Service waehlen.
@@ -166,14 +200,7 @@ func (b *mockBroker) catalog(w http.ResponseWriter) {
 			"bindable": true,
 			"plans":    []map[string]interface{}{{"id": "demo-plan", "name": "free", "description": "d"}},
 		},
-		{
-			"id": mockRealService, "name": "real", "description": desc,
-			"bindable": true, "plan_updateable": true,
-			"plans": []map[string]interface{}{
-				{"id": mockPlan, "name": "small", "description": "s"},
-				{"id": secondPlanID, "name": "large", "description": "l"},
-			},
-		},
+		real,
 	}})
 }
 
@@ -231,7 +258,13 @@ func (b *mockBroker) instance(w http.ResponseWriter, r *http.Request, id string)
 			writeErr(w, 400, "BadRequest", "plan_id is required")
 			return
 		}
-		if req.PlanID != "" {
+		if req.PlanID != "" && req.PlanID != inst[1] {
+			// Ein Planwechsel. Wer ihn zusagt, muss ihn vollziehen; wer ihn
+			// verneint, muss ihn ablehnen.
+			if b.mut.planUpdateableNotHeld {
+				writeErr(w, 400, "BadRequest", "plan changes are not supported")
+				return
+			}
 			b.instances[id] = [2]string{inst[0], req.PlanID}
 		}
 		if len(req.Parameters) > 0 && !b.mut.updateDropsParams {
@@ -448,6 +481,10 @@ func TestMock_JedeMutationWirdBemerkt(t *testing.T) {
 		{"fremde Hauptversion wird bedient", mutation{wrongVersionAccepted: true}, "version-negotiation"},
 		{"abweichende Attribute ergeben 200 statt 409", mutation{conflictStatus: 200}, "provision-conflict"},
 		{"Fehlerantwort ohne error/description", mutation{errorBodyEmpty: true}, "error-body"},
+		{"Planwechsel zugesagt, aber abgelehnt", mutation{planUpdateableNotHeld: true}, "catalog-promises"},
+		{"Planwechsel verneint, aber vollzogen", mutation{planUpdateableFalse: true}, "catalog-promises"},
+		{"metadata ist eine Zeichenkette", mutation{metadataNotObject: true}, "catalog-display"},
+		{"maximum_polling_duration ist negativ", mutation{pollingNegative: true}, "catalog-display"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := withBroker(t, tc.mut)
@@ -457,6 +494,21 @@ func TestMock_JedeMutationWirdBemerkt(t *testing.T) {
 				"es schlug etwas fehl, aber nicht %q: %s", tc.check, failedNames(r))
 		})
 	}
+}
+
+// Die Gegenprobe zu den Zusagen: OSB verlangt die Abrufbarkeit nicht. Ein
+// Broker, der sie nicht anmeldet, ist konform - das Gate darf ihn nicht
+// deswegen durchfallen lassen, sondern muss die Pruefung ueberspringen.
+// Ohne diesen Fall waere die Pruefung eine Regel, die die Spezifikation nicht
+// kennt.
+func TestMock_NichtAngemeldeteAbrufbarkeitIstKeinFehler(t *testing.T) {
+	r := withBroker(t, mutation{retrievableNotDeclared: true})
+
+	assert.Zero(t, r.Failures(),
+		"nicht zugesagt ist nicht verletzt, es schlug an: %s", failedNames(r))
+	assert.Contains(t, r.Skipped, "fetch-get-instance",
+		"die Pruefung muss uebersprungen werden, nicht stillschweigend bestehen")
+	assert.Contains(t, r.Skipped, "fetch-get-binding")
 }
 
 // Der wichtigste Fall. Eine Negativpruefung, die einen Transportfehler als

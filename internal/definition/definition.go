@@ -44,7 +44,22 @@ type Offering struct {
 	Description string   `json:"description"`
 	Bindable    *bool    `json:"bindable,omitempty"`
 	Tags        []string `json:"tags,omitempty"`
-	Plans       []Plan   `json:"plans"`
+	// Metadata ist der Anzeigeblock, den ein Marktplatz rendert -
+	// displayName, imageUrl, longDescription, documentationUrl, supportUrl.
+	//
+	// Ohne ihn zeigt eine Kachel den technischen Namen und sonst nichts. Der
+	// Inhalt bleibt bewusst frei: OSB schreibt keine Schluessel vor, und
+	// verschiedene Marktplaetze lesen verschiedene.
+	Metadata map[string]interface{} `json:"metadata,omitempty"`
+	// PlanUpdateable sagt zu, dass ein Konsument den Plan wechseln darf.
+	//
+	// Der Broker kann es - ein PATCH mit neuem plan_id rendert das Manifest
+	// neu. Ob der Operator es mitmacht, weiss nur die Definition: CNPG laesst
+	// Speicher wachsen, aber nicht schrumpfen. Ohne Angabe gilt die Zusage
+	// als nicht gegeben, und CF lehnt `cf update-service -p` ab, bevor der
+	// Broker gefragt wird.
+	PlanUpdateable *bool  `json:"planUpdateable,omitempty"`
+	Plans          []Plan `json:"plans"`
 }
 
 // Plan is one OSB plan with its render parameters.
@@ -77,8 +92,13 @@ type Plan struct {
 	// Der Broker gibt die Instanz trotzdem auf: der Datensatz verschwindet,
 	// das Deprovision ist 200, ein zweites 410. Nur die Daten bleiben, und die
 	// Ressourcen werden markiert, damit ein Betreiber sie findet.
-	RetainOnDeprovision bool  `json:"retainOnDeprovision,omitempty"`
-	Free                *bool `json:"free,omitempty"`
+	RetainOnDeprovision bool `json:"retainOnDeprovision,omitempty"`
+	// Free sagt, ob dieser Plan kostenlos ist. Ohne Angabe gilt laut OSB
+	// 2.17 `true` - ein kostenpflichtiger Plan, dessen Angabe unterwegs
+	// verlorengeht, bewirbt sich also als kostenlos.
+	Free *bool `json:"free,omitempty"`
+	// Metadata ist der Anzeigeblock des Plans - displayName, bullets, costs.
+	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // ParameterLimit begrenzt einen einzelnen Benutzerparameter.

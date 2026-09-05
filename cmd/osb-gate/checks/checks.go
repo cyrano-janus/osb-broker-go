@@ -252,11 +252,37 @@ type catalogService struct {
 	Bindable       bool   `json:"bindable"`
 	PlanUpdateable bool   `json:"plan_updateable"`
 	Description    string `json:"description"`
-	Plans          []struct {
-		ID          string `json:"id"`
-		Name        string `json:"name"`
-		Description string `json:"description"`
-	} `json:"plans"`
+	// InstancesRetrievable und BindingsRetrievable sagen, ob die
+	// GET-Endpunkte benutzbar sind. OSB verlangt sie nicht; ohne die Zusage
+	// ruft eine Plattform sie nicht auf, und das Gate prueft sie nicht.
+	InstancesRetrievable bool `json:"instances_retrievable"`
+	BindingsRetrievable  bool `json:"bindings_retrievable"`
+	// Metadata ist der Anzeigeblock des Marktplatzes. Als interface{}
+	// gelesen, weil ein Broker hier alles Moegliche schicken kann und genau
+	// das geprueft werden soll.
+	Metadata interface{}   `json:"metadata"`
+	Plans    []catalogPlan `json:"plans"`
+}
+
+type catalogPlan struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	// Free als Zeiger: "nicht gesagt" und "gesagt: kostenlos" sind
+	// verschiedene Aussagen, auch wenn OSB sie gleich behandelt.
+	Free                   *bool       `json:"free"`
+	Metadata               interface{} `json:"metadata"`
+	MaximumPollingDuration *int        `json:"maximum_polling_duration"`
+}
+
+// serviceByID findet den Katalogeintrag zu einer service_id.
+func serviceByID(svcs []catalogService, id string) *catalogService {
+	for i := range svcs {
+		if svcs[i].ID == id {
+			return &svcs[i]
+		}
+	}
+	return nil
 }
 
 func fetchCatalog(c *client) ([]catalogService, bool) {
@@ -309,6 +335,7 @@ func RunReport(cfg Config) *Report {
 	c.checkAuthEnforcement()
 	c.checkVersionNegotiation()
 	svcs := c.checkCatalogStructure()
+	c.checkCatalogDisplay(svcs)
 	c.checkErrorMapping(svcs)
 	c.checkErrorBody(svcs)
 
@@ -318,11 +345,13 @@ func RunReport(cfg Config) *Report {
 	if serviceID == "" {
 		c.skip("lifecycle", "kein pruefbarer Service im Katalog")
 	} else {
-		inst := runLifecycleAudit(c, serviceID, planID)
+		svc := serviceByID(svcs, serviceID)
+		inst := runLifecycleAudit(c, serviceID, planID, svc)
 		if inst != "" {
 			c.checkProvisionConflict(inst, serviceID, planID, svcs)
-			runFetchAudit(c, inst, serviceID, planID)
+			runFetchAudit(c, inst, serviceID, planID, svc)
 			runUpdateAudit(c, inst, serviceID, planID)
+			c.checkCatalogPromises(inst, serviceID, planID, svcs)
 			cleanupAudit(c, inst, serviceID, planID)
 		}
 	}
@@ -695,7 +724,7 @@ func anyServiceAndPlan(svcs []catalogService) (string, string) {
 
 // runLifecycleAudit provisions and binds; returns the instance id for the
 // follow-up audits ("" on failure).
-func runLifecycleAudit(c *client, serviceID, planID string) string {
+func runLifecycleAudit(c *client, serviceID, planID string, svc *catalogService) string {
 	instanceID := c.cfg.IDPrefix + "-lc"
 
 	// accepts_incomplete gehoert in die Query, nicht in den Body. Ohne den
@@ -827,7 +856,12 @@ func runLifecycleAudit(c *client, serviceID, planID string) string {
 	// GET auf eine bestehende Binding. Nur hier ist sie noch da - nach dem
 	// Unbind laesst sich das nicht mehr pruefen, und geprueft wurde bislang
 	// ausschliesslich der 404 fuer eine unbekannte.
-	if bindOK {
+	switch {
+	case !bindOK:
+		// nichts zu holen
+	case svc == nil || !svc.BindingsRetrievable:
+		c.skip("fetch-get-binding", "bindings_retrievable ist nicht zugesagt - die Plattform ruft GET nicht auf")
+	default:
 		gbStatus, gbBody := c.do("GET", bindPath, nil)
 		switch {
 		case gbStatus != 200:
@@ -865,8 +899,21 @@ func hasCredentials(body []byte) bool {
 
 // runFetchAudit exercises GET instance / GET binding / last_operation incl.
 // the 404 paths for nonexistent resources.
-func runFetchAudit(c *client, instanceID, serviceID, planID string) {
+//
+// GET instance und GET binding sind in OSB optional. Ein Broker meldet im
+// Katalog an, ob er sie beantwortet; ohne die Zusage ruft eine Plattform sie
+// nie auf. Sie unbedingt zu fordern hiesse, einen konformen Broker an einer
+// Regel scheitern zu lassen, die die Spezifikation nicht kennt - deshalb
+// entscheidet die Zusage, ob geprueft oder uebersprungen wird.
+func runFetchAudit(c *client, instanceID, serviceID, planID string, svc *catalogService) {
 	const check = "fetch-get-instance"
+	if svc == nil || !svc.InstancesRetrievable {
+		c.skip(check, "instances_retrievable ist nicht zugesagt - die Plattform ruft GET nicht auf")
+		c.skip("fetch-nonexistent-instance", "instances_retrievable ist nicht zugesagt")
+		runFetchBindingAudit(c, instanceID, serviceID, planID, svc)
+		runLastOperationAudit(c, instanceID, serviceID, planID)
+		return
+	}
 	status, body := c.do("GET", "/v2/service_instances/"+instanceID+"?service_id="+serviceID+"&plan_id="+planID, nil)
 	if status != 200 {
 		c.fail(check, "GET instance -> expected 200, got %d: %s", status, truncate(body))
@@ -883,15 +930,7 @@ func runFetchAudit(c *client, instanceID, serviceID, planID string) {
 	}
 	c.pass(check, "GET instance -> 200 with service_id+plan_id")
 
-	checkLO := "fetch-last-operation"
-	stLO, loBody := c.do("GET", "/v2/service_instances/"+instanceID+"/last_operation?service_id="+serviceID+"&plan_id="+planID, nil)
-	if stLO != 200 {
-		c.fail(checkLO, "last_operation -> expected 200, got %d: %s", stLO, truncate(loBody))
-	} else if !strings.Contains(string(loBody), "state") {
-		c.fail(checkLO, "last_operation response lacks state field")
-	} else {
-		c.pass(checkLO, "last_operation -> 200 with state")
-	}
+	runLastOperationAudit(c, instanceID, serviceID, planID)
 
 	checkGhostInst := "fetch-nonexistent-instance"
 	st404, _ := c.do("GET", "/v2/service_instances/"+c.cfg.IDPrefix+"-ghost?service_id="+serviceID+"&plan_id="+planID, nil)
@@ -901,12 +940,35 @@ func runFetchAudit(c *client, instanceID, serviceID, planID string) {
 		c.pass(checkGhostInst, "GET nonexistent instance -> 404")
 	}
 
-	checkGhostBind := "fetch-nonexistent-binding"
-	st404b, _ := c.do("GET", "/v2/service_instances/"+instanceID+"/service_bindings/"+c.cfg.IDPrefix+"-ghost-b?service_id="+serviceID+"&plan_id="+planID, nil)
-	if st404b != 404 {
-		c.fail(checkGhostBind, "GET nonexistent binding -> expected 404, got %d", st404b)
+	runFetchBindingAudit(c, instanceID, serviceID, planID, svc)
+}
+
+// last_operation ist nicht optional: ohne sie kann eine Plattform ein
+// asynchrones Provision nicht abschliessen.
+func runLastOperationAudit(c *client, instanceID, serviceID, planID string) {
+	const check = "fetch-last-operation"
+	status, body := c.do("GET", "/v2/service_instances/"+instanceID+"/last_operation?service_id="+serviceID+"&plan_id="+planID, nil)
+	switch {
+	case status != 200:
+		c.fail(check, "last_operation -> expected 200, got %d: %s", status, truncate(body))
+	case !strings.Contains(string(body), "state"):
+		c.fail(check, "last_operation response lacks state field")
+	default:
+		c.pass(check, "last_operation -> 200 with state")
+	}
+}
+
+func runFetchBindingAudit(c *client, instanceID, serviceID, planID string, svc *catalogService) {
+	const check = "fetch-nonexistent-binding"
+	if svc == nil || !svc.BindingsRetrievable {
+		c.skip(check, "bindings_retrievable ist nicht zugesagt")
+		return
+	}
+	status, _ := c.do("GET", "/v2/service_instances/"+instanceID+"/service_bindings/"+c.cfg.IDPrefix+"-ghost-b?service_id="+serviceID+"&plan_id="+planID, nil)
+	if status != 404 {
+		c.fail(check, "GET nonexistent binding -> expected 404, got %d", status)
 	} else {
-		c.pass(checkGhostBind, "GET nonexistent binding -> 404")
+		c.pass(check, "GET nonexistent binding -> 404")
 	}
 }
 

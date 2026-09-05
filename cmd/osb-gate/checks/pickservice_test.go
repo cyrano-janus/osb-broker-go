@@ -22,11 +22,7 @@ const smallPlanID = "plan-small-0000-0000-000000000001"
 func svc(id string, planIDs ...string) catalogService {
 	s := catalogService{ID: id, Name: id}
 	for _, p := range planIDs {
-		s.Plans = append(s.Plans, struct {
-			ID          string `json:"id"`
-			Name        string `json:"name"`
-			Description string `json:"description"`
-		}{ID: p, Name: p})
+		s.Plans = append(s.Plans, catalogPlan{ID: p, Name: p})
 	}
 	return s
 }
