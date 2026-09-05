@@ -138,8 +138,12 @@ curl -sk https://localhost:9090/metrics | grep '^osb_'
 Neun Kollektoren, eigene Registry statt der Standardregistry. Nützlich sind
 `osb_requests_total` nach Status und `osb_last_operation_state`.
 
-**`osb_active_instances` und `osb_active_bindings` sind registriert, werden aber
-nie gesetzt** und melden immer 0. Nicht darauf verlassen.
+**`osb_active_instances` und `osb_active_bindings` werden beim Abholen
+gezählt**, nicht mitgeführt — sie überstehen also einen Neustart des Brokers
+und erfassen auch Änderungen, die nicht durch diesen Prozess liefen. Fehlen
+beide in einem Scrape, war der Zustandsspeicher nicht lesbar; wie oft, sagt
+`osb_state_read_errors_total`. Eine Lücke im Graphen ist Absicht: eine
+stehengebliebene Zahl wäre nicht als Störung erkennbar.
 
 ## Wenn die Plattform selbst verdächtig ist
 

@@ -16,9 +16,6 @@ target platform or only the development platform?** What separates the two is in
 
 None of the open points currently blocks a target platform.
 
-**`osb_active_instances` and `osb_active_bindings` are never set.** Both gauges
-are registered and permanently report 0.
-
 ## Structural problems
 
 ## Definitions and deployment
@@ -103,4 +100,6 @@ visible or cheaper.
    the deadline is enforced, a wrong path ends in `failed` after ten minutes
    instead of an endless poll — it still only becomes visible when somebody
    looks.
-2. **`osb_active_instances` and `osb_active_bindings`** permanently report 0.
+2. **Delivery** — `values-kind.yaml` has drifted from `definitions/`,
+   `rbac.operatorCRDs` does not cover every shipped definition, and the module
+   path is still a placeholder.

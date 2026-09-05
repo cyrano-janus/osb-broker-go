@@ -35,6 +35,11 @@ func (h *Handlers) SetEngine(e *EngineHolder) {
 // /metrics endpoint (unauthenticated).
 func (h *Handlers) SetMetrics(m *Metrics) {
 	h.metrics = m
+	// Die Bestandsmetriken zaehlen den Zustandsspeicher beim Abholen. Kann er
+	// nicht zaehlen, gibt es sie nicht - statt eine 0 zu behaupten.
+	if h.broker != nil {
+		m.WatchState(h.broker.StateStore())
+	}
 }
 
 // New creates a new Handlers instance

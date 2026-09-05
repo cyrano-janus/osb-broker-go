@@ -136,8 +136,12 @@ curl -sk https://localhost:9090/metrics | grep '^osb_'
 Nine collectors on their own registry rather than the default one. Useful are
 `osb_requests_total` by status and `osb_last_operation_state`.
 
-**`osb_active_instances` and `osb_active_bindings` are registered but never set**
-and always report 0. Do not rely on them.
+**`osb_active_instances` and `osb_active_bindings` are counted at scrape
+time**, not carried along — so they survive a broker restart and also catch
+changes that did not go through this process. If both are missing from a
+scrape, the state store could not be read; how often is in
+`osb_state_read_errors_total`. The gap in the graph is deliberate: a number
+left standing would not be recognisable as a fault.
 
 ## When the platform itself is the suspect
 

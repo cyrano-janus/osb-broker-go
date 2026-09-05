@@ -215,6 +215,25 @@ func (s *CRDStateStore) DeleteBinding(ctx context.Context, id string) error {
 	return s.deleteCredentialsSecret(ctx, resourceName(id)+"-credentials")
 }
 
+// CountInstances und CountBindings zaehlen den Bestand fuer die
+// Bestandsmetriken. Gezaehlt wird beim Abholen: der Zustand liegt in CRDs, und
+// ein im Prozess mitgefuehrter Zaehler waere nach jedem Neustart falsch.
+func (s *CRDStateStore) CountInstances(ctx context.Context) (int, error) {
+	var list osbv1.OSBServiceInstanceList
+	if err := s.client.List(ctx, &list, client.InNamespace(s.namespace)); err != nil {
+		return 0, fmt.Errorf("count instances: %w", err)
+	}
+	return len(list.Items), nil
+}
+
+func (s *CRDStateStore) CountBindings(ctx context.Context) (int, error) {
+	var list osbv1.OSBServiceBindingList
+	if err := s.client.List(ctx, &list, client.InNamespace(s.namespace)); err != nil {
+		return 0, fmt.Errorf("count bindings: %w", err)
+	}
+	return len(list.Items), nil
+}
+
 // ListBindingsByInstance liefert alle Bindings einer Instanz.
 func (s *CRDStateStore) ListBindingsByInstance(ctx context.Context, instanceID string) ([]*Binding, error) {
 	var list osbv1.OSBServiceBindingList

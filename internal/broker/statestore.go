@@ -20,11 +20,37 @@ type StateStore interface {
 	ListBindingsByInstance(ctx context.Context, instanceID string) ([]*Binding, error)
 }
 
+// Counter zaehlt den Bestand. Ein Zustandsspeicher darf das nicht koennen -
+// dann gibt es die Bestandsmetriken nicht, statt eine 0 zu behaupten.
+//
+// Gezaehlt wird beim Abholen und nicht mitgefuehrt: ein Zaehler, den der
+// Broker bei jedem Provision hochzaehlt, faellt beim Neustart auf 0 zurueck,
+// waehrend die Instanzen weiterlaufen - und er verpasst jede Aenderung, die
+// nicht durch diesen Prozess ging. Der Zustand liegt in CRDs, nicht im
+// Prozess; also fragt man ihn.
+type Counter interface {
+	CountInstances(ctx context.Context) (int, error)
+	CountBindings(ctx context.Context) (int, error)
+}
+
 // memoryStateStore is a thread-safe in-memory StateStore.
 type memoryStateStore struct {
 	mu        sync.RWMutex
 	instances map[string]*Instance
 	bindings  map[string]*Binding
+}
+
+// CountInstances und CountBindings erfuellen Counter.
+func (m *memoryStateStore) CountInstances(context.Context) (int, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return len(m.instances), nil
+}
+
+func (m *memoryStateStore) CountBindings(context.Context) (int, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return len(m.bindings), nil
 }
 
 // NewInMemoryStateStore returns an empty in-memory StateStore.

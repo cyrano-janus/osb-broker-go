@@ -32,6 +32,11 @@ func New(state StateStore) *Broker {
 	return &Broker{state: state}
 }
 
+// StateStore gibt den Zustandsspeicher heraus. Gebraucht wird das von den
+// Bestandsmetriken: sie zaehlen beim Abholen und brauchen dafuer den Speicher
+// selbst, nicht die Lesemethoden fuer einzelne Datensaetze.
+func (b *Broker) StateStore() StateStore { return b.state }
+
 // StoredInstance liefert den gespeicherten Instanz-Datensatz.
 func (b *Broker) StoredInstance(ctx context.Context, instanceID string) (*Instance, error) {
 	return b.state.GetInstance(ctx, instanceID)

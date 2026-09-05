@@ -11,11 +11,23 @@
 //	osb_last_operation_state{state}             — last_operation polls per state
 //	osb_active_instances                        — gauge of known instances
 //	osb_active_bindings                         — gauge of known bindings
+//	osb_state_read_errors_total                 — failed state-store reads
+//
+// Die beiden Bestands-Gauges werden beim Abholen gezaehlt, nicht mitgefuehrt.
+// Ein Zaehler, den der Broker bei jedem Provision hochzaehlt, faellt beim
+// Neustart auf 0 zurueck, waehrend die Instanzen weiterlaufen - und er
+// verpasst jede Aenderung, die nicht durch diesen Prozess ging. Kann der
+// Zustandsspeicher gerade nicht gelesen werden, fehlen die beiden Metriken:
+// eine Luecke im Graphen ist sichtbar, eine stehengebliebene Zahl ist es
+// nicht.
 package handlers
 
 import (
+	"context"
 	"strconv"
 	"time"
+
+	"github.com/example/osb-broker/internal/broker"
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
@@ -31,8 +43,10 @@ type Metrics struct {
 	Deprovisions *prometheus.CounterVec
 	Unbinds      *prometheus.CounterVec
 	LastOp       *prometheus.CounterVec
-	ActiveInst   prometheus.Gauge
-	ActiveBind   prometheus.Gauge
+	// ReadErrors zaehlt Leseversuche auf den Zustandsspeicher, die scheitern.
+	// Ohne diesen Zaehler waere eine Luecke in den Bestandsmetriken nicht von
+	// "es gibt gerade nichts" zu unterscheiden.
+	ReadErrors prometheus.Counter
 
 	registry *prometheus.Registry
 }
@@ -71,18 +85,14 @@ func NewMetrics() *Metrics {
 			Name: "osb_last_operation_state",
 			Help: "last_operation polls by reported state (succeeded/in progress/failed).",
 		}, []string{"state"}),
-		ActiveInst: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "osb_active_instances",
-			Help: "Currently known service instances.",
-		}),
-		ActiveBind: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "osb_active_bindings",
-			Help: "Currently known service bindings.",
+		ReadErrors: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "osb_state_read_errors_total",
+			Help: "Failed reads of the state store while collecting metrics.",
 		}),
 	}
 	reg.MustRegister(
 		m.Requests, m.Duration, m.Provisions, m.Bindings,
-		m.Deprovisions, m.Unbinds, m.LastOp, m.ActiveInst, m.ActiveBind,
+		m.Deprovisions, m.Unbinds, m.LastOp, m.ReadErrors,
 	)
 	return m
 }
@@ -157,4 +167,64 @@ func (h *Handlers) observeLastOperation(state string) {
 	if h.metrics != nil {
 		h.metrics.LastOp.WithLabelValues(state).Inc()
 	}
+}
+
+// stateCollector meldet den Bestand, indem er ihn beim Abholen zaehlt.
+//
+// Kein Gauge, den irgendwer setzt: prometheus.Collector wird bei jedem Scrape
+// befragt, und genau dann wird der Zustandsspeicher gezaehlt. Scheitert das,
+// wird die Metrik weggelassen und osb_state_read_errors_total erhoeht - eine
+// Zahl zu melden, die man nicht gemessen hat, waere eine Erfindung.
+type stateCollector struct {
+	counter    broker.Counter
+	readErrors prometheus.Counter
+	instDesc   *prometheus.Desc
+	bindDesc   *prometheus.Desc
+	// timeout begrenzt den Lesevorgang. Ein Scrape darf nicht haengen, nur
+	// weil der API-Server gerade langsam ist.
+	timeout time.Duration
+}
+
+const stateReadTimeout = 5 * time.Second
+
+func newStateCollector(c broker.Counter, readErrors prometheus.Counter) *stateCollector {
+	return &stateCollector{
+		counter:    c,
+		readErrors: readErrors,
+		instDesc:   prometheus.NewDesc("osb_active_instances", "Currently known service instances.", nil, nil),
+		bindDesc:   prometheus.NewDesc("osb_active_bindings", "Currently known service bindings.", nil, nil),
+		timeout:    stateReadTimeout,
+	}
+}
+
+func (s *stateCollector) Describe(ch chan<- *prometheus.Desc) {
+	ch <- s.instDesc
+	ch <- s.bindDesc
+}
+
+func (s *stateCollector) Collect(ch chan<- prometheus.Metric) {
+	ctx, cancel := context.WithTimeout(context.Background(), s.timeout)
+	defer cancel()
+
+	if n, err := s.counter.CountInstances(ctx); err != nil {
+		s.readErrors.Inc()
+	} else {
+		ch <- prometheus.MustNewConstMetric(s.instDesc, prometheus.GaugeValue, float64(n))
+	}
+	if n, err := s.counter.CountBindings(ctx); err != nil {
+		s.readErrors.Inc()
+	} else {
+		ch <- prometheus.MustNewConstMetric(s.bindDesc, prometheus.GaugeValue, float64(n))
+	}
+}
+
+// WatchState laesst die Bestandsmetriken den Zustandsspeicher zaehlen. Ohne
+// Aufruf - oder mit einem Speicher, der nicht zaehlen kann - gibt es die
+// beiden Metriken nicht.
+func (m *Metrics) WatchState(store interface{}) {
+	c, ok := store.(broker.Counter)
+	if !ok {
+		return
+	}
+	m.registry.MustRegister(newStateCollector(c, m.ReadErrors))
 }

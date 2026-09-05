@@ -16,9 +16,6 @@ in [target-platforms.md](target-platforms.md).
 
 Keiner der offenen Punkte blockiert derzeit eine Zielplattform.
 
-**`osb_active_instances` und `osb_active_bindings` werden nie gesetzt.** Beide
-Gauges sind registriert und melden dauerhaft 0.
-
 ## Strukturelle Probleme
 
 ## Definitionen und Deployment
@@ -103,4 +100,6 @@ nächsten sichtbar oder billiger.
    Seit das Zeitlimit greift, endet ein falscher Pfad nach zehn Minuten in
    `failed` statt in einer endlosen Abfrage — sichtbar ist er trotzdem erst,
    wenn jemand hinsieht.
-2. **`osb_active_instances` und `osb_active_bindings`** melden dauerhaft 0.
+2. **Die Auslieferung** — `values-kind.yaml` driftet von `definitions/` ab,
+   `rbac.operatorCRDs` deckt nicht alle mitgelieferten Definitionen ab, und
+   der Modulpfad ist noch ein Platzhalter.
