@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/cyrano-janus/osb-broker-go/internal/broker"
+	"github.com/cyrano-janus/osb-broker-go/internal/reconcile"
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
@@ -47,6 +48,21 @@ type Metrics struct {
 	// Ohne diesen Zaehler waere eine Luecke in den Bestandsmetriken nicht von
 	// "es gibt gerade nichts" zu unterscheiden.
 	ReadErrors prometheus.Counter
+
+	// Abgleich (internal/reconcile). Ohne diese Zahlen ist ein Abgleich, der
+	// still scheitert, von einem, der nichts zu tun hatte, nicht zu
+	// unterscheiden - beide Male passiert nichts.
+	ReconcileRuns      *prometheus.CounterVec
+	ReconcileInstances *prometheus.CounterVec
+	// ReconcileLastRun steht still, wenn der Abgleich nicht mehr laeuft. Das
+	// ist die eine Zahl, auf die ein Alarm gehoert.
+	ReconcileLastRun prometheus.Gauge
+	// Die beiden Zustaende, die sonst nirgends auffallen: ein Datensatz ohne
+	// Definition und ein Datensatz ohne Objekte. Gauges, weil die Frage
+	// lautet "wie viele sind es gerade" - ein Zaehler stiege ewig weiter,
+	// auch wenn laengst aufgeraeumt wurde.
+	ReconcileUnresolvable prometheus.Gauge
+	ReconcileMissing      prometheus.Gauge
 
 	registry *prometheus.Registry
 }
@@ -90,11 +106,64 @@ func NewMetrics() *Metrics {
 			Help: "Failed reads of the state store while collecting metrics.",
 		}),
 	}
+	m.ReconcileRuns = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "osb_reconcile_runs_total",
+		Help: "Reconcile runs, by whether the run itself could take place.",
+	}, []string{"result"})
+	m.ReconcileInstances = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "osb_reconcile_instances_total",
+		Help: "Instances seen by the reconciler, by outcome.",
+	}, []string{"outcome"})
+	m.ReconcileLastRun = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "osb_reconcile_last_run_timestamp_seconds",
+		Help: "Unix time of the last reconcile run that took place.",
+	})
+	m.ReconcileUnresolvable = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "osb_reconcile_unresolvable_instances",
+		Help: "Instance records the reconciler cannot resolve - definition, plan or namespace is gone.",
+	})
+	m.ReconcileMissing = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "osb_reconcile_missing_objects",
+		Help: "Instance records whose operator resources are gone.",
+	})
 	reg.MustRegister(
 		m.Requests, m.Duration, m.Provisions, m.Bindings,
 		m.Deprovisions, m.Unbinds, m.LastOp, m.ReadErrors,
+		m.ReconcileRuns, m.ReconcileInstances, m.ReconcileLastRun,
+		m.ReconcileUnresolvable, m.ReconcileMissing,
 	)
 	return m
+}
+
+// ObserveReconcile schreibt das Ergebnis eines Durchlaufs fort.
+//
+// Ein Durchlauf, der gar nicht stattfinden konnte, zaehlt als "error" und
+// bewegt weder Zeitstempel noch Bestand: die alten Zahlen weiterzuschreiben
+// hiesse, einen Stand zu behaupten, den niemand gemessen hat.
+func (m *Metrics) ObserveReconcile(res reconcile.Result) {
+	if m == nil {
+		return
+	}
+	if res.Err != nil {
+		m.ReconcileRuns.WithLabelValues("error").Inc()
+		return
+	}
+	m.ReconcileRuns.WithLabelValues("ok").Inc()
+	m.ReconcileLastRun.SetToCurrentTime()
+
+	for outcome, n := range map[string]int{
+		"up-to-date":      res.UpToDate,
+		"applied":         res.Applied,
+		"objects-missing": res.ObjectsMissing,
+		"unresolvable":    res.Unresolvable,
+		"failed":          res.Failed,
+	} {
+		if n > 0 {
+			m.ReconcileInstances.WithLabelValues(outcome).Add(float64(n))
+		}
+	}
+	m.ReconcileUnresolvable.Set(float64(res.Unresolvable))
+	m.ReconcileMissing.Set(float64(res.ObjectsMissing))
 }
 
 // Registry returns the underlying Prometheus registry (for the /metrics handler).

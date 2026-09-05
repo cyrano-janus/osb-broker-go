@@ -43,15 +43,33 @@ type Config struct {
 	// LogRequests schaltet das Zugriffsprotokoll. Standardmaessig an.
 	LogRequests bool
 
-	Server ServerConfig
-	TLS    TLSConfig
-	Auth   AuthConfig
+	Server    ServerConfig
+	TLS       TLSConfig
+	Auth      AuthConfig
+	Reconcile ReconcileConfig
 
 	// Warnings carries non-fatal findings for main() to log. Configuration
 	// that is legal but weak (no auth at all, mTLS without an allowlist)
 	// must be visible in the log, not silently accepted.
 	Warnings []string
 }
+
+// ReconcileConfig steuert den periodischen Abgleich bestehender Instanzen
+// gegen die geladenen Definitionen.
+//
+// Ausdruecklich einzuschalten: der Abgleich schreibt in fremde Namespaces,
+// ohne dass ein Request kommt. Wer eine aeltere Fassung ersetzt, soll davon
+// nicht ueberrascht werden.
+type ReconcileConfig struct {
+	// Interval ist der Abstand zwischen zwei Durchlaeufen. 0 = aus.
+	Interval time.Duration
+}
+
+// minReconcileInterval ist keine Grenze, sondern die Schwelle, ab der gewarnt
+// wird. Der Abgleich liest je Instanz mindestens ein Objekt; im
+// Sekundentakt setzt das den API-Server unter Dauerlast, ohne dass es jemand
+// bemerkt.
+const minReconcileInterval = time.Minute
 
 // ServerConfig holds the http.Server tuning knobs. The broker ran without
 // any timeouts before Phase 4.5.
@@ -133,6 +151,10 @@ func LoadFrom(get func(string) string) (*Config, error) {
 			WriteTimeout:      l.duration("SERVER_WRITE_TIMEOUT", 60*time.Second),
 			IdleTimeout:       l.duration("SERVER_IDLE_TIMEOUT", 120*time.Second),
 			ShutdownTimeout:   l.duration("SERVER_SHUTDOWN_TIMEOUT", 15*time.Second),
+		},
+
+		Reconcile: ReconcileConfig{
+			Interval: l.duration("RECONCILE_INTERVAL", 0),
 		},
 
 		TLS: TLSConfig{
@@ -326,6 +348,11 @@ func (c *Config) collectWarnings() {
 	if !c.TLS.Enabled {
 		c.Warnings = append(c.Warnings,
 			"TLS is disabled - the broker serves plain HTTP and credentials travel in the clear")
+	}
+	if c.Reconcile.Interval > 0 && c.Reconcile.Interval < minReconcileInterval {
+		c.Warnings = append(c.Warnings, fmt.Sprintf(
+			"RECONCILE_INTERVAL=%s is shorter than %s - the reconciler reads at least one object per instance on every run",
+			c.Reconcile.Interval, minReconcileInterval))
 	}
 	if c.Auth.MTLS.Enabled && len(c.Auth.MTLS.AllowedCNs) == 0 &&
 		len(c.Auth.MTLS.AllowedDNSNames) == 0 && len(c.Auth.MTLS.AllowedURIs) == 0 {

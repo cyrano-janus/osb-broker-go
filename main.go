@@ -16,6 +16,7 @@ import (
 	"github.com/cyrano-janus/osb-broker-go/internal/broker"
 	"github.com/cyrano-janus/osb-broker-go/internal/config"
 	"github.com/cyrano-janus/osb-broker-go/internal/handlers"
+	"github.com/cyrano-janus/osb-broker-go/internal/reconcile"
 	"github.com/cyrano-janus/osb-broker-go/internal/server"
 	k8sconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
 )
@@ -77,8 +78,10 @@ func main() {
 
 	// Prometheus metrics (Phase 4.3). Enabled by default; METRICS_ENABLED=0
 	// turns collection and the /metrics endpoint off.
+	var metrics *handlers.Metrics
 	if cfg.MetricsEnabled {
-		h.SetMetrics(handlers.NewMetrics())
+		metrics = handlers.NewMetrics()
+		h.SetMetrics(metrics)
 	}
 
 	// Authentication (Phase 4.5). Any one configured method succeeding is
@@ -109,6 +112,31 @@ func main() {
 		WriteTimeout:      cfg.Server.WriteTimeout,
 		IdleTimeout:       cfg.Server.IdleTimeout,
 	})
+
+	// Periodischer Abgleich bestehender Instanzen gegen die geladenen
+	// Definitionen. Ausdruecklich einzuschalten (RECONCILE_INTERVAL), weil er
+	// als Einziges ohne einen Request in fremde Namespaces schreibt.
+	//
+	// Der Zustandsspeicher muss aufzaehlen koennen. Kann er es nicht, bleibt
+	// der Abgleich aus statt eine leere Liste als "nichts zu tun" zu lesen -
+	// er meldete sonst jeden Durchlauf als Erfolg, ohne etwas geprueft zu
+	// haben.
+	if cfg.Reconcile.Interval > 0 {
+		lister, ok := stateStore.(broker.Lister)
+		switch {
+		case !ok:
+			log.Printf("reconcile: abgeschaltet - der Zustandsspeicher kann nicht aufzaehlen")
+		case engineHolder == nil || engineHolder.Engine == nil:
+			log.Printf("reconcile: abgeschaltet - es sind keine ServiceDefinitions geladen")
+		default:
+			r := reconcile.New(lister, engineHolder.Engine, reconcile.Options{
+				Interval: cfg.Reconcile.Interval,
+				Observer: metrics.ObserveReconcile,
+			})
+			go r.Run(ctx)
+			log.Printf("Abgleich aktiv, alle %s", cfg.Reconcile.Interval)
+		}
+	}
 
 	scheme := "http"
 	if cfg.TLS.Enabled {

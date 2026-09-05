@@ -81,6 +81,23 @@ config:
   # stumm laeuft, ist im Fehlerfall nicht nachvollziehbar. Abschaltbar, weil
   # das bei hoher Last teuer wird und manche Betreiber es am Ingress fuehren.
   logRequests: true
+  # Periodischer Abgleich bestehender Instanzen gegen die geladenen
+  # Definitionen (RECONCILE_INTERVAL). Leer = aus.
+  #
+  # Ohne ihn wirkt eine geaenderte Definition nur auf neue Instanzen: wer den
+  # Plan "small" von 1Gi auf 2Gi hebt, laesst die bestehenden stehen. Mit ihm
+  # zieht der Broker sie nach - er rendert aus dem gespeicherten Plan und den
+  # gespeicherten Benutzerparametern neu und schreibt nur bei echter
+  # Abweichung.
+  #
+  # Ausdruecklich einzuschalten, weil er als Einziges ohne einen Request in
+  # fremde Namespaces schreibt. Er loescht nie und legt nie an: eine
+  # verschwundene Definition laesst er in Ruhe und meldet sie, eine
+  # verschwundene Ressource ersetzt er nicht.
+  #
+  # Unter einer Minute wird gewarnt - je Instanz wird mindestens ein Objekt
+  # gelesen.
+  reconcileInterval: ""
 
 # ServiceDefinitions als ConfigMap gerendert.
 # Jeder Eintrag unter `files` wird zu einer Datei in DEFINITIONS_DIR.

@@ -231,6 +231,26 @@ func (s *CRDStateStore) CountInstances(ctx context.Context) (map[InstanceKey]int
 	return out, nil
 }
 
+// ListInstances liefert jeden Datensatz. Ein einzelner unleserlicher Eintrag
+// bricht die Liste nicht ab: er wuerde sonst den Abgleich aller anderen
+// verhindern, und ein Speicher, in dem ein Objekt von Hand verbogen wurde,
+// legte damit die Wartung still.
+func (s *CRDStateStore) ListInstances(ctx context.Context) ([]*Instance, error) {
+	var list osbv1.OSBServiceInstanceList
+	if err := s.client.List(ctx, &list, client.InNamespace(s.namespace)); err != nil {
+		return nil, fmt.Errorf("list instances: %w", err)
+	}
+	out := make([]*Instance, 0, len(list.Items))
+	for i := range list.Items {
+		inst, err := specToInstance(&list.Items[i].Spec)
+		if err != nil {
+			continue
+		}
+		out = append(out, inst)
+	}
+	return out, nil
+}
+
 func (s *CRDStateStore) CountBindings(ctx context.Context) (map[string]int, error) {
 	var list osbv1.OSBServiceBindingList
 	if err := s.client.List(ctx, &list, client.InNamespace(s.namespace)); err != nil {

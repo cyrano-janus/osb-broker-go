@@ -28,6 +28,20 @@ type StateStore interface {
 // waehrend die Instanzen weiterlaufen - und er verpasst jede Aenderung, die
 // nicht durch diesen Prozess ging. Der Zustand liegt in CRDs, nicht im
 // Prozess; also fragt man ihn.
+// Lister liefert die Datensaetze selbst, nicht ihre Zahl.
+//
+// Der Abgleich (internal/reconcile) braucht jeden einzelnen, um ihn gegen die
+// Definition zu halten, die jetzt gilt - mit Plan, Namespace und
+// Benutzerparametern, denn ohne die drei laesst sich nicht rendern.
+//
+// Eigene Schnittstelle und kein Feld an StateStore: ein Zustandsspeicher, der
+// nicht aufzaehlen kann, soll den Abgleich abschalten koennen statt eine leere
+// Liste zu behaupten. Eine leere Liste hiesse "nichts abzugleichen", und jeder
+// Durchlauf meldete Erfolg, ohne etwas geprueft zu haben.
+type Lister interface {
+	ListInstances(ctx context.Context) ([]*Instance, error)
+}
+
 type Counter interface {
 	// CountInstances zaehlt je Angebot und Plan. Die blosse Gesamtzahl sagt
 	// einem Betreiber wenig - die Frage ist "wovon wie viele", also welches
@@ -84,6 +98,18 @@ func (m *memoryStateStore) PutInstance(_ context.Context, i *Instance) error {
 	defer m.mu.Unlock()
 	m.instances[i.ID] = i.DeepCopy()
 	return nil
+}
+
+// ListInstances liefert Kopien, keine Zeiger auf den Bestand: der Abgleich
+// arbeitet ausserhalb der Sperre, und ein geteilter Zeiger waere ein Rennen.
+func (m *memoryStateStore) ListInstances(_ context.Context) ([]*Instance, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make([]*Instance, 0, len(m.instances))
+	for _, i := range m.instances {
+		out = append(out, i.DeepCopy())
+	}
+	return out, nil
 }
 
 func (m *memoryStateStore) GetInstance(_ context.Context, id string) (*Instance, error) {

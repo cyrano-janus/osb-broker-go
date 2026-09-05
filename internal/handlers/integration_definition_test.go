@@ -99,6 +99,7 @@ func routerForYAML(t *testing.T, defYAML string) (*gin.Engine, *definition.Opera
 	// pruefen koennen.
 	testBroker = b
 	testEngine = engine
+	testStore = stateStore
 
 	return h.SetupRouter(), oc
 }
@@ -109,6 +110,10 @@ var testBroker *broker.Broker
 // testEngine haelt die Engine derselben Route, damit ein Test den Katalog
 // ueber die Leitung gegen den der Engine halten kann.
 var testEngine *definition.Engine
+
+// testStore haelt den Zustandsspeicher derselben Route - der Abgleich zaehlt
+// darueber die Instanzen auf.
+var testStore broker.StateStore
 
 func putJSON(router *gin.Engine, path string, body interface{}) *httptest.ResponseRecorder {
 	return sendJSON(router, "PUT", path, body)

@@ -32,6 +32,12 @@ tls:
       kind: ClusterIssuer
       name: osb-ca-issuer
 
+# Abgleich bestehender Instanzen. Auf der Entwicklungsplattform kurz genug,
+# um eine Definitionsaenderung ohne Warten zu sehen, und lang genug, um den
+# API-Server nicht zu belasten.
+config:
+  reconcileInterval: 2m
+
 # GENERIERT aus definitions/ - nicht von Hand bearbeiten.
 #
 # Gesichert: internal/chart/sync_test.go vergleicht zeichengleich gegen
