@@ -191,9 +191,13 @@ func newStateCollector(c broker.Counter, readErrors prometheus.Counter) *stateCo
 	return &stateCollector{
 		counter:    c,
 		readErrors: readErrors,
-		instDesc:   prometheus.NewDesc("osb_active_instances", "Currently known service instances.", nil, nil),
-		bindDesc:   prometheus.NewDesc("osb_active_bindings", "Currently known service bindings.", nil, nil),
-		timeout:    stateReadTimeout,
+		instDesc: prometheus.NewDesc("osb_active_instances",
+			"Currently known service instances, by offering and plan.",
+			[]string{"service_id", "plan_id"}, nil),
+		bindDesc: prometheus.NewDesc("osb_active_bindings",
+			"Currently known service bindings, by offering.",
+			[]string{"service_id"}, nil),
+		timeout: stateReadTimeout,
 	}
 }
 
@@ -206,15 +210,24 @@ func (s *stateCollector) Collect(ch chan<- prometheus.Metric) {
 	ctx, cancel := context.WithTimeout(context.Background(), s.timeout)
 	defer cancel()
 
-	if n, err := s.counter.CountInstances(ctx); err != nil {
+	// Nur was gezaehlt wurde, wird gemeldet. Ein Plan, der auf 0 faellt,
+	// verschwindet damit aus der Ausgabe statt eine alte Zahl zu behalten -
+	// sonst zeigte ein Graph dauerhaft Instanzen, die es nicht gibt.
+	if counts, err := s.counter.CountInstances(ctx); err != nil {
 		s.readErrors.Inc()
 	} else {
-		ch <- prometheus.MustNewConstMetric(s.instDesc, prometheus.GaugeValue, float64(n))
+		for key, n := range counts {
+			ch <- prometheus.MustNewConstMetric(s.instDesc, prometheus.GaugeValue,
+				float64(n), key.ServiceID, key.PlanID)
+		}
 	}
-	if n, err := s.counter.CountBindings(ctx); err != nil {
+	if counts, err := s.counter.CountBindings(ctx); err != nil {
 		s.readErrors.Inc()
 	} else {
-		ch <- prometheus.MustNewConstMetric(s.bindDesc, prometheus.GaugeValue, float64(n))
+		for serviceID, n := range counts {
+			ch <- prometheus.MustNewConstMetric(s.bindDesc, prometheus.GaugeValue,
+				float64(n), serviceID)
+		}
 	}
 }
 

@@ -29,8 +29,18 @@ type StateStore interface {
 // nicht durch diesen Prozess ging. Der Zustand liegt in CRDs, nicht im
 // Prozess; also fragt man ihn.
 type Counter interface {
-	CountInstances(ctx context.Context) (int, error)
-	CountBindings(ctx context.Context) (int, error)
+	// CountInstances zaehlt je Angebot und Plan. Die blosse Gesamtzahl sagt
+	// einem Betreiber wenig - die Frage ist "wovon wie viele", also welches
+	// Angebot genutzt wird und wo Kosten entstehen.
+	CountInstances(ctx context.Context) (map[InstanceKey]int, error)
+	// CountBindings zaehlt je Angebot.
+	CountBindings(ctx context.Context) (map[string]int, error)
+}
+
+// InstanceKey ist die Aufschluesselung des Bestands: Angebot und Plan.
+type InstanceKey struct {
+	ServiceID string
+	PlanID    string
 }
 
 // memoryStateStore is a thread-safe in-memory StateStore.
@@ -41,16 +51,24 @@ type memoryStateStore struct {
 }
 
 // CountInstances und CountBindings erfuellen Counter.
-func (m *memoryStateStore) CountInstances(context.Context) (int, error) {
+func (m *memoryStateStore) CountInstances(context.Context) (map[InstanceKey]int, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return len(m.instances), nil
+	out := map[InstanceKey]int{}
+	for _, i := range m.instances {
+		out[InstanceKey{ServiceID: i.ServiceID, PlanID: i.PlanID}]++
+	}
+	return out, nil
 }
 
-func (m *memoryStateStore) CountBindings(context.Context) (int, error) {
+func (m *memoryStateStore) CountBindings(context.Context) (map[string]int, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return len(m.bindings), nil
+	out := map[string]int{}
+	for _, b := range m.bindings {
+		out[b.ServiceID]++
+	}
+	return out, nil
 }
 
 // NewInMemoryStateStore returns an empty in-memory StateStore.
