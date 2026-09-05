@@ -391,3 +391,34 @@ func (o *OperatorClient) DeleteSecret(ctx context.Context, namespace, name strin
 	}
 	return nil
 }
+
+// LabelCR ergaenzt Labels an einem bestehenden Objekt, ohne die uebrigen zu
+// verlieren. Gebraucht wird das fuer den Loeschschutz: eine stehengelassene
+// Ressource muss sagen, zu welcher Instanz sie gehoerte.
+//
+// Mit Retry, aus demselben Grund wie beim Apply: zwischen Lesen und Schreiben
+// fasst der Operator sein eigenes Objekt an, und ohne Wiederholung scheitert
+// jeder Schreibvorgang, der kurz danach kommt, an einem
+// resourceVersion-Konflikt.
+func (o *OperatorClient) LabelCR(ctx context.Context, apiVersion, kind, namespace, name string, labels map[string]string) error {
+	gv, err := schema.ParseGroupVersion(apiVersion)
+	if err != nil {
+		return fmt.Errorf("parse apiVersion %q: %w", apiVersion, err)
+	}
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		obj := &unstructured.Unstructured{}
+		obj.SetGroupVersionKind(gv.WithKind(kind))
+		if err := o.Client.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, obj); err != nil {
+			return err
+		}
+		merged := obj.GetLabels()
+		if merged == nil {
+			merged = map[string]string{}
+		}
+		for k, v := range labels {
+			merged[k] = v
+		}
+		obj.SetLabels(merged)
+		return o.Client.Update(ctx, obj)
+	})
+}

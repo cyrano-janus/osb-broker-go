@@ -74,13 +74,17 @@ definitions:
                 storageSize: {max: 5Gi}
             - id: plan-large-0000-0000-000000000002
               name: large
-              description: "HA, 3 instances, 10Gi storage"
+              description: "HA, 3 instances, 10Gi storage. Deleting the service keeps the data."
               params:
                 storageSize: 10Gi
                 instances: 3
               allowedParameters: [storageSize]
               parameterLimits:
                 storageSize: {max: 50Gi}
+              # Ein Produktionsplan verliert seine Daten nicht auf einen
+              # Tastendruck. Der Broker gibt die Instanz auf, der Cluster bleibt
+              # stehen und traegt osb.io/retained-instance.
+              retainOnDeprovision: true
 
         provision:
           apiVersion: postgresql.cnpg.io/v1
@@ -136,12 +140,16 @@ definitions:
                 storageSize: {max: 5Gi}
             - id: plan-rabbit-prod-0000-0000-000000000002
               name: prod
-              description: "3-node HA cluster, 10Gi storage"
+              description: "3-node HA cluster, 10Gi storage. Deleting the service keeps the data."
               params:
                 replicas: 3
                 storageSize: 10Gi
               parameterLimits:
                 storageSize: {max: 50Gi}
+              # Wie beim Produktionsplan von CNPG: die Instanz wird aufgegeben, der
+              # Cluster bleibt stehen und ist ueber osb.io/retained-instance
+              # auffindbar.
+              retainOnDeprovision: true
               allowedParameters: [storageSize]
 
         provision:

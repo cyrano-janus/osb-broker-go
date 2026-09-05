@@ -186,6 +186,11 @@
                   }
                 ]
               },
+              "retainOnDeprovision": {
+                "type": "boolean",
+                "default": false,
+                "description": "Leave the operator's resources standing when an instance of this plan is deprovisioned. The broker still gives the instance up - the record is removed, deprovision is 200, a second one is 410 - but the data survives and the resources are labelled osb.io/retained-instance and osb.io/retained-at so an operator can find them. OSB carries no way to confirm a deprovision, so the plan decides."
+              },
               "free": {
                 "type": "boolean",
                 "default": true

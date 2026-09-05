@@ -226,6 +226,17 @@ func (e *Engine) DeprovisionInstance(ctx context.Context, sd *ServiceDefinition,
 		rec = r
 	}
 
+	// Loeschschutz: der Plan behaelt seine Ressourcen. Der Broker gibt die
+	// Instanz trotzdem auf - OSB kennt kein "teilweise geloescht", und die
+	// Plattform muss das Deprovision abschliessen koennen.
+	if e.planRetains(sd, rec) {
+		markErr := e.markRetained(ctx, namespace, instanceID, retainableRefs(sd, rec, safeName, namespace))
+		if err := e.forgetInstance(ctx, instanceID); err != nil {
+			return err
+		}
+		return markErr
+	}
+
 	switch {
 	case rec != nil && len(rec.AppliedRefs) > 0:
 		// Multi-doc: delete every object by its own GVK.
@@ -246,12 +257,41 @@ func (e *Engine) DeprovisionInstance(ctx context.Context, sd *ServiceDefinition,
 		}
 	}
 
-	if e.reg != nil {
-		if err := e.reg.DeleteInstance(ctx, instanceID); err != nil {
-			return fmt.Errorf("remove instance record: %w", err)
-		}
+	return e.forgetInstance(ctx, instanceID)
+}
+
+// forgetInstance loescht den Datensatz. Ohne Registry gibt es nichts zu tun.
+func (e *Engine) forgetInstance(ctx context.Context, instanceID string) error {
+	if e.reg == nil {
+		return nil
+	}
+	if err := e.reg.DeleteInstance(ctx, instanceID); err != nil {
+		return fmt.Errorf("remove instance record: %w", err)
 	}
 	return nil
+}
+
+// retainableRefs liefert die Objekte, die beim Loeschschutz stehen bleiben -
+// dieselbe Dreistufigkeit wie beim Loeschen, damit auch Datensaetze ohne
+// Referenzliste erfasst werden.
+func retainableRefs(sd *ServiceDefinition, rec *InstanceRecord, safeName, namespace string) []ObjectRef {
+	if rec != nil && len(rec.AppliedRefs) > 0 {
+		return rec.AppliedRefs
+	}
+	names := []string{safeName}
+	if rec != nil && len(rec.AppliedObjects) > 0 {
+		names = rec.AppliedObjects
+	}
+	out := make([]ObjectRef, 0, len(names))
+	for _, n := range names {
+		out = append(out, ObjectRef{
+			APIVersion: sd.Spec.Provision.APIVersion,
+			Kind:       sd.Spec.Provision.Kind,
+			Namespace:  namespace,
+			Name:       n,
+		})
+	}
+	return out
 }
 
 // LastOperation maps CR readiness to OSB operation state:

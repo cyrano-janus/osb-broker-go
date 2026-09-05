@@ -66,7 +66,19 @@ type Plan struct {
 	// Die Grenzen gelten fuer Provision und Update gleichermassen und werden
 	// zusaetzlich als OSB-Plan-Schema im Katalog veroeffentlicht.
 	ParameterLimits map[string]ParameterLimit `json:"parameterLimits,omitempty"`
-	Free            *bool                     `json:"free,omitempty"`
+	// RetainOnDeprovision laesst die Ressourcen des Operators stehen, wenn
+	// eine Instanz dieses Plans aufgegeben wird.
+	//
+	// `cf delete-service` loescht sonst sofort. Fuer einen Entwicklungsplan
+	// ist das richtig; fuer einen Produktionsplan ist es die unwiderrufliche
+	// Loeschung einer Datenbank auf einen Tastendruck - und OSB kennt fuer das
+	// Deprovision keinen Weg, eine Bestaetigung zu uebermitteln.
+	//
+	// Der Broker gibt die Instanz trotzdem auf: der Datensatz verschwindet,
+	// das Deprovision ist 200, ein zweites 410. Nur die Daten bleiben, und die
+	// Ressourcen werden markiert, damit ein Betreiber sie findet.
+	RetainOnDeprovision bool  `json:"retainOnDeprovision,omitempty"`
+	Free                *bool `json:"free,omitempty"`
 }
 
 // ParameterLimit begrenzt einen einzelnen Benutzerparameter.

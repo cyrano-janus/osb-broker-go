@@ -28,12 +28,16 @@ spec:
           storageSize: {max: 5Gi}
       - id: plan-rabbit-prod-0000-0000-000000000002
         name: prod
-        description: "3-node HA cluster, 10Gi storage"
+        description: "3-node HA cluster, 10Gi storage. Deleting the service keeps the data."
         params:
           replicas: 3
           storageSize: 10Gi
         parameterLimits:
           storageSize: {max: 50Gi}
+        # Wie beim Produktionsplan von CNPG: die Instanz wird aufgegeben, der
+        # Cluster bleibt stehen und ist ueber osb.io/retained-instance
+        # auffindbar.
+        retainOnDeprovision: true
         allowedParameters: [storageSize]
 
   provision:
