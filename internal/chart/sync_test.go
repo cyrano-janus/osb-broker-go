@@ -136,21 +136,119 @@ func TestChart_EingebetteteDefinitionenSindZeichengleich(t *testing.T) {
 func provisionGroups(t *testing.T) map[string]string {
 	t.Helper()
 	out := map[string]string{}
+	for group, defs := range provisionResources(t) {
+		for _, d := range defs {
+			out[group] = d.definition
+			break
+		}
+	}
+	return out
+}
+
+// templateKind ist ein Objekt, das eine Vorlage anlegt.
+type templateKind struct {
+	kind       string
+	definition string
+}
+
+// provisionResources liest, was die Vorlagen wirklich anlegen - nicht nur
+// spec.provision.apiVersion.
+//
+// Eine Vorlage darf mehrere Dokumente rendern, und ein zweites Dokument darf
+// eine andere Art tragen: cnpg-pgvector legt neben dem Cluster eine Database
+// an, die die Erweiterung aktiviert. Wer nur den Vorgabewert liest, uebersieht
+// genau das - und ein fehlendes Recht faellt dann beim ersten Provision auf,
+// also beim Kunden.
+func provisionResources(t *testing.T) map[string][]templateKind {
+	t.Helper()
+	out := map[string][]templateKind{}
 	for name, body := range shippedDefinitions(t) {
 		var d struct {
 			Spec struct {
 				Provision struct {
 					APIVersion string `yaml:"apiVersion"`
+					Kind       string `yaml:"kind"`
+					Template   string `yaml:"template"`
 				} `yaml:"provision"`
 			} `yaml:"spec"`
 		}
 		require.NoError(t, yaml.Unmarshal([]byte(body), &d), name)
-		av := d.Spec.Provision.APIVersion
-		require.NotEmpty(t, av, "%s: spec.provision.apiVersion fehlt", name)
-		group, _, _ := strings.Cut(av, "/")
-		out[group] = name
+		pv := d.Spec.Provision
+		require.NotEmpty(t, pv.APIVersion, "%s: spec.provision.apiVersion fehlt", name)
+
+		seen := map[string]bool{}
+		add := func(apiVersion, kind string) {
+			if apiVersion == "" || kind == "" || seen[apiVersion+"/"+kind] {
+				return
+			}
+			seen[apiVersion+"/"+kind] = true
+			group, _, _ := strings.Cut(apiVersion, "/")
+			out[group] = append(out[group], templateKind{kind: kind, definition: name})
+		}
+		add(pv.APIVersion, pv.Kind)
+
+		// Jedes Dokument der Vorlage. Ein Dokument, das apiVersion oder kind
+		// weglaesst, erbt den Vorgabewert - der steht schon drin.
+		for _, doc := range strings.Split(pv.Template, "\n---") {
+			av := firstYAMLValue(doc, "apiVersion:")
+			k := firstYAMLValue(doc, "kind:")
+			if av != "" && k != "" {
+				add(av, k)
+			}
+		}
 	}
 	return out
+}
+
+// firstYAMLValue liest den ersten Wert eines Schluessels auf oberster Ebene.
+// Kein YAML-Parser: die Vorlage ist ein Go-Template und vor dem Rendern kein
+// gueltiges YAML.
+func firstYAMLValue(doc, key string) string {
+	for _, line := range strings.Split(doc, "\n") {
+		if strings.HasPrefix(line, key) {
+			return strings.TrimSpace(strings.Trim(strings.TrimPrefix(line, key), `"'`))
+		}
+	}
+	return ""
+}
+
+// chartRBACResources liefert je Gruppe die gewaehrten Ressourcen.
+func chartRBACResources(t *testing.T) map[string]map[string]bool {
+	t.Helper()
+	var v struct {
+		RBAC struct {
+			OperatorCRDs []struct {
+				Group     string   `yaml:"group"`
+				Resources []string `yaml:"resources"`
+			} `yaml:"operatorCRDs"`
+		} `yaml:"rbac"`
+	}
+	require.NoError(t, yaml.Unmarshal([]byte(read(t, filepath.Join(chartDir, "values.yaml"))), &v))
+	out := map[string]map[string]bool{}
+	for _, e := range v.RBAC.OperatorCRDs {
+		if out[e.Group] == nil {
+			out[e.Group] = map[string]bool{}
+		}
+		for _, r := range e.Resources {
+			out[e.Group][r] = true
+		}
+	}
+	return out
+}
+
+// Nicht nur die Gruppe, auch die Ressource. Ein Recht auf `clusters` deckt
+// keine `databases`, und der Unterschied faellt sonst erst beim Provision auf.
+func TestChart_RBACDecktJedesAngelegteObjektAb(t *testing.T) {
+	granted := chartRBACResources(t)
+
+	for group, kinds := range provisionResources(t) {
+		for _, tk := range kinds {
+			resource := strings.ToLower(tk.kind) + "s"
+			assert.True(t, granted[group][resource],
+				"rbac.operatorCRDs gewaehrt %q in %q nicht - %s legt es an, das Provision waere 403",
+				resource, group, tk.definition)
+		}
+	}
 }
 
 func chartRBACGroups(t *testing.T) map[string]bool {

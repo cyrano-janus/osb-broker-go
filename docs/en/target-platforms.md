@@ -133,7 +133,9 @@ promise the broker does not keep otherwise surfaces at the user.
 |---|---|
 | OSB 2.17 lifecycle over HTTP | integration test covers catalog → provision → last_operation → bind → unbind → deprovision |
 | Registration, marketplace, `cf create-service` | against Korifi on kind |
+| Multi-document manifest end to end | `cnpg-pgvector` creates a Cluster **and** a `Database`; `status.extensions[vector].applied=true`, in the database `pg_extension` shows `vector 0.8.1` on PostgreSQL 18.6, and a `<->` comparison returns the neighbour |
 | Generic engine end to end | `cf create-service cnpg-postgresql large` creates a real CloudNativePG cluster (3 instances, 10Gi); `psql` in the pod answers, credentials from the operator secret |
+| Multi-document manifest end to end | `cnpg-pgvector` creates a Cluster **and** a `Database`; `status.extensions[vector].applied=true`, in the database `pg_extension` shows `vector 0.8.1` on PostgreSQL 18.6, and a `<->` comparison returns the neighbour |
 | Restart persistence | instances and bindings survive kill and rescheduling |
 | Asynchronous provisioning | `202` with `operation`, `last_operation` reports `in progress` until the operator is done, then `succeeded`; without `accepts_incomplete=true` the broker answers `422 AsyncRequired` |
 | Complete binding lifecycle | bind `201`, repeat `200` with the same credentials, `GET binding` `200`, unbind `200`, unbind of an unknown binding `410` |

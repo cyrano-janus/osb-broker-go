@@ -486,6 +486,32 @@ So that nobody loses time over them:
 |---|---|---|
 | `metadata.annotations` | control over behaviour | the Go type only knows `name` |
 
+### What an offering owes the developer
+
+The catalogue is the only thing a developer sees of the service before typing
+`cf create-service`. What is not there they have to look up in someone else's
+repository — or provision and find out.
+
+`cnpg-pgvector` is the example to read this off. Its display block names four
+things you would otherwise only learn by looking:
+
+| What the developer needs to know | Where it lives |
+|---|---|
+| **Which versions.** PostgreSQL 18, pgvector 0.8.1 | `offering.metadata.longDescription` |
+| **What is already done.** `CREATE EXTENSION` has run; `vector` and `<->` are ready in `app` | same place |
+| **What it is not.** Not a second system — same credentials, same client library | same place |
+| **When not to take it.** No vectors needed means `cnpg-postgresql`; this offering is tied to PostgreSQL 18 | same place |
+| **What the plan costs and gives.** Instances, storage, ceiling, delete behaviour | `plan.metadata.bullets` |
+
+**The rule behind it:** an offering describes the *promise*, not the plumbing.
+"Run by CloudNativePG" belongs in, because it says who handles failover and
+maintenance. The name of the extension image does not — it changes, and the
+developer can do nothing with it.
+
+**And what the plan enforces it must also state.** `parameterLimits` reaches the
+catalogue as a plan schema; put the ceiling in the `bullets` too and a human
+sees it before running into it.
+
 ## Reconciling existing instances
 
 The broker reads the definitions **at start-up**. A changed definition therefore

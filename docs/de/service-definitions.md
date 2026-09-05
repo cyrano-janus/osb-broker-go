@@ -494,6 +494,32 @@ Damit niemand Zeit damit verliert:
 |---|---|---|
 | `metadata.annotations` | Steuerung des Verhaltens | der Go-Typ kennt nur `name` |
 
+### Was ein Angebot dem Entwickler schuldet
+
+Der Katalog ist das Einzige, was ein Entwickler vom Dienst sieht, bevor er
+`cf create-service` tippt. Was dort nicht steht, muss er in einem fremden
+Repositorium suchen — oder er provisioniert und probiert.
+
+`cnpg-pgvector` ist das Beispiel, an dem sich das ablesen lässt. Der
+Anzeigeblock nennt vier Dinge, die man sonst nur durch Nachsehen erfährt:
+
+| Was der Entwickler wissen muss | Wo es steht |
+|---|---|
+| **Welche Version.** PostgreSQL 18, pgvector 0.8.1 | `offering.metadata.longDescription` |
+| **Was schon getan ist.** `CREATE EXTENSION` ist gelaufen, `vector` und `<->` stehen in `app` bereit | ebenda |
+| **Was es nicht ist.** Kein zweites System — dieselben Zugangsdaten, dieselbe Clientbibliothek | ebenda |
+| **Wann man es nicht nimmt.** Wer keine Vektoren braucht, nimmt `cnpg-postgresql`; dieses Angebot ist an PostgreSQL 18 gebunden | ebenda |
+| **Was der Plan kostet und hergibt.** Instanzen, Speicher, Obergrenze, Löschverhalten | `plan.metadata.bullets` |
+
+**Die Regel dahinter:** ein Angebot beschreibt die *Zusage*, nicht die Technik.
+„Betrieben von CloudNativePG" gehört hinein, weil es sagt, wer Failover und
+Wartung übernimmt. Der Name des Erweiterungsimages gehört nicht hinein — er
+ändert sich, und der Entwickler kann damit nichts anfangen.
+
+**Und was der Plan durchsetzt, muss er auch sagen.** `parameterLimits` steht als
+Plan-Schema im Katalog; steht die Obergrenze zusätzlich in den `bullets`, sieht
+sie ein Mensch, bevor er sie überschreitet.
+
 ## Der Abgleich bestehender Instanzen
 
 Der Broker liest die Definitionen **beim Start**. Eine geänderte Definition

@@ -138,6 +138,7 @@ Anwender auf.
 | OSB-2.17-Lebenszyklus über HTTP | Integrationstest deckt catalog → provision → last_operation → bind → unbind → deprovision ab |
 | Registrierung, Marketplace, `cf create-service` | gegen Korifi auf kind |
 | Generic Engine Ende zu Ende | `cf create-service cnpg-postgresql large` erzeugt einen echten CloudNativePG-Cluster (3 Instanzen, 10Gi); `psql` im Pod antwortet, Credentials aus dem Operator-Secret |
+| Mehrteiliges Manifest Ende zu Ende | `cnpg-pgvector` legt Cluster **und** `Database` an; `status.extensions[vector].applied=true`, in der Datenbank `pg_extension` = `vector 0.8.1` auf PostgreSQL 18.6, ein `<->`-Vergleich liefert den Nachbarn |
 | Neustart-Persistenz | Instanzen und Bindings überleben Kill und Rescheduling |
 | Asynchrones Provision | `202` mit `operation`, `last_operation` meldet `in progress` bis der Operator fertig ist, danach `succeeded`; ohne `accepts_incomplete=true` antwortet der Broker `422 AsyncRequired` |
 | Binding-Lebenszyklus vollständig | Bind `201`, Wiederholung `200` mit denselben Zugangsdaten, `GET binding` `200`, Unbind `200`, Unbind einer unbekannten Binding `410` |

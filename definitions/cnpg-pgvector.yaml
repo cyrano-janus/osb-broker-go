@@ -1,0 +1,125 @@
+apiVersion: broker.osb.io/v1alpha1
+kind: ServiceDefinition
+metadata:
+  name: cnpg-pgvector
+spec:
+  offering:
+    id: b3c7d1e2-pgvc-0000-0000-000000000001
+    name: cnpg-pgvector
+    description: "PostgreSQL 18 with the pgvector extension already enabled - vector similarity search for AI workloads"
+    bindable: true
+    tags:
+      - postgresql
+      - vector
+      - embeddings
+      - ai
+      - cnpg
+    # Was ein Entwickler bekommt, steht hier - nicht in der Doku eines
+    # anderen Repositoriums. Der Katalog ist das Einzige, was er sieht, bevor
+    # er `cf create-service` tippt.
+    metadata:
+      displayName: "PostgreSQL + pgvector"
+      longDescription: >-
+        Ein PostgreSQL-18-Cluster von CloudNativePG mit pgvector 0.8.1. Die
+        Erweiterung ist beim Provisionieren bereits aktiviert - CREATE
+        EXTENSION ist nicht noetig, der Typ `vector` und die Operatoren
+        `<->`, `<#>` und `<=>` stehen in der Datenbank `app` sofort zur
+        Verfuegung. Im Uebrigen ist es ein vollwertiges PostgreSQL: dieselben
+        Zugangsdaten, dieselbe Clientbibliothek, kein zweites System neben der
+        relationalen Datenbank. Wer keine Vektoren braucht, nimmt
+        cnpg-postgresql - dieses Angebot ist an PostgreSQL 18 gebunden.
+      providerDisplayName: "CloudNativePG"
+      documentationUrl: "https://github.com/pgvector/pgvector#getting-started"
+      supportUrl: "https://github.com/cloudnative-pg/cloudnative-pg/issues"
+    plans:
+      - id: plan-pgvector-small-0000-000000000001
+        name: small
+        metadata:
+          displayName: "Small"
+          bullets:
+            - "1 Instanz, kein Failover"
+            - "pgvector 0.8.1 in der Datenbank app aktiviert"
+            - "5Gi Speicher, bis 20Gi einstellbar"
+            - "Loeschen entfernt die Daten samt Indizes"
+        description: "Single instance, 5Gi storage, pgvector enabled"
+        params:
+          storageSize: 5Gi
+          instances: 1
+        allowedParameters: [storageSize]
+        # Ein HNSW-Index liegt im Speicher und auf der Platte; Vektordaten
+        # wachsen schneller als der Betreiber schaetzt. Die Grenze steht
+        # deshalb hoeher als beim relationalen Plan gleichen Namens.
+        parameterLimits:
+          storageSize: {max: 20Gi}
+      - id: plan-pgvector-large-0000-000000000002
+        name: large
+        metadata:
+          displayName: "Large"
+          bullets:
+            - "3 Instanzen mit Failover"
+            - "pgvector 0.8.1 in der Datenbank app aktiviert"
+            - "50Gi Speicher, bis 200Gi einstellbar"
+            - "Loeschen laesst die Daten stehen"
+        description: "HA, 3 instances, 50Gi storage, pgvector enabled. Deleting the service keeps the data."
+        params:
+          storageSize: 50Gi
+          instances: 3
+        allowedParameters: [storageSize]
+        parameterLimits:
+          storageSize: {max: 200Gi}
+        retainOnDeprovision: true
+
+  provision:
+    apiVersion: postgresql.cnpg.io/v1
+    kind: Cluster
+    # Zwei Dokumente. Das Cluster haengt die Erweiterung als ImageVolume ein,
+    # die Database aktiviert sie - ohne das zweite waere die Bibliothek zwar
+    # geladen, `CREATE EXTENSION vector` aber noch nicht gelaufen, und der Typ
+    # `vector` existierte nicht.
+    #
+    # Beides braucht PostgreSQL 18 (extension_control_path) und Kubernetes
+    # 1.33 (ImageVolume). Das Basisimage ist deshalb ausdruecklich gesetzt und
+    # nicht dem Operator ueberlassen: eine Definition, die stillschweigend auf
+    # einer aelteren Nebenversion landet, faellt erst beim Provision auf.
+    template: |
+      apiVersion: postgresql.cnpg.io/v1
+      kind: Cluster
+      metadata:
+        name: {{ .safeName }}
+        labels:
+          app.kubernetes.io/managed-by: osb-broker-go
+          osb.io/instance-id: {{ .instanceID }}
+      spec:
+        imageName: ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie
+        instances: {{ .plan.instances }}
+        storage:
+          size: {{ .plan.storageSize }}
+        postgresql:
+          extensions:
+            - name: pgvector
+              image:
+                reference: ghcr.io/cloudnative-pg/pgvector:0.8.1-18-trixie
+      ---
+      apiVersion: postgresql.cnpg.io/v1
+      kind: Database
+      metadata:
+        name: {{ .safeName }}-app
+        labels:
+          app.kubernetes.io/managed-by: osb-broker-go
+          osb.io/instance-id: {{ .instanceID }}
+      spec:
+        name: app
+        owner: app
+        cluster:
+          name: {{ .safeName }}
+        extensions:
+          - name: vector
+            ensure: present
+
+  readiness:
+    statusJSONPath: 'status.conditions.#(type=="Ready").status'
+    expectedValue: "True"
+    timeoutSeconds: 600
+
+  bind:
+    credentialsFromSecret: "{{ .safeName }}-app"

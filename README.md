@@ -10,11 +10,17 @@ One hardened process exposes Kubernetes operators through the Open Service
 Broker API. A new service is a YAML file, not a new broker: no code per
 service, no external database.
 
-**Three services are offered** — PostgreSQL, RabbitMQ and SeaweedFS — two of
-them proven end to end against a running operator. The catalogue grows along a
-named demand, not along what is possible: a service is added when a concrete
-workload asks for it **and** its operator satisfies the three-part pattern. Why
-that is so is in [ADR 0008](docs/en/adr/0008-depth-over-breadth.md).
+**Four services are offered** — PostgreSQL, PostgreSQL with pgvector, RabbitMQ
+and SeaweedFS — three of them proven end to end against a running operator. The
+catalogue grows along a named demand, not along what is possible: a service is
+added when a concrete workload asks for it **and** its operator satisfies the
+three-part pattern. Why that is so is in
+[ADR 0008](docs/en/adr/0008-depth-over-breadth.md).
+
+**Every offering states what it delivers.** `cnpg-pgvector`, for instance, names
+the PostgreSQL version, the pgvector version and the fact that the extension is
+already enabled — right there in the catalogue, so a developer does not have to
+look it up in someone else's repository.
 
 The effort therefore goes into depth: a plan **enforces** its sizes
 (`parameterLimits`, published as the plan's OSB schema too), a production plan

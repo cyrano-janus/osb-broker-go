@@ -127,7 +127,9 @@ rbac:
   # Deshalb bleibt die Liste handgepflegt.
   operatorCRDs:
     - group: postgresql.cnpg.io
-      resources: [clusters]
+      # databases: cnpg-pgvector legt neben dem Cluster eine Database an, die
+      # die Erweiterung aktiviert. Ein Recht auf clusters deckt sie nicht.
+      resources: [clusters, databases]
       verbs: [create, get, list, update, delete]
     - group: rabbitmq.com
       resources: [rabbitmqclusters]
