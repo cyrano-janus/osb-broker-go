@@ -38,8 +38,14 @@ tls:
     issuerRef:
       kind: ClusterIssuer
       name: ""             # Pflichtangabe, sonst schlägt das Rendern fehl
+    # Beide leer lassen bei einem ACME-Issuer: dort bestimmt der ACME-Server
+    # die Laufzeit, eine Vorgabe hier gilt nicht - und renewBefore wird
+    # ungueltig, sobald er kuerzer ausstellt als die Vorgabe.
     duration: 2160h        # 90 Tage
     renewBefore: 360h      # 15 Tage vorher erneuern
+    # Der Name, unter dem die PLATTFORM den Broker erreicht - nicht der
+    # Service-DNS-Name im Cluster. Bei einem ACME-Issuer muss er ausserdem
+    # einer sein, fuer den das ACME-Konto autorisiert ist.
     dnsNames: []           # leer = <fullname>[.namespace[.svc[.cluster.local]]]
 
 # Authentifizierung. Jede aktivierte Methode genügt für sich; Cloud Foundry

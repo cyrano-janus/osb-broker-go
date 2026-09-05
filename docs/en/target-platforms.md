@@ -62,6 +62,42 @@ Cloud Foundry a BOSH trusted certificate; or mTLS in both directions where the
 platform issues client certificates. The broker demands none in particular.
 That does not change the code, but it changes the operating instructions.
 
+### Where the broker gets its certificate
+
+It does not fetch one. It reads `TLS_CERT_FILE` and `TLS_KEY_FILE` from disk and
+reloads them every `TLS_RELOAD_INTERVAL` — a renewal takes effect without a
+restart. Who writes the files is none of its business.
+
+In the chart cert-manager writes them, and `tls.certManager.issuerRef` points at
+**any** issuer. An ACME issuer therefore works with no code change:
+
+```yaml
+tls:
+  certManager:
+    issuerRef: {kind: ClusterIssuer, name: acme-dns01}
+    duration: ""          # ACME: the server decides the lifetime
+    renewBefore: ""       # invalid as soon as it issues shorter than this
+    dnsNames:
+      - osb-broker.svc.example.com
+```
+
+Three things to watch:
+
+1. **`dnsNames` is the name the platform reaches the broker by** — not the
+   in-cluster service DNS name. Cloud Foundry validates the certificate against
+   the URL from `cf create-service-broker`. With ACME it must also be a name the
+   ACME account is authorised for.
+2. **HTTP-01 fails for an internal broker.** The challenge requires the ACME
+   server to reach `http://<name>/.well-known/acme-challenge/…`. Behind a
+   firewall that cannot work — **DNS-01** only needs the DNS provider's API.
+3. **Leave `duration` and `renewBefore` empty.** With ACME the server decides
+   the lifetime; a value in the `Certificate` does not apply there, and a
+   `renewBefore` longer than the actual lifetime makes the `Certificate`
+   invalid.
+
+That also settles the [trust anchor](adr/0009-deployment-model.md) via route 1:
+an ACME certificate comes from a CA the platform already trusts.
+
 ## External marketplaces
 
 The third target case is the one where the broker is not registered with Cloud

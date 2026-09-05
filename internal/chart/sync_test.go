@@ -203,11 +203,16 @@ func helmAvailable() bool {
 }
 
 func helmTemplate(t *testing.T, valuesFiles ...string) (string, error) {
+	return helmTemplateArgs(t, valuesFiles)
+}
+
+func helmTemplateArgs(t *testing.T, valuesFiles []string, extra ...string) (string, error) {
 	t.Helper()
 	args := []string{"template", "guard", chartDir}
 	for _, f := range valuesFiles {
 		args = append(args, "-f", filepath.Join(chartDir, f))
 	}
+	args = append(args, extra...)
 	cmd := exec.Command("helm", args...)
 	cmd.Dir = repoRoot
 	out, err := cmd.CombinedOutput()
@@ -307,4 +312,25 @@ func TestChart_DieImageVersionStehtAnEinerStelle(t *testing.T) {
 			assert.Equal(t, want, v, "%s pinnt eine andere Version als Chart.yaml appVersion", f)
 		}
 	}
+}
+
+// cert-manager mit einem ACME-Issuer bestimmt die Laufzeit nicht selbst: der
+// ACME-Server tut es. Ein fest gerendertes `duration` ist dort eine Angabe,
+// die nicht gilt - und `renewBefore` wird ungültig, sobald der Server kürzer
+// ausstellt als die Vorgabe (Let's Encrypt bietet inzwischen sehr kurze
+// Laufzeiten an). Beide Felder müssen weglassbar sein.
+func TestChart_ZertifikatsLaufzeitIstWeglassbar(t *testing.T) {
+	if !helmAvailable() {
+		t.Skip("helm ist nicht installiert")
+	}
+	out, err := helmTemplateArgs(t, []string{"values-kind.yaml"},
+		"--set", "tls.certManager.duration=",
+		"--set", "tls.certManager.renewBefore=")
+	require.NoError(t, err, out)
+
+	cert := out[strings.Index(out, "kind: Certificate"):]
+	assert.NotContains(t, cert, "duration:",
+		"ein ACME-Issuer bestimmt die Laufzeit nicht - eine gerenderte Angabe gilt dort nicht")
+	assert.NotContains(t, cert, "renewBefore:")
+	assert.Contains(t, cert, "issuerRef:", "das Certificate muss trotzdem vollstaendig sein")
 }

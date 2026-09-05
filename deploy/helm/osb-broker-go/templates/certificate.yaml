@@ -13,8 +13,18 @@ spec:
   issuerRef:
     kind: {{ .Values.tls.certManager.issuerRef.kind }}
     name: {{ required "tls.certManager.issuerRef.name is required when cert-manager issues the broker certificate" .Values.tls.certManager.issuerRef.name }}
-  duration: {{ .Values.tls.certManager.duration }}
-  renewBefore: {{ .Values.tls.certManager.renewBefore }}
+  {{- /*
+    Beide weglassbar. Ein ACME-Issuer bestimmt die Laufzeit nicht selbst - der
+    ACME-Server tut es -, und `renewBefore` wird ungueltig, sobald der Server
+    kuerzer ausstellt als die Vorgabe. Leer lassen heisst: cert-manager
+    entscheidet.
+  */ -}}
+  {{- with .Values.tls.certManager.duration }}
+  duration: {{ . }}
+  {{- end }}
+  {{- with .Values.tls.certManager.renewBefore }}
+  renewBefore: {{ . }}
+  {{- end }}
   usages:
     - server auth
   privateKey:

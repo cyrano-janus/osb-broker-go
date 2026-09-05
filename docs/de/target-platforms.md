@@ -62,6 +62,45 @@ oder mTLS in beide Richtungen, wenn die Plattform Client-Zertifikate ausstellt.
 Der Broker verlangt keinen bestimmten. Das ändert nichts am Code, aber alles an
 der Betriebsanleitung.
 
+### Woher der Broker sein Zertifikat bekommt
+
+Er holt es nicht selbst. Er liest `TLS_CERT_FILE` und `TLS_KEY_FILE` von der
+Platte und lädt sie alle `TLS_RELOAD_INTERVAL` neu — eine Erneuerung wirkt
+ohne Neustart. Wer die Dateien schreibt, ist ihm gleich.
+
+Im Chart schreibt cert-manager sie, und `tls.certManager.issuerRef` zeigt auf
+**einen beliebigen** Issuer. Ein ACME-Issuer funktioniert damit ohne
+Codeänderung:
+
+```yaml
+tls:
+  certManager:
+    issuerRef: {kind: ClusterIssuer, name: acme-dns01}
+    duration: ""          # ACME: der Server bestimmt die Laufzeit
+    renewBefore: ""       # sonst ungültig, sobald er kürzer ausstellt
+    dnsNames:
+      - osb-broker.svc.example.com
+```
+
+Drei Dinge sind dabei zu beachten:
+
+1. **`dnsNames` ist der Name, unter dem die Plattform den Broker erreicht** —
+   nicht der Service-DNS-Name im Cluster. Cloud Foundry prüft das Zertifikat
+   gegen die URL aus `cf create-service-broker`. Bei ACME muss es außerdem ein
+   Name sein, für den das ACME-Konto autorisiert ist.
+2. **HTTP-01 scheitert an einem internen Broker.** Die Challenge verlangt, dass
+   der ACME-Server `http://<name>/.well-known/acme-challenge/…` erreicht. Für
+   einen Broker hinter der Firewall geht das nicht — **DNS-01** braucht nur die
+   API des DNS-Anbieters.
+3. **`duration` und `renewBefore` leer lassen.** Bei ACME bestimmt der Server
+   die Laufzeit; eine Vorgabe im `Certificate` gilt dort nicht, und ein
+   `renewBefore`, das länger ist als die tatsächliche Laufzeit, macht das
+   `Certificate` ungültig.
+
+Damit ist auch der [Vertrauensanker](adr/0009-deployment-model.md) auf Weg 1
+gelöst: ein ACME-Zertifikat kommt von einer CA, der die Plattform ohnehin
+traut.
+
 ## Externe Marketplaces
 
 Der dritte Zielfall ist der, bei dem der Broker nicht bei Cloud Foundry
