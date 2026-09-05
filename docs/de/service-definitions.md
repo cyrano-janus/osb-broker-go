@@ -70,6 +70,8 @@ schlimmer als einer, der gar nicht startet.
 | `description` | nein | Katalogtext. |
 | `bindable` | nein | Vorgabe **true**. |
 | `tags` | nein | Katalog-Tags. |
+| `metadata` | nein | **Der Anzeigeblock des Marktplatzes.** Siehe unten. |
+| `planUpdateable` | nein | Vorgabe **false**. Sagt zu, dass ein Benutzer den Plan wechseln darf. Siehe unten. |
 | `plans` | ja | Mindestens einer, IDs eindeutig. |
 
 ### Pläne
@@ -83,7 +85,8 @@ schlimmer als einer, der gar nicht startet.
 | `allowedParameters` | nein | Welche dieser Stellschrauben der Benutzer selbst setzen darf. Siehe unten. |
 | `parameterLimits` | nein | **Kontingente.** Grenzen für die Werte, die er setzen darf. Siehe unten. |
 | `retainOnDeprovision` | nein | Lässt die Ressourcen des Operators beim Löschen stehen. Siehe unten. |
-| `free` | nein | Wird gelesen und **nicht verwendet** — der Katalog setzt für jeden Plan hart `free: true`. |
+| `free` | nein | Vorgabe **true**. Steht immer im Katalog, auch als `false` — fehlt das Feld dort, gilt laut OSB `true`, und ein kostenpflichtiger Plan bewürbe sich als kostenlos. |
+| `metadata` | nein | **Der Anzeigeblock des Plans.** Siehe unten. |
 
 **Der Typ eines `params`-Wertes zählt.** YAML liest `1` als Zahl und `1Gi` als
 Zeichenkette. Ein Template wie `{{ if eq .plan.replicas 1 }}` vergleicht
@@ -176,6 +179,60 @@ mehr, hält er nicht zurück: das wäre eine Annahme über einen Plan, den er ni
 kennt, und jede verlorene Buchführung würde stillschweigend Ressourcen
 anhäufen. Und: schreibe die Absicht in die `description` — das ist der Text,
 den ein Benutzer in `cf marketplace` sieht.
+
+### Was der Katalog von sich aus sagt
+
+Der Katalog ist das Einzige, was ein Marktplatz vom Broker sieht, bevor er ihn
+benutzt. Eine Fähigkeit, die dort nicht steht, bleibt ungenutzt: die Plattform
+lehnt ab, bevor der Broker gefragt wird.
+
+**`metadata` ist der Anzeigeblock.** Ohne ihn zeigt eine Marktplatz-Kachel den
+technischen Namen und sonst nichts. OSB schreibt keine Schlüssel vor; Cloud
+Foundry und Tanzu Apps Manager lesen diese:
+
+```yaml
+offering:
+  metadata:
+    displayName: "PostgreSQL"
+    longDescription: >-
+      Ein PostgreSQL-Cluster, betrieben von CloudNativePG.
+    providerDisplayName: "CloudNativePG"
+    documentationUrl: "https://cloudnative-pg.io/documentation/"
+    supportUrl: "https://github.com/cloudnative-pg/cloudnative-pg/issues"
+  plans:
+    - id: …
+      metadata:
+        displayName: "Small"
+        bullets:
+          - "1 Instanz, kein Failover"
+```
+
+Der Block geht unverändert durch. Ein Broker, der ihn umformt, lieferte eine
+Kachel, die der Betreiber so nicht geschrieben hat.
+
+**`planUpdateable` sagt den Planwechsel zu — und ohne die Zusage lehnt der
+Broker ihn ab.** Er könnte ihn technisch: ein `PATCH` mit neuem `plan_id`
+rendert das Manifest mit den Werten des neuen Plans neu. Ob der Operator
+mitgeht, weiß nur die Definition — CloudNativePG lässt Speicher wachsen und
+nicht schrumpfen. Und ein Wechsel ändert mehr als Größen: er kann eine Instanz
+auf einen Plan mit `retainOnDeprovision` schieben, womit ein späteres
+Deprovision die Daten stehen lässt.
+
+Deshalb ist ein Wechsel ohne Zusage `422 PlanChangeNotSupported`. Derselbe Plan
+ist kein Wechsel, und ein `PATCH` ohne `plan_id` bleibt unberührt —
+`cf update-service -c` darf nicht daran scheitern, dass der Plan unveränderlich
+ist.
+
+**Zwei Felder stehen fest im Katalog und nicht in der Definition.**
+`instances_retrievable` und `bindings_retrievable` sind Aussagen über den
+Broker, nicht über den Operator: die GET-Endpunkte sind für jede Definition
+registriert. Ein Test hält die Zusage gegen die Route.
+
+**`maximum_polling_duration` je Plan stammt aus `readiness.timeoutSeconds`.**
+Der Broker gibt die Bereitschaftsprüfung nach dieser Frist auf. Fragt die
+Plattform danach weiter, wartet sie auf eine Antwort, die nicht mehr kommt;
+hört sie vorzeitig auf, meldet sie einen Fehlschlag, den der Broker nicht sieht.
+Zwei Zahlen für dieselbe Frist liefen auseinander, also ist es eine.
 
 ## `spec.provision`
 
@@ -435,7 +492,6 @@ Damit niemand Zeit damit verliert:
 
 | Feld | Was man erwartet | Was passiert |
 |---|---|---|
-| `plan.free` | freier oder kostenpflichtiger Plan | Katalog setzt hart `free: true` |
 | `metadata.annotations` | Steuerung des Verhaltens | der Go-Typ kennt nur `name` |
 
 ## Wenn eine Definition ausgerollt wird

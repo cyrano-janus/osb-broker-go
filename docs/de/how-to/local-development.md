@@ -215,7 +215,7 @@ unterscheiden.
 Prüfungen wirkungslos sind, ist von einem grünen nicht zu unterscheiden — es
 meldet dieselbe Farbe und sagt damit nichts. `osb-gate` führt den Beleg in
 `checks/mockbroker_test.go`: ein konformer httptest-Broker muss null
-Fehlschläge ergeben, jede der 20 Mutationen — genau eine verletzte Regel — muss
+Fehlschläge ergeben, jede der 31 Mutationen — genau eine verletzte Regel — muss
 genau die zuständige Prüfung auslösen, und gegen einen geschlossenen Server darf
 **nichts** bestehen. Die letzte Zusage ist die wichtigste: eine Negativprüfung,
 die einen Transportfehler als „der Broker hat abgelehnt" liest, meldet einen
@@ -225,7 +225,12 @@ unerreichbaren Broker als konform.
 go test ./cmd/osb-gate/checks/ -run TestMock -v
 ```
 
-Stand: **26 Mutationen**, 34 Prüfzusagen gegen einen konformen Broker.
+Stand: **31 Mutationen**, 37 Prüfzusagen gegen einen konformen Broker.
+
+Zwei davon sind Gegenproben statt Verletzungen: eine nicht angemeldete
+Abrufbarkeit und ein ehrlich verneinter Planwechsel dürfen **nicht**
+fehlschlagen. Ohne sie wäre eine Prüfung eine Regel, die die Spezifikation
+nicht kennt.
 
 Wer eine Prüfung hinzufügt, fügt ihre Mutation dazu. Sonst ist die Prüfung
 selbst ungeprüft.
@@ -247,26 +252,47 @@ go build -o osb-checker . && ./osb-checker -f configs/config.yaml
 
 ## Ein neues Feld an einer Definition
 
-Der Weg ist kurz, aber es gibt vier Stellen, und drei davon mahnt ein Test an,
+Der Weg ist kurz, aber es gibt fünf Stellen, und vier davon mahnt ein Test an,
 wenn man sie vergisst:
 
-1. **Der Go-Typ** in `internal/definition/definition.go`.
+1. **Der Go-Typ** in `internal/definition/definition.go` — `Offering` oder
+   `Plan`.
 2. **Das JSON-Schema** `schemas/service-definition.schema.json` — damit prüft
    ein Anwender seine Definition offline, bevor er sie ausrollt.
 3. **Die eingebettete Kopie** `internal/handlers/docs/service-definition.schema.json`,
    die der Broker unter `/schemas/…` ausliefert. Ein `cp` genügt.
-4. **Diese Doku** — `service-definitions.md`, in beiden Sprachbäumen.
+4. **Der Katalog** `internal/definition/engine.go` — aber nur, wenn das Feld
+   nach außen gehört. Siehe unten.
+5. **Diese Doku** — `service-definitions.md`, in beiden Sprachbäumen.
 
-`TestSchema_PlanDecktDenGoTyp` und sein Gegenstück prüfen Schritt 1 und 2 **in
-beide Richtungen**: ein Go-Feld ohne Schema-Eintrag fällt auf, und ein
-Schema-Schlüssel ohne Go-Feld auch — das wäre eine Zusage an Anwender, die der
-Broker nicht einlöst. `TestDocsSync_ServiceDefinitionSchemaMatchesEmbeddedCopy`
-prüft Schritt 3.
+`TestSchema_PlanDecktDenGoTyp`, `TestSchema_OfferingDecktDenGoTyp` und ihre
+Gegenstücke prüfen Schritt 1 und 2 **in beide Richtungen**: ein Go-Feld ohne
+Schema-Eintrag fällt auf, und ein Schema-Schlüssel ohne Go-Feld auch — das wäre
+eine Zusage an Anwender, die der Broker nicht einlöst.
+`TestDocsSync_ServiceDefinitionSchemaMatchesEmbeddedCopy` prüft Schritt 3.
 
-**Diese Wächter gab es nicht immer.** `Plan` steckt nicht unter `definitions/`
-im Schema, sondern inline in `offering.properties.plans.items` — deshalb hatte
-es lange keinen Wächter, und `parameterLimits` ist am Schema vorbeigerutscht.
-Der Wächter kam danach und hat beim nächsten Feld sofort angeschlagen.
+**Schritt 4 ist der, den man übersieht.** `Offering` und `Plan` beschreiben,
+was in der YAML-Datei stehen darf; `CatalogEntry` und `CatalogPlan` beschreiben,
+was über die Leitung geht. Das sind zwei Typen, und ein Feld, das nur im ersten
+steht, wird gelesen und verschwindet. `free` war genau das: im Go-Typ, im
+Schema, in der Doku — und nie im Katalog.
+
+Kein Test kann diesen Schritt allgemein einfordern, weil nicht jedes
+Definitionsfeld nach außen gehört: `readiness.statusJSONPath` etwa geht
+niemanden außerhalb etwas an. **Die Frage lautet deshalb: soll eine Plattform
+das wissen?** Wenn ja, gehört daneben ein Test in
+`internal/handlers/catalog_promises_test.go`, der die Zusage gegen das
+Verhalten hält — und, wo es sich über HTTP prüfen lässt, eine Prüfung in
+`cmd/osb-gate`.
+
+**Der Waagebalken dahinter:** eine Zusage, die der Broker nicht hält, scheitert
+erst beim Anwender auf einem System, das hier niemand nachstellt. Eine
+Fähigkeit, die er hat und nicht anmeldet, benutzt niemand. Beide Fehler sind
+still, und beide fallen nur auf, wenn jemand sie gegeneinander hält.
+
+`Plan` steckt nicht unter `definitions/` im Schema, sondern inline in
+`offering.properties.plans.items` — er braucht deshalb seinen eigenen Wächter
+und hat ihn. Für `Offering` gilt dasselbe.
 
 ## Das Chart bleibt mit dem Repo zusammen
 

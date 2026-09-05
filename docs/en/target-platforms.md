@@ -51,10 +51,16 @@ success on Korifi is not yet a success on TAS.
 | Tenancy | one kind cluster, one user | real orgs and spaces, real separation of rights |
 | Load | one developer, one service at a time | many concurrent operations |
 
-**Two points have to be settled per target system** and can only be answered
-there: how certificate trust is established, and whether the broker runs as a
-Kubernetes Deployment beside the platform or as a CF app on it. Neither changes
-the code, but both change the operating instructions.
+**The shape is settled:** the broker runs as a Kubernetes Deployment in the
+operators' cluster, and a platform reaches it over a network address
+([ADR 0009](adr/0009-deployment-model.md)).
+
+**What stays open is the trust anchor**, and only the target system's operator
+can settle it. Three equal routes: a certificate from a CA the platform already
+trusts; the cluster CA into its trust store — on TAS a field in Ops Manager, on
+Cloud Foundry a BOSH trusted certificate; or mTLS in both directions where the
+platform issues client certificates. The broker demands none in particular.
+That does not change the code, but it changes the operating instructions.
 
 ## External marketplaces
 
@@ -63,11 +69,25 @@ Foundry but with any platform that speaks the OSB API. For the broker this is
 the same case as CF: a consumer that reads `/v2/catalog` and drives the
 lifecycle.
 
-In practice this means two things. First, fields that Cloud Foundry generously
-ignores may be mandatory here — a real `dashboard_url`, for instance, instead of
-the currently hardcoded `https://dashboard.example.com/instances/<id>`. Second,
-the conformance suite `cmd/osb-gate` is the only tool that exercises this
-case at all; here it stands in for the platform.
+In practice this means three things.
+
+**First, the catalogue counts for more than with Cloud Foundry.** It is the only
+thing a marketplace sees of the broker before it uses it — and what is not there
+nobody uses. Every offering and every plan therefore carries a `metadata` block
+with `displayName`, `longDescription` and links to documentation and support;
+every plan states explicitly whether it is free and names its polling deadline.
+What the broker can do and declares is in
+[reference/osb-api.md](reference/osb-api.md).
+
+**Second, fields that Cloud Foundry generously ignores may be mandatory here** —
+a real `dashboard_url`, for instance, instead of the currently hardcoded
+`https://dashboard.example.com/instances/<id>`.
+
+**Third, `cmd/osb-gate` is the only tool that exercises this case at all**; here
+it stands in for the platform. Two of its checks aim exactly at this:
+`catalog-display` says what a marketplace could show and today cannot, and
+`catalog-promises` holds every catalogue promise against the behaviour. A
+promise the broker does not keep otherwise surfaces at the user.
 
 ## State of verification
 
@@ -142,6 +162,8 @@ weighs more for an operator than a fourth service in the marketplace.
 | **Quotas** | ✅ `parameterLimits` per plan, enforced on `PUT` and `PATCH` and published as the plan's OSB schema in the catalogue |
 | **Deletion protection** | ✅ `retainOnDeprovision` per plan; the instance is given up, the data stays and carries `osb.io/retained-instance` |
 | **Inventory** | ✅ `osb_active_instances{service_id,plan_id}` — which offering is used how often |
+| **Findability in a marketplace** | ✅ `metadata` per offering and plan, `free`, `maximum_polling_duration`, `instances_retrievable`, `bindings_retrievable` — and `catalog-promises` holds every promise against the behaviour |
+| **Plan change** | open, and deliberately so: the broker can do it, promises it for no definition and refuses it with `422`. It is only safe in one direction — CloudNativePG grows storage and cannot shrink it — and a catalogue flag knows no direction |
 | **Backup and restore** | open. CloudNativePG can do it (`Backup`, `ScheduledBackup`, Barman) — the broker offers it neither as a plan attribute nor as a service key |
 | **Point-in-time recovery on provision** | open; an instance is always created empty |
 | **Upgrades of existing instances** | open. Definitions are read at start-up, a changed definition does not touch existing instances |
@@ -159,9 +181,11 @@ thing:
 - **Backup and PITR** depend on the target-system run. That is where it is
   decided where backups go and who administers them; the broker side cannot be
   sensibly designed without that answer.
-- **Upgrades** do **not** depend on it but on a reconcile loop: a changed
-  definition would have to re-apply to existing instances, and that needs
-  something that runs without a request arriving.
+- **Upgrades and the plan change** do **not** depend on it but on a reconcile
+  loop: a changed definition would have to re-apply to existing instances, and a
+  plan change would have to be checked before it is applied. That needs
+  something that runs without a request arriving —
+  [ADR 0009](adr/0009-deployment-model.md) permits a controller for it.
 - **Load and multi-tenancy** are not a feature but a measurement — that needs a
   target system.
 

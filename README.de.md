@@ -20,9 +20,16 @@ Dreier-Muster erfüllt. Warum das so ist, steht in
 Die Arbeit geht deshalb in die Tiefe: ein Plan **erzwingt** seine Größen
 (`parameterLimits`, auch als OSB-Plan-Schema im Katalog), ein Produktionsplan
 verliert seine Daten nicht auf einen Tastendruck (`retainOnDeprovision`), und
-der Bestand ist nach Angebot und Plan aufgeschlüsselt. Was noch fehlt —
-Sicherung, Point-in-Time-Recovery, Upgrades bestehender Instanzen — steht
-ungeschönt in [target-platforms.md](docs/de/target-platforms.md).
+der Bestand ist nach Angebot und Plan aufgeschlüsselt.
+
+**Der Katalog sagt, was der Broker kann — und nur das.** Er ist das Einzige,
+was ein Marktplatz vom Broker sieht, bevor er ihn benutzt: jedes Angebot und
+jeder Plan trägt seinen Anzeigeblock, jeder Plan sagt ausdrücklich, ob er
+kostenlos ist, und jede Zusage wird gegen das Verhalten gehalten. Ein
+Planwechsel, den keine Definition zusagt, ist `422` statt einer stillen
+Änderung. Was noch fehlt — Sicherung, Point-in-Time-Recovery, Upgrades
+bestehender Instanzen — steht ungeschönt in
+[target-platforms.md](docs/de/target-platforms.md).
 
 ## Wofür das gebaut wird
 

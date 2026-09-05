@@ -15,7 +15,7 @@ All `/v2` routes sit behind authentication and the `X-Broker-API-Version` check.
 |---|---|
 | `GET /v2/catalog` | exactly `engine.Catalog()`. An empty list when no definitions are loaded |
 | `PUT /v2/service_instances/:id` | Provision. `202` with `operation`; without `?accepts_incomplete=true` **422** `AsyncRequired`; `200` for a known instance, `409` for differing parameters; `400` for an unknown service or plan. Checks `allowedParameters` |
-| `PATCH /v2/service_instances/:id` | Plan change. Checks `allowedParameters`, re-renders, writes only on a real change; `200` |
+| `PATCH /v2/service_instances/:id` | Update. Checks `allowedParameters`, re-renders, writes only on a real change; `200`. Switching to a different plan is **422** `PlanChangeNotSupported` unless the definition sets `planUpdateable` |
 | `DELETE /v2/service_instances/:id` | Deprovision. `410` for an unknown instance, `409` when bindings exist. `service_id` may be omitted, the service then comes from the record |
 | `GET /v2/service_instances/:id` | from the state store; `404` for an unknown instance |
 | `GET /v2/service_instances/:id/last_operation` | State from the operator's CR. `service_id` may be omitted, the service then comes from the record. `410` for an unknown instance, `failed` when the record exists and the object is gone |
@@ -46,6 +46,15 @@ So that the picture does not come out crooked — these points are conformant an
 tested:
 
 - The catalogue structure, including plans, tags and `bindable`.
+- **The catalogue's promises match the behaviour.** `free` per plan is always
+  present, `false` included — omit it and OSB reads `true`. `plan_updateable`
+  comes from the definition and is `false` when absent; an unpromised change is
+  `422`. `instances_retrievable` and `bindings_retrievable` are promised
+  outright, because the GET endpoints are registered for every definition.
+  `maximum_polling_duration` per plan is the broker's readiness deadline, so the
+  platform does not poll longer than the broker answers.
+- **`metadata` per offering and per plan** reaches the catalogue unchanged —
+  the display block a marketplace renders.
 - **Plan schemas** (`schemas.service_instance.create/update.parameters`): every
   plan publishes which parameters it accepts — derived from
   `allowedParameters` and `parameterLimits`, that is from what the broker

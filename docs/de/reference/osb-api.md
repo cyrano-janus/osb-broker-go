@@ -16,7 +16,7 @@ Alle `/v2`-Routen liegen hinter der Authentifizierung und der
 |---|---|
 | `GET /v2/catalog` | genau `engine.Catalog()`. Ohne geladene Definitionen eine leere Liste |
 | `PUT /v2/service_instances/:id` | Provision. `202` mit `operation`; ohne `?accepts_incomplete=true` **422** `AsyncRequired`; bei bekannter Instanz `200`, bei abweichenden Parametern `409`; unbekannter Service oder Plan `400`. Prüft `allowedParameters` |
-| `PATCH /v2/service_instances/:id` | Plan-Wechsel. Prüft `allowedParameters`, rendert neu, schreibt nur bei echter Änderung; `200` |
+| `PATCH /v2/service_instances/:id` | Update. Prüft `allowedParameters`, rendert neu, schreibt nur bei echter Änderung; `200`. Ein Wechsel auf einen anderen Plan ist **422** `PlanChangeNotSupported`, solange die Definition `planUpdateable` nicht setzt |
 | `DELETE /v2/service_instances/:id` | Deprovision. `410` bei unbekannter Instanz, `409` bei bestehenden Bindings. `service_id` darf fehlen, dann kommt der Service aus dem Datensatz |
 | `GET /v2/service_instances/:id` | aus dem Zustandsspeicher; `404` bei unbekannter Instanz |
 | `GET /v2/service_instances/:id/last_operation` | Zustand aus dem CR des Operators. `service_id` darf fehlen, dann kommt der Service aus dem Datensatz. `410` bei unbekannter Instanz, `failed` wenn der Datensatz da ist und das Objekt fehlt |
@@ -46,6 +46,16 @@ Foundry folgenlos, für einen Marketplace, der den Link anbietet, nicht.
 Damit das Bild nicht schief wird — diese Punkte sind konform und geprüft:
 
 - Die Katalogstruktur, inklusive Plänen, Tags und `bindable`.
+- **Die Zusagen des Katalogs decken sich mit dem Verhalten.** `free` je Plan
+  steht immer da, auch als `false` — fehlt es, liest OSB `true`.
+  `plan_updateable` stammt aus der Definition und ist ohne Angabe `false`; ein
+  nicht zugesagter Wechsel ist `422`. `instances_retrievable` und
+  `bindings_retrievable` sind fest zugesagt, weil die GET-Endpunkte für jede
+  Definition registriert sind. `maximum_polling_duration` je Plan ist die
+  Bereitschaftsfrist des Brokers, damit die Plattform nicht länger fragt, als
+  er antwortet.
+- **`metadata` je Angebot und je Plan** geht unverändert in den Katalog — der
+  Anzeigeblock, den ein Marktplatz rendert.
 - **Plan-Schemas** (`schemas.service_instance.create/update.parameters`): jeder
   Plan veröffentlicht, welche Parameter er annimmt — abgeleitet aus
   `allowedParameters` und `parameterLimits`, also aus dem, was der Broker

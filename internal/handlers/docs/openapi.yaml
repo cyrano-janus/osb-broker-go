@@ -19,7 +19,7 @@ info:
 
     is enough: HTTP Basic Auth, and a TLS client certificate (mTLS) whose
 
-    identity is on the broker's allowlist. Which methods are enabled is
+    identity is on the broker''s allowlist. Which methods are enabled is
 
     deployment configuration; a `401` advertises the enabled HTTP
 
@@ -82,11 +82,11 @@ paths:
       tags:
       - Catalog
       summary: Get the service catalog
-      description: 'Merges the static in-memory catalog with all loaded
+      description: 'Exactly the catalogue the engine derives from the loaded
 
-        ServiceDefinition documents. Definition-based services advertise
+        ServiceDefinition documents, unchanged. Without definitions the
 
-        `plan_updateable: true`.
+        services list is empty.
 
         '
       responses:
@@ -634,9 +634,21 @@ components:
           type: array
           items:
             type: string
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Display block a marketplace renders - displayName, longDescription,
+            documentationUrl, supportUrl. Taken from the definition unchanged.
         plan_updateable:
           type: boolean
-          description: Always true for definition-based services
+          description: From the definition's planUpdateable, false when absent. A plan
+            change without this promise is 422 PlanChangeNotSupported.
+        instances_retrievable:
+          type: boolean
+          description: Always true - GET on an instance is registered for every definition
+        bindings_retrievable:
+          type: boolean
+          description: Always true - GET on a binding is registered for every definition
         plans:
           type: array
           items:
@@ -655,6 +667,19 @@ components:
           type: string
         free:
           type: boolean
+          description: Always present, false included - omitted, OSB reads true.
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Display block for this plan - displayName, bullets, costs.
+        maximum_polling_duration:
+          type: integer
+          description: Seconds the platform should poll last_operation. Equals the broker's
+            readiness deadline from readiness.timeoutSeconds.
+        schemas:
+          type: object
+          additionalProperties: true
+          description: OSB plan schemas derived from allowedParameters and parameterLimits.
     GetInstanceResponse:
       type: object
       properties:

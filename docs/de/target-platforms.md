@@ -50,10 +50,17 @@ Grund, warum ein Erfolg auf Korifi noch keiner auf TAS ist.
 | Mandanten | ein kind-Cluster, ein Nutzer | echte Orgs und Spaces, echte Rechtetrennung |
 | Last | ein Entwickler, ein Service auf einmal | viele gleichzeitige Operationen |
 
-**Zwei Punkte sind je Zielsystem zu klären** und lassen sich nur dort
-beantworten: wie das Zertifikatsvertrauen hergestellt wird, und ob der Broker
-als Kubernetes-Deployment neben der Plattform läuft oder als CF-App auf ihr.
-Beides ändert nichts am Code, aber alles an der Betriebsanleitung.
+**Die Bauform steht fest:** der Broker läuft als Kubernetes-Deployment im
+Cluster der Operatoren, und eine Plattform erreicht ihn über eine
+Netzwerkadresse ([ADR 0009](adr/0009-deployment-model.md)).
+
+**Offen bleibt der Vertrauensanker**, und er lässt sich nur beim Betreiber des
+Zielsystems klären. Drei gleichberechtigte Wege: ein Zertifikat von einer CA,
+der die Plattform ohnehin traut; die Cluster-CA in ihren Vertrauensspeicher —
+bei TAS ein Feld im Ops Manager, bei Cloud Foundry ein BOSH-Trusted-Certificate;
+oder mTLS in beide Richtungen, wenn die Plattform Client-Zertifikate ausstellt.
+Der Broker verlangt keinen bestimmten. Das ändert nichts am Code, aber alles an
+der Betriebsanleitung.
 
 ## Externe Marketplaces
 
@@ -62,12 +69,26 @@ registriert wird, sondern bei einer beliebigen Plattform, die die OSB-API
 spricht. Für den Broker ist das derselbe Fall wie CF: ein Konsument, der
 `/v2/catalog` liest und den Lebenszyklus fährt.
 
-Praktisch heißt das zweierlei. Erstens sind die Felder, die Cloud Foundry
-großzügig ignoriert, hier möglicherweise Pflicht — etwa ein echter
-`dashboard_url` statt des heute fest verdrahteten
-`https://dashboard.example.com/instances/<id>`. Zweitens ist die Konformitäts-
-suite `cmd/osb-gate` das einzige Werkzeug, das diesen Fall überhaupt prüft;
-sie ersetzt hier die Plattform.
+Praktisch heißt das dreierlei.
+
+**Erstens zählt der Katalog mehr als bei Cloud Foundry.** Er ist das Einzige,
+was ein Marktplatz vom Broker sieht, bevor er ihn benutzt — und was dort nicht
+steht, benutzt niemand. Jedes Angebot und jeder Plan trägt deshalb einen
+`metadata`-Block mit `displayName`, `longDescription` und den Links auf
+Dokumentation und Support; jeder Plan sagt ausdrücklich, ob er kostenlos ist,
+und nennt seine Pollfrist. Was der Broker kann und anmeldet, steht in
+[reference/osb-api.md](reference/osb-api.md).
+
+**Zweitens sind Felder, die Cloud Foundry großzügig ignoriert, hier
+möglicherweise Pflicht** — etwa ein echter `dashboard_url` statt des heute fest
+verdrahteten `https://dashboard.example.com/instances/<id>`.
+
+**Drittens ist `cmd/osb-gate` das einzige Werkzeug, das diesen Fall überhaupt
+prüft**; es ersetzt hier die Plattform. Zwei seiner Prüfungen zielen genau
+darauf: `catalog-display` sagt, was ein Marktplatz anzeigen könnte und heute
+nicht kann, und `catalog-promises` hält jede Zusage des Katalogs gegen das
+Verhalten. Eine Zusage, die der Broker nicht hält, fällt sonst erst dem
+Anwender auf.
 
 ## Verifikationsstand
 
@@ -143,6 +164,8 @@ Punkt wiegt für einen Betreiber schwerer als ein vierter Dienst im Marketplace.
 | **Kontingente** | ✅ `parameterLimits` je Plan, durchgesetzt auf `PUT` und `PATCH` und als OSB-Plan-Schema im Katalog veröffentlicht |
 | **Löschschutz** | ✅ `retainOnDeprovision` je Plan; die Instanz wird aufgegeben, die Daten bleiben und tragen `osb.io/retained-instance` |
 | **Bestandsübersicht** | ✅ `osb_active_instances{service_id,plan_id}` — welches Angebot wie oft genutzt wird |
+| **Auffindbarkeit im Marktplatz** | ✅ `metadata` je Angebot und Plan, `free`, `maximum_polling_duration`, `instances_retrievable`, `bindings_retrievable` — und `catalog-promises` hält jede Zusage gegen das Verhalten |
+| **Planwechsel** | offen, und zwar bewusst: der Broker kann ihn, sagt ihn aber für keine Definition zu und lehnt ihn mit `422` ab. Er ist nur in eine Richtung sicher — CloudNativePG lässt Speicher wachsen, nicht schrumpfen —, und ein Katalogflag kennt keine Richtung |
 | **Sicherung und Wiederherstellung** | offen. CloudNativePG kann es (`Backup`, `ScheduledBackup`, Barman) — der Broker bietet es weder als Planmerkmal noch als Service-Key an |
 | **Point-in-Time-Recovery beim Provision** | offen; eine Instanz entsteht immer leer |
 | **Upgrades bestehender Instanzen** | offen. Definitionen werden beim Start gelesen, eine geänderte Definition fasst bestehende Instanzen nicht an |
@@ -159,9 +182,11 @@ der Operator, der den Dienst betreibt.
 - **Sicherung und PITR** hängen am Zielsystem-Durchlauf. Dort entscheidet sich,
   wohin Sicherungen gehen und wer sie verwaltet; die Broker-Seite ist ohne
   diese Antwort nicht sinnvoll zu entwerfen.
-- **Upgrades** hängen **nicht** daran, sondern an einem Reconcile-Loop: eine
-  geänderte Definition müsste bestehende Instanzen erneut anwenden, und dafür
-  braucht es etwas, das läuft, ohne dass ein Request kommt.
+- **Upgrades und der Planwechsel** hängen **nicht** daran, sondern an einem
+  Reconcile-Loop: eine geänderte Definition müsste bestehende Instanzen erneut
+  anwenden, und ein Planwechsel müsste geprüft werden, bevor er angewendet
+  wird. Dafür braucht es etwas, das läuft, ohne dass ein Request kommt —
+  [ADR 0009](adr/0009-deployment-model.md) erlaubt dafür einen Controller.
 - **Last und Mandantentrennung** sind keine Funktion, sondern eine
   Messung — die braucht ein Zielsystem.
 

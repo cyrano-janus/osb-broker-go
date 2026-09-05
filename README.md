@@ -19,9 +19,15 @@ that is so is in [ADR 0008](docs/en/adr/0008-depth-over-breadth.md).
 The effort therefore goes into depth: a plan **enforces** its sizes
 (`parameterLimits`, published as the plan's OSB schema too), a production plan
 does not lose its data to a keystroke (`retainOnDeprovision`), and the
-inventory is broken down by offering and plan. What is still missing — backup,
-point-in-time recovery, upgrades of existing instances — is stated plainly in
-[target-platforms.md](docs/en/target-platforms.md).
+inventory is broken down by offering and plan.
+
+**The catalogue says what the broker can do — and only that.** It is the only
+thing a marketplace sees of the broker before it uses it: every offering and
+every plan carries its display block, every plan states explicitly whether it is
+free, and every promise is held against the behaviour. A plan change no
+definition promises is `422` rather than a silent change. What is still missing
+— backup, point-in-time recovery, upgrades of existing instances — is stated
+plainly in [target-platforms.md](docs/en/target-platforms.md).
 
 ## What this is built for
 

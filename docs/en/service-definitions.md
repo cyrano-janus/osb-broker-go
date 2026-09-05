@@ -72,6 +72,8 @@ does not come up at all.
 | `description` | no | Catalogue text. |
 | `bindable` | no | Defaults to **true**. |
 | `tags` | no | Catalogue tags. |
+| `metadata` | no | **The marketplace display block.** See below. |
+| `planUpdateable` | no | Defaults to **false**. Promises that a user may switch plans. See below. |
 | `plans` | yes | At least one, IDs unique. |
 
 ### Plans
@@ -85,7 +87,8 @@ does not come up at all.
 | `allowedParameters` | no | Which of those knobs the user may set themselves. See below. |
 | `parameterLimits` | no | **Quotas.** Bounds for the values they may set. See below. |
 | `retainOnDeprovision` | no | Leaves the operator's resources standing on delete. See below. |
-| `free` | no | Read and **not used** — the catalogue hardcodes `free: true` for every plan. |
+| `free` | no | Defaults to **true**. Always present in the catalogue, `false` included — omit it there and OSB reads `true`, so a paid plan would advertise itself as free. |
+| `metadata` | no | **The plan's display block.** See below. |
 
 **The type of a `params` value matters.** YAML reads `1` as a number and `1Gi`
 as a string. A template such as `{{ if eq .plan.replicas 1 }}` compares
@@ -174,6 +177,58 @@ plan it does not retain: that would be an assumption about a plan it does not
 know, and every lost bookkeeping entry would silently pile up resources. And:
 write the intent into the `description` — that is the text a user sees in
 `cf marketplace`.
+
+### What the catalogue says on its own
+
+The catalogue is the only thing a marketplace sees of the broker before it uses
+it. A capability that is not there stays unused: the platform rejects the
+request before the broker is ever asked.
+
+**`metadata` is the display block.** Without it a marketplace tile shows the
+technical name and nothing else. OSB prescribes no keys; Cloud Foundry and
+Tanzu Apps Manager read these:
+
+```yaml
+offering:
+  metadata:
+    displayName: "PostgreSQL"
+    longDescription: >-
+      A PostgreSQL cluster run by CloudNativePG.
+    providerDisplayName: "CloudNativePG"
+    documentationUrl: "https://cloudnative-pg.io/documentation/"
+    supportUrl: "https://github.com/cloudnative-pg/cloudnative-pg/issues"
+  plans:
+    - id: …
+      metadata:
+        displayName: "Small"
+        bullets:
+          - "1 instance, no failover"
+```
+
+The block passes through unchanged. A broker that reshapes it would deliver a
+tile the operator never wrote.
+
+**`planUpdateable` promises the plan change — and without the promise the
+broker refuses it.** Technically it could: a `PATCH` with a new `plan_id`
+re-renders the manifest with the new plan's values. Whether the operator goes
+along only the definition knows — CloudNativePG grows storage and cannot shrink
+it. And a change alters more than sizes: it can move an instance onto a plan
+with `retainOnDeprovision`, so a later deprovision leaves the data standing.
+
+A change without the promise is therefore `422 PlanChangeNotSupported`. The
+same plan is not a change, and a `PATCH` without `plan_id` is untouched —
+`cf update-service -c` must not fail because the plan is immutable.
+
+**Two fields are fixed in the catalogue rather than in the definition.**
+`instances_retrievable` and `bindings_retrievable` are statements about the
+broker, not the operator: the GET endpoints are registered for every
+definition. A test holds the promise against the route.
+
+**`maximum_polling_duration` per plan comes from `readiness.timeoutSeconds`.**
+The broker gives up the readiness check after that deadline. Poll longer and
+the platform waits for an answer that will not come; stop earlier and it
+reports a failure the broker never sees. Two numbers for the same deadline
+drifted apart, so it is one.
 
 ## `spec.provision`
 
@@ -429,7 +484,6 @@ So that nobody loses time over them:
 
 | Field | What you expect | What happens |
 |---|---|---|
-| `plan.free` | free or paid plan | the catalogue hardcodes `free: true` |
 | `metadata.annotations` | control over behaviour | the Go type only knows `name` |
 
 ## When a definition is rolled out

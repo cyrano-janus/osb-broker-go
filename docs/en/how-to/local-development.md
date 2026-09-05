@@ -213,7 +213,7 @@ tool whose verdict has no consequence is indistinguishable from a broken one.
 **Both prove that their checks can fire.** A gate whose checks are ineffective
 is indistinguishable from a green one — it reports the same colour and thereby
 says nothing. `osb-gate` carries that proof in `checks/mockbroker_test.go`: a conformant httptest broker must yield zero
-failures, each of the 20 mutations — exactly one violated rule — must trigger
+failures, each of the 31 mutations — exactly one violated rule — must trigger
 exactly the check responsible for it, and against a closed server **nothing**
 may pass. The last promise is the most important one: a negative check that
 reads a transport error as "the broker rejected it" reports an unreachable
@@ -223,7 +223,11 @@ broker as conformant.
 go test ./cmd/osb-gate/checks/ -run TestMock -v
 ```
 
-Currently: **26 mutations**, 34 assertions against a conformant broker.
+Currently: **31 mutations**, 37 assertions against a conformant broker.
+
+Two of them are counter-checks rather than violations: an undeclared
+retrievability and an honestly refused plan change must **not** fail. Without
+them a check would be a rule the specification does not know.
 
 Whoever adds a check adds its mutation. Otherwise the check itself is unchecked.
 
@@ -244,26 +248,46 @@ go build -o osb-checker . && ./osb-checker -f configs/config.yaml
 
 ## Adding a field to a definition
 
-The path is short, but there are four places, and a test flags three of them
+The path is short, but there are five places, and a test flags four of them
 if you forget:
 
-1. **The Go type** in `internal/definition/definition.go`.
+1. **The Go type** in `internal/definition/definition.go` — `Offering` or
+   `Plan`.
 2. **The JSON schema** `schemas/service-definition.schema.json` — this is what
    a user validates their definition against offline, before rolling it out.
 3. **The embedded copy** `internal/handlers/docs/service-definition.schema.json`
    that the broker serves under `/schemas/…`. A `cp` is enough.
-4. **These docs** — `service-definitions.md`, in both language trees.
+4. **The catalogue** `internal/definition/engine.go` — but only if the field
+   belongs on the outside. See below.
+5. **These docs** — `service-definitions.md`, in both language trees.
 
-`TestSchema_PlanDecktDenGoTyp` and its counterpart check steps 1 and 2 **in
-both directions**: a Go field without a schema entry is flagged, and so is a
-schema key without a Go field — that would be a promise to users the broker
-does not keep. `TestDocsSync_ServiceDefinitionSchemaMatchesEmbeddedCopy` checks
-step 3.
+`TestSchema_PlanDecktDenGoTyp`, `TestSchema_OfferingDecktDenGoTyp` and their
+counterparts check steps 1 and 2 **in both directions**: a Go field without a
+schema entry is flagged, and so is a schema key without a Go field — that would
+be a promise to users the broker does not keep.
+`TestDocsSync_ServiceDefinitionSchemaMatchesEmbeddedCopy` checks step 3.
 
-**These guards did not always exist.** `Plan` does not sit under `definitions/`
-in the schema but inline in `offering.properties.plans.items` — which is why it
-went unguarded for a long time and `parameterLimits` slipped past the schema.
-The guard came after that and caught the very next field.
+**Step 4 is the one that gets missed.** `Offering` and `Plan` describe what may
+appear in the YAML file; `CatalogEntry` and `CatalogPlan` describe what goes
+over the wire. Those are two types, and a field that only exists in the first is
+read and then disappears. `free` was exactly that: in the Go type, in the
+schema, in the docs — and never in the catalogue.
+
+No test can demand this step in general, because not every definition field
+belongs on the outside: `readiness.statusJSONPath`, for instance, is nobody's
+business out there. **So the question is: should a platform know this?** If yes,
+a test in `internal/handlers/catalog_promises_test.go` belongs beside it,
+holding the promise against the behaviour — and, where it is checkable over
+HTTP, a check in `cmd/osb-gate`.
+
+**The trade-off behind it:** a promise the broker does not keep fails at the
+user, on a system nobody here reproduces. A capability it has and never declares
+goes unused. Both failures are silent, and both surface only when someone holds
+them against each other.
+
+`Plan` does not sit under `definitions/` in the schema but inline in
+`offering.properties.plans.items` — which is why it needs its own guard, and has
+one. The same holds for `Offering`.
 
 ## The chart stays in step with the repository
 

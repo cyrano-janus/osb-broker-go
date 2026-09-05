@@ -20,12 +20,11 @@ Keiner der offenen Punkte blockiert derzeit eine Zielplattform.
 
 ## Definitionen und Deployment
 
-**Zwei Readiness-Pfade sind gegen das CRD ihres Operators geprüft, nicht gegen
-einen laufenden Operator.** `valkey-cluster` und `seaweedfs-s3` führen laut
-Schema `status.conditions` — ob der Operator dort wirklich `Ready` schreibt,
-sagt ein Schema nicht. Gegen einen echten CR gerechnet sind nur
-`cnpg-postgresql` und `rabbitmq-cluster`; deren Operatoren laufen in der
-Entwicklungsplattform.
+**Ein Readiness-Pfad ist gegen das CRD seines Operators geprüft, nicht gegen
+einen laufenden Operator.** `seaweedfs-s3` führt laut Schema
+`status.conditions` — ob der Operator dort wirklich `Ready` schreibt, sagt ein
+Schema nicht. Gegen einen echten CR gerechnet sind `cnpg-postgresql` und
+`rabbitmq-cluster`; deren Operatoren laufen in der Entwicklungsplattform.
 
 Trifft ein Pfad daneben, meldet `last_operation` den Grund samt der
 Condition-Namen, die der Operator tatsächlich führt, und der Vorgang endet nach
@@ -63,13 +62,15 @@ Zielplattform näher wäre als Korifi. Einordnung in
 
 ## Empfohlene Reihenfolge
 
-1. **Ein Durchlauf gegen ein Zielsystem.** Das ist das Tor für alles andere,
-   nicht ein Punkt unter mehreren: alles bisher Belegte stammt von der
-   Entwicklungsplattform, und dort entscheidet sich weder, wie das
-   Zertifikatsvertrauen hergestellt wird, noch ob der Broker als
-   Kubernetes-Deployment neben der Plattform läuft oder als CF-App auf ihr.
-   Solange das offen ist, ist jede Tiefenarbeit auf Verdacht gebaut. Siehe
-   [target-platforms.md](target-platforms.md).
+1. **Ein Durchlauf gegen ein Zielsystem.** Alles bisher Belegte stammt von der
+   Entwicklungsplattform. Was dort nicht entschieden werden kann, ist der
+   **Vertrauensanker**: eine fremde Plattform prüft das Zertifikat des Brokers
+   gegen ihren eigenen Speicher, und welcher der drei Wege gilt, entscheidet
+   der Betreiber des Zielsystems — das ist eine Absprache, kein Code.
+
+   Die Bauform steht dagegen fest: der Broker läuft als Kubernetes-Deployment
+   im Cluster der Operatoren ([ADR 0009](adr/0009-deployment-model.md)). Damit
+   ist auch entschieden, dass er ein Controller sein darf.
 2. **Was ein managed Dienst braucht.** Kontingente, Löschschutz und die
    Bestandsübersicht stehen; offen sind Sicherung und Wiederherstellung,
    Point-in-Time-Recovery und Upgrades bestehender Instanzen. Die Liste mit
@@ -81,6 +82,14 @@ Zielplattform näher wäre als Korifi. Einordnung in
    **Upgrades hängen nicht am Zielsystem, sondern an einem Reconcile-Loop** —
    eine geänderte Definition müsste bestehende Instanzen erneut anwenden, und
    dafür braucht es etwas, das läuft, ohne dass ein Request kommt.
+   [ADR 0009](adr/0009-deployment-model.md) erlaubt dafür einen
+   Kubernetes-Controller.
+
+   **Der Planwechsel gehört dazu.** Keine Definition setzt `planUpdateable`,
+   und ohne die Zusage lehnt der Broker ihn mit `422` ab. Der Grund ist nicht
+   fehlende Fähigkeit, sondern Richtung: CloudNativePG lässt Speicher wachsen
+   und nicht schrumpfen, und ein Katalogflag kennt keine Richtung. Ein
+   Reconcile-Loop könnte den Übergang prüfen, bevor er ihn anwendet.
 3. **`seaweedfs-s3` gegen einen laufenden Operator** — das CRD-Schema sagt,
    dass es `status.conditions` gibt, nicht dass der Operator dort `Ready`
    schreibt.

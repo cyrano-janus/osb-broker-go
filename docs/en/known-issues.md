@@ -20,12 +20,11 @@ None of the open points currently blocks a target platform.
 
 ## Definitions and deployment
 
-**Two readiness paths are checked against their operator's CRD, not against a
-running operator.** `valkey-cluster` and `seaweedfs-s3` carry
-`status.conditions` according to the schema — whether the operator really
-writes `Ready` there is something a schema does not say. Computed against a real
-CR are only `cnpg-postgresql` and `rabbitmq-cluster`, whose operators run in the
-development platform.
+**One readiness path is checked against its operator's CRD, not against a
+running operator.** `seaweedfs-s3` carries `status.conditions` according to the
+schema — whether the operator really writes `Ready` there is something a schema
+does not say. Computed against a real CR are `cnpg-postgresql` and
+`rabbitmq-cluster`, whose operators run in the development platform.
 
 When a path misses, `last_operation` reports the reason together with the
 condition names the operator actually publishes, and the run ends in `failed`
@@ -63,12 +62,16 @@ closer to the target platform than Korifi. Classification in
 
 ## Suggested order
 
-1. **A run against a target system.** This is the gate for everything else,
-   not one point among several: all evidence so far comes from the development
-   platform, and that decides neither how certificate trust is established nor
-   whether the broker runs as a Kubernetes Deployment beside the platform or as
-   a CF app on it. While that is open, any depth work is built on an
-   assumption. See [target-platforms.md](target-platforms.md).
+1. **A run against a target system.** All evidence so far comes from the
+   development platform. What cannot be decided there is the **trust anchor**:
+   a foreign platform validates the broker's certificate against its own store,
+   and which of the three routes applies is the target system operator's call —
+   an agreement, not code.
+
+   The shape, by contrast, is settled: the broker runs as a Kubernetes
+   Deployment in the operators' cluster
+   ([ADR 0009](adr/0009-deployment-model.md)). That also settles that it may be
+   a controller.
 2. **What a managed service needs.** Quotas, deletion protection and the
    inventory breakdown are in place; backup and restore, point-in-time
    recovery and upgrades of existing instances are open. The list with the
@@ -79,5 +82,13 @@ closer to the target platform than Korifi. Classification in
    **Upgrades do not depend on the target system but on a reconcile loop** — a
    changed definition would have to re-apply to existing instances, and that
    needs something that runs without a request arriving.
+   [ADR 0009](adr/0009-deployment-model.md) permits a Kubernetes controller for
+   that.
+
+   **The plan change belongs here.** No definition sets `planUpdateable`, and
+   without the promise the broker refuses it with `422`. The reason is not
+   missing capability but direction: CloudNativePG grows storage and cannot
+   shrink it, and a catalogue flag knows no direction. A reconcile loop could
+   check the transition before applying it.
 3. **`seaweedfs-s3` against a running operator** — the CRD schema says
    `status.conditions` exists, not that the operator writes `Ready` there.
