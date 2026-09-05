@@ -23,6 +23,7 @@ func (r *stateStoreRegistry) PutInstance(ctx context.Context, rec *definition.In
 		Ready:          true,
 		AppliedObjects: rec.AppliedObjects,
 		AppliedRefs:    toBrokerRefs(rec.AppliedRefs),
+		Parameters:     rec.Parameters,
 	})
 }
 
@@ -44,6 +45,7 @@ func (r *stateStoreRegistry) GetInstance(ctx context.Context, instanceID string)
 		Namespace:      inst.Namespace,
 		AppliedObjects: inst.AppliedObjects,
 		AppliedRefs:    toDefinitionRefs(inst.AppliedRefs),
+		Parameters:     inst.Parameters,
 	}, nil
 }
 

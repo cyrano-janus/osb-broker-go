@@ -116,7 +116,6 @@ locations in [reference/osb-api.md](reference/osb-api.md).
 
 | Deviation | on Korifi | on production CF / TAS |
 |---|---|---|
-| User parameters never reach the template | `cf create-service -c` has no effect | functional gap, not a breach |
 | `readiness.timeoutSeconds` is never enforced | invisible, the test services are fast | a stuck operator reports `in progress` until the platform itself gives up |
 | Five readiness paths are unverified | the operators are not installed at all | a path that misses costs one platform timeout per instance |
 

@@ -37,7 +37,7 @@ func TestEngine_UpdateInstance_ChangesCRSpec(t *testing.T) {
 	// UPDATE auf large (3 Instanzen)
 	done, err := e.UpdateInstance(ctx,
 		"f48a9e21-cnpg-0000-0000-000000000001", "inst-upd", "default",
-		"plan-large-0000-0000-000000000002")
+		"plan-large-0000-0000-000000000002", nil)
 	require.NoError(t, err)
 
 	cr, err = oc.GetCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, "default", "osb-inst-upd")
@@ -67,7 +67,7 @@ func TestEngine_UpdateInstance_SamePlanIsNoOp(t *testing.T) {
 
 	done, err := e.UpdateInstance(ctx,
 		"f48a9e21-cnpg-0000-0000-000000000001", "inst-same", "default",
-		"plan-large-0000-0000-000000000002")
+		"plan-large-0000-0000-000000000002", nil)
 	require.NoError(t, err)
 	assert.True(t, done)
 	assert.Equal(t, before, rvOf(), "same plan must not touch the CR")
@@ -85,7 +85,7 @@ func TestEngine_UpdateInstance_UnknownPlanFails(t *testing.T) {
 
 	_, err := e.UpdateInstance(ctx,
 		"f48a9e21-cnpg-0000-0000-000000000001", "inst-unk", "default",
-		"plan-does-not-exist")
+		"plan-does-not-exist", nil)
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 

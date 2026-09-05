@@ -163,11 +163,15 @@ reason lives that a new service needs no code.
 only, kind from the definition), finally the fallback to a single CR under
 `safeName`. The tiers catch records that do not carry all three fields.
 
-**Update** re-renders with the new plan's parameters and then compares before
-writing. The reason is in the code: even a write that changes nothing bumps
+**Update** re-renders with the new effective configuration — plan plus merged
+user parameters — and then compares before writing. The reason is in the code: even a write that changes nothing bumps
 `resourceVersion` and wakes up the operator's reconcile loop. The comparison
 normalises both sides through JSON, because the same number arrives as `int64`
 or `float64` depending on the path it took.
+
+The record is updated even when the manifest stays the same: a plan change with
+no effect on the manifest, and a parameter the template does not read, both
+change the state of the instance without changing its objects.
 
 **Readiness** is **gjson**, not JSONPath. The path runs over the whole CR, not
 just `status`, a leading dot is stripped, and a path that is not found means

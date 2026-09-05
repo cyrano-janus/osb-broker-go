@@ -158,7 +158,6 @@ type Operation struct {
 	Type        string // "provision", "update", "deprovision", "bind", "unbind"
 }
 
-
 // Instance represents a service instance
 type Instance struct {
 	ID           string

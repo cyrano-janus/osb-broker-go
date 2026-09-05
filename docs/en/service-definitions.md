@@ -81,17 +81,30 @@ does not come up at all.
 | `name` | yes | `cf create-service <svc> <name> …`. |
 | `description` | no | Catalogue text. |
 | `params` | no | **The sizing knobs.** They arrive in the template as `{{ .plan.<key> }}`. |
-| `allowedParameters` | no | Permitted keys for user parameters. See the warning below. |
+| `allowedParameters` | no | Which of those knobs the user may set themselves. See below. |
 | `free` | no | Read and **not used** — the catalogue hardcodes `free: true` for every plan. |
 
 **The type of a `params` value matters.** YAML reads `1` as a number and `1Gi`
 as a string. A template such as `{{ if eq .plan.replicas 1 }}` compares
 type-strictly and fails if the value was written as `1.0`.
 
-**`allowedParameters` is only checked on `PATCH`, not on `PUT`.** On provision
-the broker accepts arbitrary parameters — and then discards them without
-comment, because user parameters never reach the template anyway. See
-[known-issues.md](known-issues.md).
+**`allowedParameters` is the allow list, and it applies on both paths.** A key
+from the list overrides the `params` value of the same name in the template;
+any key not in it is a `400` — on `PUT` just as on `PATCH`. A missing or empty
+list means this plan takes no user parameters.
+
+```yaml
+- id: plan-small-0000-0000-000000000001
+  name: small
+  params:
+    storageSize: 1Gi      # default
+    instances: 1          # not overridable
+  allowedParameters: [storageSize]
+```
+
+`cf create-service pg small db -c '{"storageSize":"5Gi"}'` renders `5Gi`,
+`cf create-service pg small db` renders `1Gi`, and `-c '{"instances":3}'` is a
+`400`.
 
 ## `spec.provision`
 
@@ -108,15 +121,15 @@ template this must therefore describe the primary object, not just any of them.
 
 ### What is available in the template
 
-Both spellings work — the lowercase one is tried first, the Go one on failure:
+Both spellings are available side by side:
 
 | lowercase | Go | Content |
 |---|---|---|
 | `.instanceID` | `.InstanceID` | the raw OSB `instance_id` |
 | `.safeName` | `.SafeName` | a DNS-safe object name derived from it |
-| `.plan` | `.Plan` | the `params` of the chosen plan |
+| `.plan` | `.Plan` | the plan's `params`, overlaid with the permitted user parameters |
 | `.bindingID` | `.BindingID` | empty during provision |
-| `.parameters` | `.Parameters` | **always empty**, see below |
+| `.parameters` | `.Parameters` | the user parameters alone, without the plan defaults |
 
 The only helper function is `upper`. `missingkey=error` applies — a typo in a
 field name is an error, not an empty string.
@@ -129,10 +142,18 @@ GUID-style names even when they are formally valid, CloudNativePG 1.24 for
 example. Beyond 63 characters the name is truncated and a slice of the SHA-256
 of the original ID is appended so the name stays unique.
 
-**User parameters do not reach the template.** `.parameters` exists in the type
-but is populated by no caller. Writing `{{ .parameters.x }}` produces an error
-because of `missingkey=error`. Plan parameters work, user parameters do not —
-see [known-issues.md](known-issues.md).
+**`{{ .plan.x }}` is almost always the right choice, not
+`{{ .parameters.x }}`.** `.plan` holds the value that applies: the plan's
+default when the user said nothing, their value otherwise. The template needs
+no branch and no fallback for it.
+
+`.parameters` is the narrower view — only what the user sent. It is the right
+one where the template has to tell "not set" apart from "set to the default
+value". Whoever uses it must reckon with `missingkey=error`:
+`{{ .parameters.x }}` is a render error as soon as the user does not send `x`.
+
+**Updates merge.** A `PATCH` overrides the keys it names and leaves the rest
+standing — see [ADR 0007](adr/0007-user-parameters.md).
 
 ### Several objects per instance
 
@@ -313,7 +334,6 @@ So that nobody loses time over them:
 | `readiness.timeoutSeconds` | abort after it elapses | read, never evaluated |
 | `plan.free` | free or paid plan | the catalogue hardcodes `free: true` |
 | `metadata.annotations` | control over behaviour | the Go type only knows `name` |
-| `.parameters` in the template | user parameters | always empty |
 
 ## When a definition is rolled out
 

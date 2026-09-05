@@ -59,42 +59,89 @@ type TemplateData struct {
 	SafeName string
 	// BindingID is the OSB binding_id.
 	BindingID string
-	// Plan holds the plan parameters.
+	// Plan holds the effective configuration: the plan's params, overlaid
+	// with those user parameters the plan allows.
 	Plan map[string]interface{}
-	// Parameters holds user-supplied request parameters.
+	// Parameters holds the user-supplied request parameters alone.
 	Parameters map[string]interface{}
 }
 
-// aliasLower provides the lowercase template aliases (.instanceID etc.).
-func (d TemplateData) instanceID() string { return d.InstanceID }
-func (d TemplateData) safeName() string   { return d.SafeName }
-
-// lowerCase returns an alias map exposing the same data with lowercase
-// keys (.instanceID, .bindingID, .plan, .parameters) for YAML-flavoured
-// template readability.
-func (t TemplateData) lowerCase() map[string]interface{} {
+// dot ist der Punkt im Template. Beide Schreibweisen stehen nebeneinander in
+// derselben Map: die YAML-nahe Kleinschreibung (.instanceID, .plan,
+// .parameters) und die Go-Schreibweise (.InstanceID, .Plan, .Parameters).
+//
+// Frueher wurde dafuer zweimal gerendert - erst gegen eine Kleinschreibungs-
+// Map, bei Fehlschlag gegen die Struktur. Das verfaelschte jede Fehlermeldung:
+// ein fehlender Schluessel unter `.parameters` liess den ersten Lauf
+// scheitern, und gemeldet wurde der Fehler des zweiten - "can't evaluate field
+// parameters in type definition.TemplateData", also ein Feldname, an dem
+// nichts falsch war. Mit einer Map gibt es einen Lauf und eine Meldung, die
+// den wirklich fehlenden Schluessel nennt.
+func (t TemplateData) dot() map[string]interface{} {
 	return map[string]interface{}{
-		"instanceID": t.InstanceID,
-		"safeName":   t.SafeName,
-		"bindingID":  t.BindingID,
-		"plan":       t.Plan,
-		"parameters": t.Parameters,
+		"instanceID": t.InstanceID, "InstanceID": t.InstanceID,
+		"safeName": t.SafeName, "SafeName": t.SafeName,
+		"bindingID": t.BindingID, "BindingID": t.BindingID,
+		"plan": t.Plan, "Plan": t.Plan,
+		"parameters": t.Parameters, "Parameters": t.Parameters,
 	}
+}
+
+// overlay legt over ueber base: jeder Schluessel aus over ersetzt den
+// gleichnamigen aus base, alles Uebrige bleibt stehen. Sind beide leer, ist
+// das Ergebnis nil - ein leeres Objekt wuerde sonst als `parameters: {}` im
+// Datensatz landen.
+//
+// Die Kopie ist nicht optional: PlanByID gibt einen Zeiger in die geladene
+// Definition zurueck. Ein Schreiben auf plan.Params wuerde den Vorgabewert
+// fuer jede weitere Instanz desselben Plans veraendern.
+func overlay(base, over map[string]interface{}) map[string]interface{} {
+	if len(base) == 0 && len(over) == 0 {
+		return nil
+	}
+	out := make(map[string]interface{}, len(base)+len(over))
+	for k, v := range base {
+		out[k] = v
+	}
+	for k, v := range over {
+		out[k] = v
+	}
+	return out
+}
+
+// ParamsEqual meldet, ob zwei Parametersaetze denselben Inhalt tragen. Nil und
+// die leere Map gelten als gleich; der Vergleich laeuft ueber dieselbe
+// JSON-Normalisierung wie der Abgleich gegen das Cluster, damit eine Zahl aus
+// dem Request und dieselbe Zahl aus dem gespeicherten CR sich nicht wegen
+// int64 gegen float64 unterscheiden.
+func ParamsEqual(a, b map[string]interface{}) bool {
+	if len(a) == 0 && len(b) == 0 {
+		return true
+	}
+	return valuesEqual(a, b)
 }
 
 // RenderProvision renders the provision CR manifest for an instance.
 // Templates may contain multiple YAML documents separated by `---`
 // (multi-doc, 4.6); the rendered output keeps the separator so
 // SplitManifests can slice it.
-func RenderProvision(sd *ServiceDefinition, instanceID string, planParams map[string]interface{}) (string, error) {
+//
+// userParams sind die Parameter aus dem Request. Sie ueberschreiben unter
+// `.plan` den gleichnamigen Planwert und stehen zusaetzlich unter
+// `.parameters` fuer sich. Damit bleibt ein Template wie
+// `{{ .plan.storageSize }}` unveraendert und liefert je nach Fall den Plan-
+// oder den Benutzerwert; welche Schluessel ueberhaupt gesetzt werden duerfen,
+// entscheidet allowedParameters des Plans.
+func RenderProvision(sd *ServiceDefinition, instanceID string, planParams, userParams map[string]interface{}) (string, error) {
 	return renderTemplate(sd.Spec.Provision.Template, TemplateData{
 		InstanceID: instanceID,
 		// SafeName is the K8s-validated object name derived from the
 		// (possibly unsanitary) OSB instance_id. Templates that create
 		// objects should use {{ .safeName }}; {{ .instanceID }} stays
 		// available for labels/annotations where arbitrary values are OK.
-		SafeName: SanitizeInstanceName(instanceID),
-		Plan:     planParams,
+		SafeName:   SanitizeInstanceName(instanceID),
+		Plan:       overlay(planParams, userParams),
+		Parameters: userParams,
 	})
 }
 
@@ -135,15 +182,7 @@ func renderTemplate(tmpl string, data TemplateData) (string, error) {
 		return "", fmt.Errorf("invalid template: %w", err)
 	}
 	var buf bytes.Buffer
-	// Execute twice: once against the lowercase alias map (YAML style),
-	// falling back to the struct (Go style). A missing lowercase key with
-	// missingkey=error panics the map lookup as "map has no entry", which
-	// we translate into a retry against the struct.
-	if err := t.Execute(&buf, data.lowerCase()); err == nil {
-		return buf.String(), nil
-	}
-	buf.Reset()
-	if err := t.Execute(&buf, data); err != nil {
+	if err := t.Execute(&buf, data.dot()); err != nil {
 		return "", fmt.Errorf("template execute: %w", err)
 	}
 	return buf.String(), nil

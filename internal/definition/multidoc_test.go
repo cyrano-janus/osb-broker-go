@@ -13,7 +13,7 @@ func TestRenderProvision_SingleDoc_Unchanged(t *testing.T) {
 	sd := testDefinition(t)
 	sd.Spec.Provision.Template = "apiVersion: example.com/v1\nkind: Thing\nmetadata:\n  name: {{ .safeName }}\n"
 
-	out, err := RenderProvision(sd, "inst-1", nil)
+	out, err := RenderProvision(sd, "inst-1", nil, nil)
 	if err != nil {
 		t.Fatalf("RenderProvision: %v", err)
 	}
@@ -40,7 +40,7 @@ metadata:
   name: {{ .safeName }}
 `
 
-	out, err := RenderProvision(sd, "inst-1", nil)
+	out, err := RenderProvision(sd, "inst-1", nil, nil)
 	if err != nil {
 		t.Fatalf("RenderProvision: %v", err)
 	}

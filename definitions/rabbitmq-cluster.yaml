@@ -19,12 +19,18 @@ spec:
         params:
           replicas: 1
           storageSize: 1Gi
+        # Was der Benutzer setzen darf:
+        #   cf create-service ... -c '{"storageSize":"5Gi"}'
+        # Jeder Schluessel, der hier nicht steht, ist 400. Ein gesetzter Wert
+        # ueberschreibt den gleichnamigen Planwert; alles Uebrige bleibt.
+        allowedParameters: [storageSize]
       - id: plan-rabbit-prod-0000-0000-000000000002
         name: prod
         description: "3-node HA cluster, 10Gi storage"
         params:
           replicas: 3
           storageSize: 10Gi
+        allowedParameters: [storageSize]
 
   provision:
     apiVersion: rabbitmq.com/v1beta1

@@ -16,13 +16,6 @@ in [target-platforms.md](target-platforms.md).
 
 Keiner der offenen Punkte blockiert derzeit eine Zielplattform.
 
-**Benutzerparameter erreichen das Template nicht.**
-`Engine.ProvisionInstance` nimmt `parameters` entgegen und verwendet sie nicht;
-`RenderProvision` setzt nur `InstanceID`, `SafeName` und `Plan`.
-`TemplateData.Parameters` wird nirgends gefüllt. `cf create-service -c` bleibt
-wirkungslos, und ein `{{ .parameters.x }}` im Template scheitert wegen
-`missingkey=error`. *FINDINGS #17.*
-
 **`readiness.timeoutSeconds` wird nie durchgesetzt.** Ein hängender Operator
 lässt die Instanz ewig `in progress` melden. `last_operation` meldet `failed`
 nur, wenn der Datensatz da ist und das Objekt fehlt — ein Operator, der die

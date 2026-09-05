@@ -45,7 +45,7 @@ func TestRender_CRManifestWithPlanParams(t *testing.T) {
 		t.Fatalf("planByID: %v", err)
 	}
 
-	out, err := RenderProvision(sd, "my-instance-1", plan.Params)
+	out, err := RenderProvision(sd, "my-instance-1", plan.Params, nil)
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestRender_InvalidTemplateRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if _, err = RenderProvision(sd, "x", map[string]interface{}{}); err == nil {
+	if _, err = RenderProvision(sd, "x", map[string]interface{}{}, nil); err == nil {
 		t.Fatal("expected template syntax error")
 	}
 }
@@ -84,7 +84,7 @@ func TestRender_MissingTemplateKeyFails(t *testing.T) {
 	if perr != nil {
 		t.Fatalf("planByID: %v", perr)
 	}
-	if _, err := RenderProvision(sd, "x", plan.Params); err == nil {
+	if _, err := RenderProvision(sd, "x", plan.Params, nil); err == nil {
 		t.Fatal("expected missing-key error")
 	}
 }
@@ -102,7 +102,7 @@ spec:
     plans:
       - id: plan-small-0000-0000-000000000001
         name: small
-        allowedParameters: [replicas]
+        allowedParameters: [replicas, storageSize, instances]
         params:
           storageSize: 1Gi
           instances: 1

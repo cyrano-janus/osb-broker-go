@@ -51,7 +51,7 @@ func TestOperatorClient_ApplyCreatesCR(t *testing.T) {
 	sd := testDefinition(t)
 	ctx := context.Background()
 
-	rendered, err := RenderProvision(sd, "inst-abc", map[string]interface{}{"storageSize": "1Gi", "instances": 1})
+	rendered, err := RenderProvision(sd, "inst-abc", map[string]interface{}{"storageSize": "1Gi", "instances": 1}, nil)
 	require.NoError(t, err)
 
 	err = oc.ApplyCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, "default", rendered)
@@ -73,7 +73,7 @@ func TestOperatorClient_DeleteCRRemovesIt(t *testing.T) {
 	sd := testDefinition(t)
 	ctx := context.Background()
 
-	rendered, err := RenderProvision(sd, "inst-del", map[string]interface{}{"storageSize": "1Gi", "instances": 1})
+	rendered, err := RenderProvision(sd, "inst-del", map[string]interface{}{"storageSize": "1Gi", "instances": 1}, nil)
 	require.NoError(t, err)
 	require.NoError(t, oc.ApplyCR(ctx, sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, "default", rendered))
 

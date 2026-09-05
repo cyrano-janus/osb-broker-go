@@ -119,7 +119,7 @@ strange behaviour later.
 | `cf service-key` returns 404 | definition bindings are not persisted |
 | Binding contains configuration files | `mapping` missing in the definition |
 | Instance immediately counts as ready, bind fails | provision answers `201` synchronously; the operator is not there yet |
-| `cf create-service -c '{…}'` has no effect | user parameters never reach the template |
+| `cf create-service -c '{…}'` ends with 400 | the key is not in the plan's `allowedParameters` |
 | Pod does not start, error while loading | a file under `definitions/` does not parse |
 | Certificate files unreadable | `fsGroup` missing; the files are mounted with mode `0440` |
 

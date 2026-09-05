@@ -33,6 +33,7 @@ Gliederung und keine toten Verweise haben.
 | 0004 | TLS and mTLS, no OAuth2 · TLS und mTLS, kein OAuth2 | accepted | [en](en/adr/0004-tls-and-mtls-no-oauth2.md) | [de](de/adr/0004-tls-and-mtls-no-oauth2.md) |
 | 0005 | CNCF Service Binding Specification | accepted | [en](en/adr/0005-cncf-service-binding-spec.md) | [de](de/adr/0005-cncf-service-binding-spec.md) |
 | 0006 | The OSB API is the only coupling · Die OSB-API ist die einzige Kopplung | accepted | [en](en/adr/0006-platform-independence.md) | [de](de/adr/0006-platform-independence.md) |
+| 0007 | User parameters overlay the plan · Benutzerparameter überlagern den Plan | accepted | [en](en/adr/0007-user-parameters.md) | [de](de/adr/0007-user-parameters.md) |
 
 ## Machine-readable sources · Maschinenlesbare Quellen
 

@@ -77,6 +77,13 @@ func (h *Handlers) instanceNamespace(ctx context.Context, instanceID string) str
 	if err != nil || inst == nil {
 		return defaultNamespace
 	}
+	return namespaceOf(inst)
+}
+
+// namespaceOf ist derselbe Dreischritt fuer einen bereits geladenen Datensatz.
+// Wer die Instanz ohnehin in der Hand hat, soll sie nicht ein zweites Mal
+// aus dem Zustandsspeicher holen muessen.
+func namespaceOf(inst *broker.Instance) string {
 	if inst.Namespace != "" {
 		return inst.Namespace
 	}

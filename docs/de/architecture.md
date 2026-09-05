@@ -171,11 +171,15 @@ Namen, Art aus der Definition), zuletzt der Rückfall auf ein einzelnes CR unter
 `safeName`. Die Stufen fangen Datensätze ab, die nicht alle drei Felder
 tragen.
 
-**Update** rendert mit den Parametern des neuen Plans neu und vergleicht dann,
-bevor es schreibt. Der Grund steht im Code: auch ein Schreibvorgang, der nichts
+**Update** rendert mit der neuen wirksamen Konfiguration neu — Plan und
+verschmolzene Benutzerparameter — und vergleicht dann, bevor es schreibt. Der Grund steht im Code: auch ein Schreibvorgang, der nichts
 ändert, erhöht die `resourceVersion` und weckt die Reconcile-Schleife des
 Operators. Der Vergleich normalisiert beide Seiten über JSON, weil dieselbe Zahl
 je nach Weg als `int64` oder `float64` ankommt.
+
+Der Datensatz wird auch dann nachgeführt, wenn das Manifest gleich bleibt: ein
+Planwechsel ohne Wirkung auf das Manifest und ein Parameter, den das Template
+nicht liest, ändern den Zustand der Instanz, nicht aber ihre Objekte.
 
 **Readiness** ist **gjson**, nicht JSONPath. Der Pfad läuft über das ganze CR,
 nicht nur über `status`, ein führender Punkt wird abgeschnitten, und ein nicht

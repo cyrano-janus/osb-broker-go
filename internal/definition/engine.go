@@ -45,6 +45,11 @@ type InstanceRecord struct {
 	// multi-doc template may mix kinds, so deprovision cannot fall back to
 	// the definition's provision apiVersion/kind for every name.
 	AppliedRefs []ObjectRef `json:"appliedRefs,omitempty"`
+	// Parameters sind die Benutzerparameter, unter denen die Instanz zuletzt
+	// gerendert wurde. Sie muessen gespeichert werden, weil ein PATCH nur die
+	// geaenderten Schluessel traegt und GET /v2/service_instances den
+	// vollstaendigen Satz zurueckgeben soll.
+	Parameters map[string]interface{} `json:"parameters,omitempty"`
 }
 
 // SetInstanceRegistry attaches an instance registry (broker state store
@@ -136,7 +141,12 @@ func (e *Engine) provisionDefinition(ctx context.Context, sd *ServiceDefinition,
 	if err != nil {
 		return err
 	}
-	rendered, err := RenderProvision(sd, instanceID, plan.Params)
+	// Die Engine prueft die Whitelist selbst. Sie ist exportiert und darf
+	// sich nicht darauf verlassen, dass ein Aufrufer das vorher getan hat.
+	if err := ValidatePlanParams(plan, parameters); err != nil {
+		return err
+	}
+	rendered, err := RenderProvision(sd, instanceID, plan.Params, parameters)
 	if err != nil {
 		return err
 	}
@@ -161,6 +171,7 @@ func (e *Engine) provisionDefinition(ctx context.Context, sd *ServiceDefinition,
 			Namespace:      namespace,
 			AppliedObjects: refNames(applied),
 			AppliedRefs:    applied,
+			Parameters:     parameters,
 		}); err != nil {
 			return fmt.Errorf("record instance: %w", err)
 		}

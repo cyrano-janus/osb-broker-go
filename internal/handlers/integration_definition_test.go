@@ -33,6 +33,7 @@ spec:
     plans:
       - id: def-plan-free
         name: free
+        allowedParameters: [size]
         params:
           size: small
       - id: def-plan-paid

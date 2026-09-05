@@ -121,7 +121,7 @@ Authentifizierung, kein TLS, leere mTLS-Allowlist, heruntergestuftes
 | `cf service-key` liefert 404 | Definitions-Bindings werden nicht persistiert |
 | Binding enthält Konfigurationsdateien | `mapping` fehlt in der Definition |
 | Instanz gilt sofort als fertig, Bind schlägt fehl | Provision antwortet synchron `201`; der Operator ist noch nicht so weit |
-| `cf create-service -c '{…}'` wirkt nicht | Benutzerparameter erreichen das Template nie |
+| `cf create-service -c '{…}'` endet mit 400 | der Schlüssel steht nicht in `allowedParameters` des Plans |
 | Pod startet nicht, Fehler beim Laden | eine Datei in `definitions/` parst nicht |
 | Zertifikatsdateien nicht lesbar | `fsGroup` fehlt; die Dateien liegen mit Modus `0440` |
 

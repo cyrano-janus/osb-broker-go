@@ -80,17 +80,31 @@ schlimmer als einer, der gar nicht startet.
 | `name` | ja | `cf create-service <svc> <name> …`. |
 | `description` | nein | Katalogtext. |
 | `params` | nein | **Die Stellschrauben.** Landen im Template als `{{ .plan.<key> }}`. |
-| `allowedParameters` | nein | Erlaubte Schlüssel für Benutzerparameter. Siehe Warnung unten. |
+| `allowedParameters` | nein | Welche dieser Stellschrauben der Benutzer selbst setzen darf. Siehe unten. |
 | `free` | nein | Wird gelesen und **nicht verwendet** — der Katalog setzt für jeden Plan hart `free: true`. |
 
 **Der Typ eines `params`-Wertes zählt.** YAML liest `1` als Zahl und `1Gi` als
 Zeichenkette. Ein Template wie `{{ if eq .plan.replicas 1 }}` vergleicht
 typsicher und schlägt fehl, wenn der Wert als `1.0` notiert wurde.
 
-**`allowedParameters` wird nur bei `PATCH` geprüft, nicht bei `PUT`.** Beim
-Provision nimmt der Broker beliebige Parameter entgegen — und verwirft sie
-anschließend kommentarlos, weil Benutzerparameter das Template ohnehin nie
-erreichen. Siehe [known-issues.md](known-issues.md).
+**`allowedParameters` ist die Freigabeliste, und sie gilt auf beiden Wegen.**
+Ein Schlüssel aus der Liste überschreibt im Template den gleichnamigen
+`params`-Wert; jeder Schlüssel, der nicht darin steht, ist `400` — beim `PUT`
+genauso wie beim `PATCH`. Eine fehlende oder leere Liste heißt: dieser Plan
+nimmt keine Benutzerparameter.
+
+```yaml
+- id: plan-small-0000-0000-000000000001
+  name: small
+  params:
+    storageSize: 1Gi      # Vorgabe
+    instances: 1          # nicht überschreibbar
+  allowedParameters: [storageSize]
+```
+
+`cf create-service pg small db -c '{"storageSize":"5Gi"}'` rendert damit
+`5Gi`, `cf create-service pg small db` rendert `1Gi`, und
+`-c '{"instances":3}'` ist `400`.
 
 ## `spec.provision`
 
@@ -107,16 +121,15 @@ Multi-Doc-Template muss das also das Hauptobjekt beschreiben, nicht irgendeines.
 
 ### Was im Template zur Verfügung steht
 
-Beide Schreibweisen funktionieren — erst wird die Kleinschreibung versucht, bei
-Fehlschlag die Go-Schreibweise:
+Beide Schreibweisen stehen nebeneinander zur Verfügung:
 
 | klein | Go | Inhalt |
 |---|---|---|
 | `.instanceID` | `.InstanceID` | die rohe OSB-`instance_id` |
 | `.safeName` | `.SafeName` | daraus abgeleiteter, DNS-tauglicher Objektname |
-| `.plan` | `.Plan` | die `params` des gewählten Plans |
+| `.plan` | `.Plan` | die `params` des Plans, überlagert von den erlaubten Benutzerparametern |
 | `.bindingID` | `.BindingID` | beim Provision leer |
-| `.parameters` | `.Parameters` | **immer leer**, siehe unten |
+| `.parameters` | `.Parameters` | nur die Benutzerparameter, ohne die Plan-Vorgaben |
 
 Einzige Hilfsfunktion: `upper`. Es gilt `missingkey=error` — ein Tippfehler im
 Feldnamen ist ein Fehler, keine leere Zeichenkette.
@@ -129,11 +142,20 @@ Operator-Webhooks lehnen nackte GUID-Namen ab, auch wenn sie formal gültig
 sind, CloudNativePG 1.24 zum Beispiel. Über 63 Zeichen wird gekürzt und ein
 Stück SHA-256 der Original-ID angehängt, damit der Name eindeutig bleibt.
 
-**Benutzerparameter erreichen das Template nicht.** `.parameters` ist im Typ
-vorgesehen, wird aber von keinem Aufrufer gefüllt. Wer `{{ .parameters.x }}`
-schreibt, bekommt wegen `missingkey=error` einen Fehler. Plan-Parameter
-funktionieren, Benutzerparameter nicht — siehe
-[known-issues.md](known-issues.md).
+**`{{ .plan.x }}` ist in aller Regel die richtige Wahl, nicht
+`{{ .parameters.x }}`.** Unter `.plan` steht der Wert, der gilt: die Vorgabe des
+Plans, sofern der Benutzer nichts gesagt hat, sonst sein Wert. Das Template
+braucht dafür keine Fallunterscheidung und keinen Vorgabewert.
+
+`.parameters` ist die engere Sicht — nur das, was der Benutzer geschickt hat.
+Sie ist dort richtig, wo das Template zwischen „nicht gesetzt" und „auf den
+Vorgabewert gesetzt" unterscheiden muss. Wer sie benutzt, muss mit
+`missingkey=error` rechnen: `{{ .parameters.x }}` ist ein Renderfehler, sobald
+der Benutzer `x` nicht schickt.
+
+**Beim Update gilt Verschmelzen.** Ein `PATCH` überschreibt die genannten
+Schlüssel und lässt die übrigen stehen — siehe
+[ADR 0007](adr/0007-user-parameters.md).
 
 ### Mehrere Objekte je Instanz
 
@@ -316,7 +338,6 @@ Damit niemand Zeit damit verliert:
 | `readiness.timeoutSeconds` | Abbruch nach Ablauf | wird gelesen, nie ausgewertet |
 | `plan.free` | freier oder kostenpflichtiger Plan | Katalog setzt hart `free: true` |
 | `metadata.annotations` | Steuerung des Verhaltens | der Go-Typ kennt nur `name` |
-| `.parameters` im Template | Benutzerparameter | immer leer |
 
 ## Wenn eine Definition ausgerollt wird
 

@@ -16,12 +16,6 @@ target platform or only the development platform?** What separates the two is in
 
 None of the open points currently blocks a target platform.
 
-**User parameters do not reach the template.** `Engine.ProvisionInstance`
-accepts `parameters` and does not use them; `RenderProvision` only sets
-`InstanceID`, `SafeName` and `Plan`. `TemplateData.Parameters` is populated
-nowhere. `cf create-service -c` has no effect, and a `{{ .parameters.x }}` in a
-template fails because of `missingkey=error`. *FINDINGS #17.*
-
 **`readiness.timeoutSeconds` is never enforced.** A stuck operator makes the
 instance report `in progress` forever. `last_operation` only reports `failed`
 when the record exists and the object is gone — an operator that never satisfies

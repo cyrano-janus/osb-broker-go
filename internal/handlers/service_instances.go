@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/example/osb-broker/internal/broker"
+	"github.com/example/osb-broker/internal/definition"
 	"github.com/gin-gonic/gin"
 )
 
@@ -45,13 +46,14 @@ func (h *Handlers) ProvisionServiceInstance(c *gin.Context) {
 
 	// OSB 2.17: ein wiederholtes Provision derselben Instanz mit denselben
 	// Parametern ist 200, nicht 201 - die Plattform wiederholt Requests, und
-	// ein zweites 201 liest sie als "neu angelegt". Weichen Service oder Plan
-	// ab, ist es 409.
+	// ein zweites 201 liest sie als "neu angelegt". Weichen Service, Plan
+	// oder Parameter ab, ist es 409.
 	if known, err := h.broker.StoredInstance(c.Request.Context(), instanceID); err == nil && known != nil {
-		if known.ServiceID != req.ServiceID || known.PlanID != req.PlanID {
+		if known.ServiceID != req.ServiceID || known.PlanID != req.PlanID ||
+			!definition.ParamsEqual(known.Parameters, req.Parameters) {
 			c.JSON(http.StatusConflict, gin.H{
 				"error":       "Conflict",
-				"description": "instance already exists with different service_id or plan_id",
+				"description": "instance already exists with different service_id, plan_id or parameters",
 			})
 			return
 		}
@@ -162,34 +164,44 @@ func (h *Handlers) UpdateServiceInstance(c *gin.Context) {
 		return
 	}
 
+	// OSB 2.17: ein Update auf eine unbekannte Instanz ist 404. Ohne diese
+	// Pruefung rendert die Engine das Manifest und legt die Instanz an - ein
+	// Update, das provisioniert, und zwar im Rueckfall-Namespace statt im
+	// Space, weil ein PATCH keinen context traegt.
+	//
+	// Ein Lesevorgang genuegt: derselbe Datensatz liefert Service, Plan und
+	// Namespace, von denen der PATCH keinen mitschickt.
+	inst, err := h.broker.StoredInstance(c.Request.Context(), instanceID)
+	if err != nil || inst == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "NotFound", "description": "instance not found"})
+		return
+	}
+
 	serviceID := req.ServiceID
 	if serviceID == "" {
-		if inst, err := h.broker.StoredInstance(c.Request.Context(), instanceID); err == nil && inst != nil {
-			serviceID = inst.ServiceID
-		}
+		serviceID = inst.ServiceID
 	}
 	if _, err := h.definitionFor(serviceID); err != nil {
 		respondOSBError(c, err)
 		return
 	}
 
-	// OSB 2.17: ein Update auf eine unbekannte Instanz ist 404. Ohne diese
-	// Pruefung rendert die Engine das Manifest und legt die Instanz an - ein
-	// Update, das provisioniert, und zwar im Rueckfall-Namespace statt im
-	// Space, weil ein PATCH keinen context traegt.
-	if !h.instanceKnown(c.Request.Context(), instanceID) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "NotFound", "description": "instance not found"})
-		return
+	// plan_id ist im PATCH optional. Fehlt es, gilt der Plan, unter dem die
+	// Instanz angelegt wurde - sonst scheitert ein reines Parameter-Update an
+	// einem unbekannten Plan "".
+	planID := req.PlanID
+	if planID == "" {
+		planID = inst.PlanID
 	}
 
 	// Der PATCH-Request traegt keinen Space; der Namespace kommt aus dem
 	// gespeicherten Datensatz (FINDINGS #16).
-	namespace := h.instanceNamespace(c.Request.Context(), instanceID)
-	if err := ValidatePlanParamsForService(h, serviceID, req.PlanID, req.Parameters); err != nil {
+	namespace := namespaceOf(inst)
+	if err := ValidatePlanParamsForService(h, serviceID, planID, req.Parameters); err != nil {
 		respondOSBError(c, err)
 		return
 	}
-	if _, err := h.engine.Engine.UpdateInstance(c.Request.Context(), serviceID, instanceID, namespace, req.PlanID); err != nil {
+	if _, err := h.engine.Engine.UpdateInstance(c.Request.Context(), serviceID, instanceID, namespace, planID, req.Parameters); err != nil {
 		respondOSBError(c, err)
 		return
 	}

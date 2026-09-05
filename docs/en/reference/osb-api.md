@@ -35,15 +35,6 @@ Reachable without authentication, deliberately:
 
 ## Deviations from OSB 2.17
 
-### User parameters do not reach the template
-
-`Engine.ProvisionInstance` accepts a `parameters` argument and does not use it;
-`RenderProvision` only sets `InstanceID`, `SafeName` and `Plan`.
-`cf create-service -c '{...}'` therefore has no effect.
-
-The check against `allowedParameters` already runs on provision — it just has
-nothing yet to check that reaches the template.
-
 ### `dashboard_url` is a constant
 
 Every instance gets `https://dashboard.example.com/instances/<id>`. Without
@@ -72,6 +63,15 @@ tested:
 - Basic auth with a constant-time comparison; mTLS as an equal alternative.
 - The lifecycle end to end against real operators — CloudNativePG and RabbitMQ,
   each on the development platform.
+- User parameters: `allowedParameters` per plan, checked on `PUT` and `PATCH`;
+  `plan_id` is optional on `PATCH`; a repeated `PUT` with differing parameters
+  is a `409`.
+
+One choice OSB 2.17 leaves open: **`PATCH` merges parameters** rather than
+replacing them. Keys that are sent override the stored ones, keys that are not
+named stay — so `GET /v2/service_instances` reports the same set the instance
+actually runs under, even when the platform only sends what changed. Reasoning
+in [ADR 0007](../adr/0007-user-parameters.md).
 
 The conformance suite `cmd/osb-checker` runs twice in CI: once over HTTP against
 CloudNativePG, once over HTTPS with a client certificate against the Helm chart.

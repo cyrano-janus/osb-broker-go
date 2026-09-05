@@ -36,15 +36,6 @@ Ohne Authentifizierung erreichbar, absichtlich:
 
 ## Abweichungen von OSB 2.17
 
-### Benutzerparameter erreichen das Template nicht
-
-`Engine.ProvisionInstance` nimmt ein `parameters`-Argument entgegen und
-verwendet es nicht; `RenderProvision` setzt nur `InstanceID`, `SafeName` und
-`Plan`. `cf create-service -c '{...}'` bleibt damit wirkungslos.
-
-Die Prüfung gegen `allowedParameters` läuft bereits beim Provision — sie hat
-nur noch nichts zu prüfen, was das Template erreicht.
-
 ### `dashboard_url` ist eine Konstante
 
 Jede Instanz bekommt `https://dashboard.example.com/instances/<id>`. Für Cloud
@@ -72,6 +63,16 @@ Damit das Bild nicht schief wird — diese Punkte sind konform und geprüft:
 - Basic Auth mit konstantzeitigem Vergleich; mTLS gleichrangig daneben.
 - Der Lebenszyklus Ende zu Ende gegen echte Operatoren — CloudNativePG und
   RabbitMQ, jeweils auf der Entwicklungsplattform.
+- Benutzerparameter: `allowedParameters` je Plan, geprüft auf `PUT` und
+  `PATCH`; `plan_id` ist im `PATCH` optional; ein wiederholtes `PUT` mit
+  abweichenden Parametern ist `409`.
+
+Eine Festlegung, die OSB 2.17 offenlässt: **beim `PATCH` werden Parameter
+verschmolzen**, nicht ersetzt. Gesendete Schlüssel überschreiben die
+gespeicherten, ungenannte bleiben stehen — damit meldet
+`GET /v2/service_instances` denselben Satz, unter dem die Instanz tatsächlich
+läuft, auch wenn die Plattform nur das Geänderte schickt. Begründung in
+[ADR 0007](../adr/0007-user-parameters.md).
 
 Die Konformitätssuite `cmd/osb-checker` läuft in der CI zweimal: einmal über
 HTTP gegen CloudNativePG, einmal über HTTPS mit Client-Zertifikat gegen das

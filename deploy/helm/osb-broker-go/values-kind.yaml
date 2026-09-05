@@ -56,12 +56,14 @@ definitions:
               params:
                 storageSize: 1Gi
                 instances: 1
+              allowedParameters: [storageSize]
             - id: plan-large-0000-0000-000000000002
               name: large
               description: "HA, 3 instances, 10Gi storage"
               params:
                 storageSize: 10Gi
                 instances: 3
+              allowedParameters: [storageSize]
 
         provision:
           apiVersion: postgresql.cnpg.io/v1
@@ -281,12 +283,14 @@ definitions:
               params:
                 replicas: 1
                 storageSize: 1Gi
+              allowedParameters: [storageSize]
             - id: plan-rabbit-prod-0000-0000-000000000002
               name: prod
               description: "3-node HA cluster, 10Gi storage"
               params:
                 replicas: 3
                 storageSize: 10Gi
+              allowedParameters: [storageSize]
 
         provision:
           apiVersion: rabbitmq.com/v1beta1
@@ -489,12 +493,14 @@ definitions:
               params:
                 storageSize: 1Gi
                 instances: 1
+              allowedParameters: [storageSize]
             - id: plan-large-0000-0000-000000000002
               name: large
               description: "HA, 3 instances, 10Gi storage"
               params:
                 storageSize: 10Gi
                 instances: 3
+              allowedParameters: [storageSize]
 
         provision:
           apiVersion: postgresql.cnpg.io/v1
