@@ -50,11 +50,22 @@ func (c *client) checkCatalogPromises(instanceID, serviceID, planID string, svcs
 		c.do("PATCH", "/v2/service_instances/"+instanceID, map[string]interface{}{
 			"service_id": serviceID, "plan_id": planID,
 		})
+
+	// Nicht zugesagt. Ein vollzogener Wechsel ist der teure Fall: er aendert
+	// nicht nur Groessen, sondern kann eine Instanz auf einen Plan mit
+	// anderer Loeschsemantik schieben, ohne dass es jemand angefordert hat.
 	case status == 200 || status == 202:
 		c.fail(check, "plan_updateable ist nicht zugesagt, der Wechsel auf %q wird aber vollzogen (%d)",
 			other, status)
+
+	// Abgelehnt - aber der Code muss stimmen. OSB 2.17: 422 "MUST be returned
+	// if the requested change is not supported". Ein 400 sagt dem Anwender
+	// "deine Anfrage ist kaputt" statt "das kann dieser Service nicht".
+	case status != 422:
+		c.fail(check, "plan_updateable ist nicht zugesagt und der Wechsel wird mit %d abgelehnt - OSB verlangt 422: %s",
+			status, truncate(body))
 	default:
-		c.pass(check, "plan_updateable nicht zugesagt und der Wechsel wird abgelehnt (%d)", status)
+		c.pass(check, "plan_updateable nicht zugesagt und der Wechsel wird mit 422 abgelehnt")
 	}
 }
 

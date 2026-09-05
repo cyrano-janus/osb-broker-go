@@ -12,9 +12,27 @@ spec:
       - postgresql
       - database
       - cnpg
+    # Anzeigeblock des Marktplatzes. OSB schreibt keine Schluessel vor;
+    # Cloud Foundry und Tanzu Apps Manager lesen diese. Ohne sie zeigt eine
+    # Kachel den technischen Namen und sonst nichts.
+    metadata:
+      displayName: "PostgreSQL"
+      longDescription: >-
+        Ein PostgreSQL-Cluster, betrieben von CloudNativePG. Der Operator
+        uebernimmt Failover, Backups und Wartung; der Broker liefert die
+        Zugangsdaten als Binding.
+      providerDisplayName: "CloudNativePG"
+      documentationUrl: "https://cloudnative-pg.io/documentation/"
+      supportUrl: "https://github.com/cloudnative-pg/cloudnative-pg/issues"
     plans:
       - id: plan-small-0000-0000-000000000001
         name: small
+        metadata:
+          displayName: "Small"
+          bullets:
+            - "1 Instanz, kein Failover"
+            - "1Gi Speicher, bis 5Gi einstellbar"
+            - "Loeschen entfernt die Daten"
         description: "Single instance, 1Gi storage"
         params:
           storageSize: 1Gi
@@ -31,6 +49,12 @@ spec:
           storageSize: {max: 5Gi}
       - id: plan-large-0000-0000-000000000002
         name: large
+        metadata:
+          displayName: "Large"
+          bullets:
+            - "3 Instanzen mit Failover"
+            - "10Gi Speicher, bis 50Gi einstellbar"
+            - "Loeschen laesst die Daten stehen"
         description: "HA, 3 instances, 10Gi storage. Deleting the service keeps the data."
         params:
           storageSize: 10Gi

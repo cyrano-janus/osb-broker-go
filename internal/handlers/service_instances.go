@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/cyrano-janus/osb-broker-go/internal/broker"
@@ -181,7 +182,8 @@ func (h *Handlers) UpdateServiceInstance(c *gin.Context) {
 	if serviceID == "" {
 		serviceID = inst.ServiceID
 	}
-	if _, err := h.definitionFor(serviceID); err != nil {
+	sd, err := h.definitionFor(serviceID)
+	if err != nil {
 		respondOSBError(c, err)
 		return
 	}
@@ -192,6 +194,27 @@ func (h *Handlers) UpdateServiceInstance(c *gin.Context) {
 	planID := req.PlanID
 	if planID == "" {
 		planID = inst.PlanID
+	}
+
+	// Ein Planwechsel, den der Katalog nicht zusagt, darf nicht stillschweigend
+	// stattfinden.
+	//
+	// Der Broker kann ihn technisch: das Manifest wird mit den Werten des
+	// neuen Plans neu gerendert. Ob der Operator mitgeht, weiss nur die
+	// Definition - CNPG laesst Speicher wachsen und nicht schrumpfen. Und der
+	// Wechsel aendert mehr als Groessen: er kann eine Instanz auf einen Plan
+	// mit retainOnDeprovision schieben, womit ein spaeteres Deprovision die
+	// Daten stehen laesst. Wer den Wechsel nicht zusagt, muss ihn ablehnen.
+	//
+	// OSB 2.17 sieht dafuer 422 vor: "MUST be returned if the requested change
+	// is not supported". Derselbe Plan ist kein Wechsel.
+	if planID != inst.PlanID && !planChangeAllowed(sd) {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"error": "PlanChangeNotSupported",
+			"description": fmt.Sprintf(
+				"service %q does not support changing the plan (plan_updateable is false)", sd.Spec.Offering.Name),
+		})
+		return
 	}
 
 	// Der PATCH-Request traegt keinen Space; der Namespace kommt aus dem
@@ -206,6 +229,13 @@ func (h *Handlers) UpdateServiceInstance(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, broker.UpdateInstanceResponse{Operation: "update"})
+}
+
+// planChangeAllowed meldet, ob die Definition den Planwechsel zusagt. Ohne
+// Angabe gilt er als nicht zugesagt: was der Operator nicht nachweislich kann,
+// darf der Broker nicht tun.
+func planChangeAllowed(sd *definition.ServiceDefinition) bool {
+	return sd != nil && sd.Spec.Offering.PlanUpdateable != nil && *sd.Spec.Offering.PlanUpdateable
 }
 
 // GetServiceInstance handles GET /v2/service_instances/:instance_id

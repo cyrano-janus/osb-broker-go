@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/cyrano-janus/osb-broker-go/internal/broker"
@@ -65,10 +66,20 @@ spec:
 `
 
 func newDefinitionRouter(t *testing.T) (*gin.Engine, *definition.OperatorClient) {
+	return routerForYAML(t, testDefYAML)
+}
+
+// newNoPlanChangeRouter baut dieselbe Route aus einer Definition, die keinen
+// Planwechsel zusagt - die Gegenprobe zu testDefYAML.
+func newNoPlanChangeRouter(t *testing.T) (*gin.Engine, *definition.OperatorClient) {
+	return routerForYAML(t, strings.Replace(testDefYAML, "    planUpdateable: true\n", "", 1))
+}
+
+func routerForYAML(t *testing.T, defYAML string) (*gin.Engine, *definition.OperatorClient) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
-	sd, err := definition.Parse([]byte(testDefYAML))
+	sd, err := definition.Parse([]byte(defYAML))
 	require.NoError(t, err)
 
 	scheme := runtime.NewScheme()

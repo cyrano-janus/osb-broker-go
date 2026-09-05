@@ -12,9 +12,23 @@ spec:
       - rabbitmq
       - amqp
       - messaging
+    metadata:
+      displayName: "RabbitMQ"
+      longDescription: >-
+        Ein RabbitMQ-Cluster, betrieben vom RabbitMQ Cluster Operator.
+        Spricht AMQP 0-9-1 und bringt die Management-Oberflaeche mit.
+      providerDisplayName: "RabbitMQ"
+      documentationUrl: "https://www.rabbitmq.com/kubernetes/operator/operator-overview"
+      supportUrl: "https://github.com/rabbitmq/cluster-operator/issues"
     plans:
       - id: plan-rabbit-dev-0000-0000-000000000001
         name: dev
+        metadata:
+          displayName: "Dev"
+          bullets:
+            - "1 Knoten, kein Failover"
+            - "1Gi Speicher, bis 5Gi einstellbar"
+            - "Loeschen entfernt die Daten"
         description: "Single node, 1Gi storage"
         params:
           replicas: 1
@@ -28,6 +42,12 @@ spec:
           storageSize: {max: 5Gi}
       - id: plan-rabbit-prod-0000-0000-000000000002
         name: prod
+        metadata:
+          displayName: "Prod"
+          bullets:
+            - "3 Knoten im Quorum"
+            - "10Gi Speicher, bis 50Gi einstellbar"
+            - "Loeschen laesst die Daten stehen"
         description: "3-node HA cluster, 10Gi storage. Deleting the service keeps the data."
         params:
           replicas: 3

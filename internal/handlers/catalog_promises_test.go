@@ -174,3 +174,51 @@ func TestKatalogzusage_JederPlanNenntSeinePollfrist(t *testing.T) {
 		assert.Greater(t, d, float64(0))
 	}
 }
+
+// Die Gegenrichtung, und der teurere Fall: sagt der Katalog den Planwechsel
+// NICHT zu, darf der Broker ihn nicht stillschweigend vollziehen.
+//
+// Er tat es. Ein `cf update-service -p` haette eine Instanz auf einen Plan
+// geschoben, den der Katalog fuer unveraenderlich erklaert - im Lauf gegen den
+// ausgerollten Broker landete sie damit auf einem Plan mit
+// retainOnDeprovision und blieb beim Loeschen stehen. Ein unangekuendigter
+// Planwechsel aendert nicht nur Groessen, sondern die Loeschsemantik.
+//
+// OSB 2.17 sieht dafuer 422 vor: "MUST be returned if the requested change is
+// not supported".
+func TestKatalogzusage_NichtZugesagterPlanwechselWirdAbgelehnt(t *testing.T) {
+	router, _ := newNoPlanChangeRouter(t)
+	require.Equal(t, false, catalogService(t, router)["plan_updateable"])
+
+	const instanceID = "promise-inst-4"
+	require.Equal(t, http.StatusAccepted, provisionJSON(router, "/v2/service_instances/"+instanceID,
+		map[string]interface{}{"service_id": "def-svc-0001", "plan_id": "def-plan-free"}).Code)
+
+	w := sendJSON(router, "PATCH", "/v2/service_instances/"+instanceID,
+		map[string]interface{}{"service_id": "def-svc-0001", "plan_id": "def-plan-paid"})
+
+	assert.Equal(t, http.StatusUnprocessableEntity, w.Code,
+		"ein nicht zugesagter Planwechsel muss 422 sein, nicht stillschweigend 200: %s", w.Body.String())
+	assert.Contains(t, w.Body.String(), "plan", "die Antwort muss sagen, woran es lag")
+}
+
+// Ein Update ohne Planwechsel bleibt erlaubt - `cf update-service -c` darf
+// nicht daran scheitern, dass der Plan unveraenderlich ist.
+func TestKatalogzusage_ParameterUpdateBleibtOhnePlanwechselErlaubt(t *testing.T) {
+	router, _ := newNoPlanChangeRouter(t)
+
+	const instanceID = "promise-inst-5"
+	require.Equal(t, http.StatusAccepted, provisionJSON(router, "/v2/service_instances/"+instanceID,
+		map[string]interface{}{"service_id": "def-svc-0001", "plan_id": "def-plan-free"}).Code)
+
+	// Ohne plan_id
+	w := sendJSON(router, "PATCH", "/v2/service_instances/"+instanceID,
+		map[string]interface{}{"service_id": "def-svc-0001", "parameters": map[string]interface{}{"size": "small"}})
+	assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	// Und mit demselben plan_id: das ist kein Wechsel.
+	w = sendJSON(router, "PATCH", "/v2/service_instances/"+instanceID,
+		map[string]interface{}{"service_id": "def-svc-0001", "plan_id": "def-plan-free"})
+	assert.Equal(t, http.StatusOK, w.Code,
+		"derselbe Plan ist kein Wechsel und darf nicht abgelehnt werden: %s", w.Body.String())
+}

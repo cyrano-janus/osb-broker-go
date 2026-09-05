@@ -12,9 +12,24 @@ spec:
       - s3
       - objectstorage
       - seaweedfs
+    metadata:
+      displayName: "SeaweedFS S3"
+      longDescription: >-
+        S3-kompatibler Objektspeicher, betrieben vom seaweedfs-operator.
+        Fuer Anwendungen, die eine S3-API erwarten, ohne einen Cloud-Anbieter
+        zu brauchen.
+      providerDisplayName: "SeaweedFS"
+      documentationUrl: "https://github.com/seaweedfs/seaweedfs/wiki"
+      supportUrl: "https://github.com/seaweedfs/seaweedfs-operator/issues"
     plans:
       - id: plan-seaweed-dev-0000-0000-000000000001
         name: dev
+        metadata:
+          displayName: "Dev"
+          bullets:
+            - "je 1 Master, Volume, Filer und S3-Gateway"
+            - "2Gi Speicher"
+            - "keine Replikation"
         description: "Single master/volume/filer/s3, 2Gi"
         params:
           masterReplicas: 1
@@ -22,6 +37,11 @@ spec:
           volumeStorage: 2Gi
       - id: plan-seaweed-prod-0000-0000-000000000002
         name: prod
+        metadata:
+          displayName: "Prod"
+          bullets:
+            - "3 Master"
+            - "10Gi Speicher, doppelt repliziert"
         description: "3 masters, replicated volumes, 10Gi"
         params:
           masterReplicas: 3

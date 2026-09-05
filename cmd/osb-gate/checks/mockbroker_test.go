@@ -65,7 +65,8 @@ type mutation struct {
 	// Zusagen des Katalogs gegen das Verhalten
 	retrievableNotDeclared bool // die Abrufbarkeit wird nicht angemeldet
 	planUpdateableNotHeld  bool // plan_updateable zugesagt, Planwechsel abgelehnt
-	planUpdateableFalse    bool // plan_updateable verneint, Planwechsel trotzdem vollzogen
+	planUpdateableFalse    bool // plan_updateable verneint
+	planChangeRejected     int  // Code, mit dem ein Planwechsel abgelehnt wird (0 = vollziehen)
 	metadataNotObject      bool // metadata ist eine Zeichenkette statt eines Blocks
 	pollingNegative        bool // maximum_polling_duration ist negativ
 }
@@ -263,6 +264,10 @@ func (b *mockBroker) instance(w http.ResponseWriter, r *http.Request, id string)
 			// verneint, muss ihn ablehnen.
 			if b.mut.planUpdateableNotHeld {
 				writeErr(w, 400, "BadRequest", "plan changes are not supported")
+				return
+			}
+			if b.mut.planChangeRejected != 0 {
+				writeErr(w, b.mut.planChangeRejected, "PlanChangeNotSupported", "plan changes are not supported")
 				return
 			}
 			b.instances[id] = [2]string{inst[0], req.PlanID}
@@ -483,6 +488,8 @@ func TestMock_JedeMutationWirdBemerkt(t *testing.T) {
 		{"Fehlerantwort ohne error/description", mutation{errorBodyEmpty: true}, "error-body"},
 		{"Planwechsel zugesagt, aber abgelehnt", mutation{planUpdateableNotHeld: true}, "catalog-promises"},
 		{"Planwechsel verneint, aber vollzogen", mutation{planUpdateableFalse: true}, "catalog-promises"},
+		{"Planwechsel verneint und mit 400 statt 422 abgelehnt",
+			mutation{planUpdateableFalse: true, planChangeRejected: 400}, "catalog-promises"},
 		{"metadata ist eine Zeichenkette", mutation{metadataNotObject: true}, "catalog-display"},
 		{"maximum_polling_duration ist negativ", mutation{pollingNegative: true}, "catalog-display"},
 	} {
@@ -509,6 +516,16 @@ func TestMock_NichtAngemeldeteAbrufbarkeitIstKeinFehler(t *testing.T) {
 	assert.Contains(t, r.Skipped, "fetch-get-instance",
 		"die Pruefung muss uebersprungen werden, nicht stillschweigend bestehen")
 	assert.Contains(t, r.Skipped, "fetch-get-binding")
+}
+
+// Die Gegenprobe zum Planwechsel: wer ihn nicht zusagt und mit 422 ablehnt,
+// verhaelt sich richtig. Ohne diesen Fall waere die Pruefung eine Aufforderung,
+// jeden Planwechsel zu unterstuetzen.
+func TestMock_EhrlichVerneinterPlanwechselIstKeinFehler(t *testing.T) {
+	r := withBroker(t, mutation{planUpdateableFalse: true, planChangeRejected: 422})
+
+	assert.Zero(t, r.Failures(), "korrekt verneint und korrekt abgelehnt, es schlug an: %s", failedNames(r))
+	assert.Contains(t, r.Passed, "catalog-promises")
 }
 
 // Der wichtigste Fall. Eine Negativpruefung, die einen Transportfehler als
