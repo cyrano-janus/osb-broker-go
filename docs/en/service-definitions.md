@@ -26,22 +26,23 @@ must be present together:
    "being created" to "done".
 
 **Where the "just YAML" promise breaks.** If one of the three is missing, the
-best definition does not help. Of the seven shipped definitions only two are
+best definition does not help. Three definitions are shipped, two of them
 proven end to end:
 
 | Definition | State |
 |---|---|
 | `cnpg-postgresql` | verified end to end, the reference for the simple shape |
 | `rabbitmq-cluster` | verified end to end, the reference for the complete shape |
-| `redis-standalone` | the secret is created by the operator's administrator, not by the operator |
-| `minio-objectstorage` | marked DEPRECATED |
-| `valkey-cluster` | the operator creates no credential secret |
-| `redpanda-cluster` | likewise |
-| `seaweedfs-s3` | successor to MinIO, not measured through |
+| `seaweedfs-s3` | readiness checked against the CRD schema only |
 
-Four of the seven cannot bind at all. That is not a weakness of the definitions
-but of the operators — and the reason the question about the three-part pattern
-comes **before** writing a definition.
+Four more sit under `definitions/unsupported/` and are not loaded. Two fail on
+their licence (Redis and Redpanda forbid offering the software as a managed
+service), one on an abandoned project (MinIO), and one because its operator
+creates no credential secret (Valkey).
+
+That is not a weakness of the definitions but of the operators and their
+licences — and the reason the question about the three-part pattern comes
+**before** writing a definition.
 
 ## Structure
 

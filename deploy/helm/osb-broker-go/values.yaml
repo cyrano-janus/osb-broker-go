@@ -95,25 +95,19 @@ definitions:
 # optionaler clusterweiter Zugriff auf Operator-CRs (z. B. postgresql.cnpg.io).
 rbac:
   create: true
+  # Diese Liste und definitions/ haelt internal/chart/sync_test.go zusammen, und
+  # zwar in beide Richtungen: eine fehlende Gruppe ist 403 beim Provision - also
+  # erst beim Kunden -, eine ueberfluessige ein clusterweites Recht zu viel.
+  #
+  # Geprueft wird nur die Vollstaendigkeit, nicht der Ressourcenname: der Plural
+  # laesst sich aus dem Kind nicht sicher ableiten (der von "Redis" ist "redis").
+  # Deshalb bleibt die Liste handgepflegt.
   operatorCRDs:
     - group: postgresql.cnpg.io
       resources: [clusters]
       verbs: [create, get, list, update, delete]
-    # Diese Liste und definitions/ haelt internal/chart/sync_test.go zusammen,
-    # und zwar in beide Richtungen: eine fehlende Gruppe ist 403 beim Provision
-    # (also erst beim Kunden), eine ueberfluessige ein clusterweites Recht zu
-    # viel.
-    # Der Plural einer CRD laesst sich aus dem Kind nicht sicher ableiten -
-    # deshalb wird diese Liste von Hand gepflegt und nur ihre Vollstaendigkeit
-    # geprueft (internal/chart/sync_test.go), in beide Richtungen.
-    - group: minio.min.io
-      resources: [tenants]
-      verbs: [create, get, list, update, delete]
     - group: rabbitmq.com
       resources: [rabbitmqclusters]
-      verbs: [create, get, list, update, delete]
-    - group: redpanda.vectorized.io
-      resources: [clusters]
       verbs: [create, get, list, update, delete]
     - group: seaweed.seaweedfs.com
       resources: [seaweeds]

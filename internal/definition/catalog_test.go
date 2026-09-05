@@ -16,10 +16,12 @@ func TestAllShippedDefinitionsParse(t *testing.T) {
 	for _, d := range defs {
 		names[d.Metadata.Name] = true
 	}
-	// redis-standalone steht bewusst nicht mehr dabei: der Operator fuehrt
-	// keinen auswertbaren Status, die Definition liegt unter
-	// definitions/unsupported/ und wird nicht geladen.
-	for _, want := range []string{"cnpg-postgresql", "rabbitmq-cluster", "minio-objectstorage"} {
+	// Vier Definitionen liegen bewusst unter definitions/unsupported/ und
+	// werden nicht geladen: Redis und Redpanda, weil ihre Lizenz die
+	// Bereitstellung als managed Service untersagt, MinIO, weil das Projekt
+	// aufgegeben ist, und Valkey, weil sein Operator kein Credentials-Secret
+	// anlegt. Die Begruendung je Fall steht in deren README.
+	for _, want := range []string{"cnpg-postgresql", "rabbitmq-cluster", "seaweedfs-s3"} {
 		if !names[want] {
 			t.Errorf("missing shipped definition %q (got %v)", want, names)
 		}

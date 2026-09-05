@@ -118,14 +118,16 @@ trifft auf einen leeren `issuerRef.name` und damit auf ein `{{ required }}`. Das
 ist Absicht — ein Zertifikat ohne Aussteller wäre sinnlos —, heißt aber, dass
 `helm install` ohne eigene Werte fehlschlägt.
 
-**`rbac.operatorCRDs` deckt nicht alle mitgelieferten Definitionen ab.** Es
-fehlen `minio.min.io/tenants` und `redis.redis.opstreelabs.in/redis`. Wer diese
-Definitionen ausrollt, bekommt beim Provision einen 403. Die Liste ist bewusst
-handgepflegt: Rechte auf CRDs, die gar nicht installiert sind, verschleiern, was
-der Broker wirklich anfassen darf.
+**`rbac.operatorCRDs` deckt genau die mitgelieferten Definitionen ab** — nicht
+weniger und nicht mehr. `internal/chart/sync_test.go` prüft beide Richtungen:
+eine fehlende Gruppe wäre ein `403` beim Provision, also erst beim Benutzer;
+eine überflüssige ein clusterweites Recht zu viel. Die Liste bleibt trotzdem
+handgepflegt, weil sich der Ressourcenname aus dem Kind nicht sicher ableiten
+lässt — der Plural von `Redis` ist `redis`.
 
-**`config.logRequests` wird von keinem Template gelesen** und hat keine
-entsprechende Umgebungsvariable. Der Wert wirkt nicht.
+**`config.logRequests` schaltet das Zugriffsprotokoll** über `LOG_REQUESTS`.
+Standard ist an: ein Broker, der stumm läuft, ist im Fehlerfall nicht
+nachvollziehbar.
 
 ### Die State-CRDs liegen nicht im Chart
 

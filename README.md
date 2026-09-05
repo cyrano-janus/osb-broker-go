@@ -112,14 +112,14 @@ served at runtime under `/openapi.yaml` and
 |---|---|---|
 | `cnpg-postgresql.yaml` | CloudNativePG | verified end to end |
 | `rabbitmq-cluster.yaml` | RabbitMQ cluster operator | verified end to end |
-| `redis-standalone.yaml` | Redis operator | the secret is not created by the operator |
-| `seaweedfs-s3.yaml` | SeaweedFS | not measured through |
-| `valkey-cluster.yaml` | Hyperspike Valkey | the operator creates no credential secret |
-| `redpanda-cluster.yaml` | Redpanda | likewise |
-| `minio-objectstorage.yaml` | MinIO | DEPRECATED |
+| `seaweedfs-s3.yaml` | SeaweedFS | readiness checked against the CRD schema only |
 
-Four of seven cannot bind — not because of the definitions but because the
-operators do not satisfy the three-part pattern. See
+**Four more sit under `definitions/unsupported/` and are not loaded** — Redis
+and Redpanda because their licence forbids offering the software as a managed
+service, MinIO because it is AGPLv3 and unmaintained since late 2025, Valkey
+because its operator creates no credentials secret. The reasoning per case is
+in [definitions/unsupported/README.md](definitions/unsupported/README.md); what
+makes an operator usable at all is in
 [service-definitions.md](docs/en/service-definitions.md).
 
 ## License

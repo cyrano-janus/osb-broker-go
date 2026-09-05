@@ -117,14 +117,15 @@ meets an empty `issuerRef.name` and therefore a `{{ required }}`. That is
 intentional — a certificate without an issuer would be pointless — but it means
 `helm install` without your own values fails.
 
-**`rbac.operatorCRDs` does not cover all shipped definitions.**
-`minio.min.io/tenants` and `redis.redis.opstreelabs.in/redis` are missing.
-Rolling out those definitions gets you a 403 on provision. The list is
-deliberately hand-maintained: rights on CRDs that are not installed obscure what
-the broker is really allowed to touch.
+**`rbac.operatorCRDs` covers exactly the shipped definitions** — no fewer and
+no more. `internal/chart/sync_test.go` checks both directions: a missing group
+would be a `403` on provision, so a failure that only surfaces at the user; a
+superfluous one is a cluster-wide right too many. The list stays hand-maintained
+because the resource name cannot be derived safely from the kind — the plural of
+`Redis` is `redis`.
 
-**`config.logRequests` is read by no template** and has no corresponding
-environment variable. The value has no effect.
+**`config.logRequests` switches the access log** via `LOG_REQUESTS`. The default
+is on: a broker running silently cannot be traced when something goes wrong.
 
 ### The state CRDs are not in the chart
 

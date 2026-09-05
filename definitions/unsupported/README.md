@@ -5,9 +5,14 @@ Unterverzeichnisse. Die Dateien bleiben, weil sie Arbeit und einen Befund
 tragen — ausgeliefert werden sie nicht, weil sie nachweislich nicht
 funktionieren würden.
 
-**Der Katalog hat damit keinen In-Memory-Cache mehr.** Das ist eine
-Entscheidung, kein Versehen: die CNCF führt kein Cache-Projekt, und die beiden
-naheliegenden Kandidaten scheitern aus verschiedenen Gründen — siehe unten.
+**Der Katalog führt damit noch drei Angebote.** Das ist wenig, aber jedes davon
+ist rechtssicher bestellbar. Ein Eintrag, den ein Betreiber nicht anbieten darf,
+ist schlechter als keiner.
+
+Zwei Lücken bleiben bewusst offen: ein **In-Memory-Cache** — die CNCF führt kein
+Cache-Projekt, und die beiden naheliegenden Kandidaten scheitern unten —, und
+**Streaming**, seit Redpanda weg ist. Für Streaming gäbe es mit Strimzi
+(Apache 2.0, CNCF Incubating) einen sauberen Ersatz; er steht auf der Roadmap.
 
 ## `redis-standalone.yaml`
 
@@ -101,6 +106,61 @@ laufendes CR.
 Valkey selbst ist nicht das Problem — sein Operator-Ökosystem ist noch nicht
 so weit. Wenn sich das ändert (ein Operator, der ein Secret erzeugt und es in
 seinem Status nennt), ist die Definition schnell wieder gültig.
+
+## `redpanda-cluster.yaml`
+
+**Die Lizenz untersagt genau diesen Anwendungsfall.** Redpanda Community steht
+unter der Business Source License 1.1: sie ist quelloffen einsehbar, aber die
+Software darf Dritten nicht als kommerzieller Streaming- oder Queuing-Dienst
+bereitgestellt werden. Der BSL-Code wandelt sich vier Jahre nach jedem Merge in
+Apache 2.0 — bis dahin gilt die Einschränkung.
+
+Das ist dieselbe Klausel wie bei Redis, mit demselben Ergebnis: ein Service
+Broker, der Instanzen für Konsumenten eines Marketplace herstellt, ist der
+Managed-Service-Fall, den die Lizenz verhindern soll.
+
+Unabhängig davon war die Definition technisch bereits falsch: ihr
+Readiness-Pfad suchte `type=="Ready"`, während das CRD
+`redpanda.vectorized.io/v1alpha1` seine Condition-Typen mit **genau einem** Wert
+enumeriert, `ClusterConfigured`. Das ist inzwischen korrigiert — die Definition
+ist also lauffähig, sie darf nur nicht angeboten werden.
+
+Die Datei trug außerdem bis zuletzt die Annotation
+`broker.osb.io/status: blocked-on-multi-doc-templates`. Die war seit Phase 4.6
+falsch (FINDINGS #21): Multi-Doc ist implementiert, und dieses Template ist
+Single-Doc.
+
+**Ersatz:** [Strimzi](https://strimzi.io) — Apache 2.0, CNCF Incubating. Ein
+`KafkaUser` erzeugt sein Credentials-Secret selbst und nennt es in
+`status.secret`; `Kafka` und `KafkaUser` führen beide `status.conditions` mit
+dem Typ `Ready`. Damit erfüllt Strimzi alle drei Kriterien. Steht auf der
+Roadmap.
+
+## `minio-objectstorage.yaml`
+
+**Das Projekt ist aufgegeben.** MinIO steht seit 2021 unter AGPLv3, hat im
+Februar 2025 die Web-Konsole aus der Community-Fassung verloren — Kontoverwaltung,
+Bucket-Konfiguration und Site-Replikation wanderten in das kostenpflichtige
+AIStor —, und seit Ende 2025 trägt das Repository „no longer maintained": keine
+neuen Funktionen, keine Bearbeitung von Issues und Pull Requests, kritische
+Sicherheitsfixes nur nach Einzelfallprüfung.
+
+Die Lizenz allein wäre kein Ausschluss: AGPLv3 erlaubt das Anbieten als Dienst,
+sie verpflichtet nur dazu, Nutzern über das Netz den Corresponding Source
+anzubieten. Ein unmaintainter Objektspeicher in einem Produktkatalog ist es
+sehr wohl — ein Betreiber sagt damit Sicherheitsfixes zu, die niemand mehr
+liefert.
+
+Technisch war die Definition zuletzt in Ordnung: ihr Readiness-Pfad ist von
+`conditions` auf `status.currentState == Initialized` korrigiert, weil der
+`Tenant` gar keine Conditions führt.
+
+**Ersatz:** `seaweedfs-s3` (Apache 2.0) füllt den S3-Platz bereits und wird
+ausgeliefert — allerdings bisher nur gegen das CRD-Schema geprüft, nicht gegen
+einen laufenden Operator. Der schwerere, aber reifere Weg wäre
+[Rook](https://rook.io) (Apache 2.0, CNCF Graduated): ein
+`CephObjectStoreUser` schreibt Access- und Secret-Key in ein Secret. Ein
+Ceph-Cluster ist dafür deutlich teurer.
 
 ## Die Schema-Ausschnitte bleiben
 
