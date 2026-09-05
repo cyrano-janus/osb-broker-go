@@ -29,7 +29,7 @@ func mtlsRequest(t *testing.T, leaf *x509.Certificate, verified bool) *http.Requ
 }
 
 func TestMTLS_NoCertificateIsNoCredentials(t *testing.T) {
-	a := NewMTLS([]string{"osb-checker"}, nil, nil)
+	a := NewMTLS([]string{"osb-gate"}, nil, nil)
 
 	// Plain HTTP request: no TLS state at all.
 	id, err := a.Authenticate(mtlsRequest(t, nil, false))
@@ -48,8 +48,8 @@ func TestMTLS_NoCertificateIsNoCredentials(t *testing.T) {
 
 func TestMTLS_UnverifiedChainIsRejected(t *testing.T) {
 	ca := newTestCA(t)
-	leaf := ca.issueClient(t, "osb-checker", nil, nil)
-	a := NewMTLS([]string{"osb-checker"}, nil, nil)
+	leaf := ca.issueClient(t, "osb-gate", nil, nil)
+	a := NewMTLS([]string{"osb-gate"}, nil, nil)
 
 	// A certificate whose chain crypto/tls did not verify must never be
 	// trusted, even if the subject matches. This guards against a
@@ -63,12 +63,12 @@ func TestMTLS_UnverifiedChainIsRejected(t *testing.T) {
 
 func TestMTLS_CommonNameAllowlist(t *testing.T) {
 	ca := newTestCA(t)
-	a := NewMTLS([]string{"osb-checker"}, nil, nil)
+	a := NewMTLS([]string{"osb-gate"}, nil, nil)
 
-	id, err := a.Authenticate(mtlsRequest(t, ca.issueClient(t, "osb-checker", nil, nil), true))
+	id, err := a.Authenticate(mtlsRequest(t, ca.issueClient(t, "osb-gate", nil, nil), true))
 	require.NoError(t, err)
 	assert.Equal(t, "mtls", id.Method)
-	assert.Equal(t, "osb-checker", id.Subject)
+	assert.Equal(t, "osb-gate", id.Subject)
 
 	// Signed by the trusted CA, but not on the allowlist. "The CA signed it"
 	// is authentication, not authorisation.

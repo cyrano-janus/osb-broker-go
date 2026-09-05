@@ -1,10 +1,15 @@
-package checker
+package checks
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+// Beispiel-IDs dieses Brokers. Sie stehen hier und nicht im Produktivcode:
+// ein allgemeines Konformitaetswerkzeug darf keine Service-IDs kennen.
+const cnpgServiceID = "f48a9e21-cnpg-0000-0000-000000000001"
+const smallPlanID = "plan-small-0000-0000-000000000001"
 
 // Die Auswahl des zu pruefenden Service entscheidet, welchen Codepfad der
 // gesamte Lifecycle-Audit anfasst. Sie nahm frueher den ersten Katalogeintrag,
@@ -28,9 +33,9 @@ func svc(id string, planIDs ...string) catalogService {
 
 // pick ruft pickService und liefert Auswahl samt Fehlerzahl.
 func pick(cfg Config, svcs []catalogService) (string, string, int) {
-	failures = 0
-	sid, pid := pickService(cfg, svcs)
-	return sid, pid, failures
+	c := &client{cfg: cfg, rep: &Report{}}
+	sid, pid := c.pickService(svcs)
+	return sid, pid, c.rep.Failures()
 }
 
 func TestPickService_UeberspringtDieDemoAngebote(t *testing.T) {

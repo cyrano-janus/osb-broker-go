@@ -76,7 +76,7 @@ ungefähr eins zu eins.
 | `internal/auth` | 299 | Authenticator-Kette, unabhängig von gin |
 | `internal/migrate` | 208 | übernimmt Zustand aus einer ConfigMap im Format `state.json` |
 | `main.go` | 139 | Verdrahtung, sonst nichts |
-| `cmd/osb-checker` | 797 | Konformitätssuite, CI-Gate |
+| `cmd/osb-gate` | 954 | Konformitätssuite, CI-Gate |
 | `cmd/osb-state-migrate` | 66 | Werkzeug um `internal/migrate` |
 
 ## Die Schichten im Einzelnen
@@ -230,7 +230,7 @@ Grenze läuft zwischen den Schichten, nicht quer durch sie:
 | `internal/broker/crdstate.go` und Umfeld | ~700 | trägt |
 | `internal/config`, `server`, `auth` | 1.011 | trägt |
 | `internal/apis/v1alpha1` | 309 | trägt |
-| `cmd/osb-checker` | 797 | trägt |
+| `cmd/osb-gate` | 954 | trägt |
 | Logging, Metriken, Docs-Endpunkte | ~290 | trägt, entkoppelte Querschnitte |
 
 Dass die Engine trägt, ist belegt: zwei Operatoren mit unterschiedlichen

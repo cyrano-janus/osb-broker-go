@@ -77,7 +77,7 @@ touch it.
 | `internal/broker/crdstate.go` and surroundings | unchanged |
 | `internal/config`, `server`, `auth` | unchanged |
 | `internal/apis/v1alpha1` | unchanged |
-| `cmd/osb-checker` | unchanged |
+| `cmd/osb-gate` | unchanged |
 | Dual path in the handlers | replaced |
 | `internal/broker/broker.go` | reduced to state access |
 | `internal/store` | deleted |

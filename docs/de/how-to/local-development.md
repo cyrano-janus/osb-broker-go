@@ -122,18 +122,21 @@ durchgeht, ist noch kein Nachweis für ein Zielsystem — siehe
 
 ## Die Konformitätssuite
 
-`cmd/osb-checker` prüft den Broker gegen OSB 2.17 und ist das Gate, an dem sich
-Änderungen an der HTTP-Schicht messen lassen.
+`cmd/osb-gate` prüft den Broker gegen OSB 2.17 und ist das Gate, an dem sich
+Änderungen an der HTTP-Schicht messen lassen. **Der Name sagt die Rolle, nicht
+den Umfang:** die Prüfungen selbst kennen keine Service-ID und keinen
+Katalogeintrag dieses Repos und gelten für jeden OSB-Broker. Zum *Gate* macht
+es allein, wo es läuft — in der CI dieses Repos, blockierend, bei jedem Push.
 
 ```bash
-go build -o /tmp/osb-checker ./cmd/osb-checker/
-/tmp/osb-checker --url http://localhost:8080 --user dev --pass dev
+go build -o /tmp/osb-gate ./cmd/osb-gate/
+/tmp/osb-gate --url http://localhost:8080 --user dev --pass dev
 ```
 
 Über HTTPS mit Client-Zertifikat:
 
 ```bash
-/tmp/osb-checker \
+/tmp/osb-gate \
   --url https://localhost:8443 \
   --user dev --pass dev \
   --ca-cert ca.crt --client-cert client.crt --client-key client.key
@@ -147,7 +150,7 @@ Vorgabe nimmt sie den ersten Service, der **kein** Demo-Angebot ist — also ein
 ServiceDefinition, und damit die Engine. Gezielt wählen geht so:
 
 ```bash
-/tmp/osb-checker --url http://localhost:8080 --user dev --pass dev \
+/tmp/osb-gate --url http://localhost:8080 --user dev --pass dev \
   --service-id f48a9e21-cnpg-0000-0000-000000000001 \
   --plan-id plan-small-0000-0000-000000000001
 ```
@@ -163,10 +166,15 @@ Neben dem eingebauten gibt es ein eigenstaendiges Werkzeug,
 `github.com/cyrano-janus/osb-checker`. Die Rollen sind festgelegt, damit sie
 nicht auseinanderdriften:
 
-| Werkzeug | Rolle | Laeuft |
-|---|---|---|
-| `cmd/osb-checker` | schnelles Gate, blockierend | L2 und L2b, jeder Push |
-| standalone `osb-checker` | Voll-Audit, unabhaengige Gegenprobe | L2, blockierend |
+| Werkzeug | Was es ist | Prüft | Läuft |
+|---|---|---|---|
+| `cmd/osb-gate` | das Gate dieses Repos | **diesen** Broker bei jedem Push | L2 und L2b, blockierend |
+| `osb-checker` | die unabhängige Zweitmeinung, eigenes Repo, öffentlich, MIT | **jeden** OSB-Broker | L2, blockierend |
+
+Der Unterschied ist die **Rolle**, nicht die Fähigkeit. Beide prüfen dieselbe
+Spezifikation; `osb-gate` ist an diesen Build gebunden und entscheidet, ob er
+durchgeht, `osb-checker` ist ein Werkzeug für sich und gegen fremde Broker
+einsetzbar.
 
 **Widersprechen sich beide, gewinnt die Spezifikation, nicht das Werkzeug.** Ein
 Widerspruch ist ein Befund fuer [known-issues.md](../known-issues.md), kein
@@ -175,6 +183,23 @@ Grund, eine der beiden Suiten anzupassen.
 Beide Laeufe blockieren. Eine Gegenprobe, die nur berichtet, wird ueberlesen;
 ein Werkzeug, dessen Urteil folgenlos bleibt, ist von einem kaputten nicht zu
 unterscheiden.
+
+**Beide belegen, dass ihre Prüfungen anschlagen können.** Ein Gate, dessen
+Prüfungen wirkungslos sind, ist von einem grünen nicht zu unterscheiden — es
+meldet dieselbe Farbe und sagt damit nichts. `osb-gate` führt den Beleg in
+`checks/mockbroker_test.go`: ein konformer httptest-Broker muss null
+Fehlschläge ergeben, jede der 20 Mutationen — genau eine verletzte Regel — muss
+genau die zuständige Prüfung auslösen, und gegen einen geschlossenen Server darf
+**nichts** bestehen. Die letzte Zusage ist die wichtigste: eine Negativprüfung,
+die einen Transportfehler als „der Broker hat abgelehnt" liest, meldet einen
+unerreichbaren Broker als konform.
+
+```bash
+go test ./cmd/osb-gate/checks/ -run TestMock -v
+```
+
+Wer eine Prüfung hinzufügt, fügt ihre Mutation dazu. Sonst ist die Prüfung
+selbst ungeprüft.
 
 Das Checker-Repo ist öffentlich; die CI klont es ohne Anmeldung und ohne
 gepinnten Stand — die Gegenprobe soll den jeweils aktuellen Checker fahren. Der

@@ -68,6 +68,6 @@ gespeicherten, ungenannte bleiben stehen — damit meldet
 läuft, auch wenn die Plattform nur das Geänderte schickt. Begründung in
 [ADR 0007](../adr/0007-user-parameters.md).
 
-Die Konformitätssuite `cmd/osb-checker` läuft in der CI zweimal: einmal über
+Die Konformitätssuite `cmd/osb-gate` läuft in der CI zweimal: einmal über
 HTTP gegen CloudNativePG, einmal über HTTPS mit Client-Zertifikat gegen das
 Helm-Chart. Der eigenständige Checker läuft als blockierende Gegenprobe daneben.

@@ -25,7 +25,7 @@ platform-specific code in the broker, and there is not supposed to be.**
 Three rules follow from that:
 
 1. **The broker runs as an ordinary Kubernetes Deployment.** It is usable
-   without Cloud Foundry — via `curl`, via `cmd/osb-checker` or from any OSB
+   without Cloud Foundry — via `curl`, via `cmd/osb-gate` or from any OSB
    platform. Every platform *consumes* the same URL; there is no second
    deployment per platform.
 2. **No `if korifi` in the code.** Where a platform behaves oddly, that is
@@ -52,7 +52,7 @@ instructions. Not in the Go code.
   precisely why it is a tooling problem and not a product problem.
 - The external marketplace is not a special case but the same case as Cloud
   Foundry — a consumer that reads `/v2/catalog` and drives the lifecycle.
-- The conformance suite `cmd/osb-checker` is therefore a meaningful gate and not
+- The conformance suite `cmd/osb-gate` is therefore a meaningful gate and not
   a formality: it tests exactly the one coupling that exists.
 
 **Price:**

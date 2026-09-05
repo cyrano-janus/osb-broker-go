@@ -1,4 +1,4 @@
-package checker
+package checks
 
 import (
 	"testing"
@@ -6,12 +6,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// checkServiceBindingSpec meldet ueber die paketweite failures-Variable; die
-// Tests setzen sie zurueck und lesen sie aus.
+// checkServiceBindingSpec meldet in den Report des Laufs; jeder Aufruf
+// bekommt einen eigenen.
 func runSpecCheck(body string) int {
-	failures = 0
-	checkServiceBindingSpec([]byte(body))
-	return failures
+	c := &client{rep: &Report{}}
+	c.checkServiceBindingSpec([]byte(body))
+	return c.rep.Failures()
 }
 
 func TestSpecCheck_OhneTypIstKeinFehler(t *testing.T) {

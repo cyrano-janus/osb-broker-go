@@ -35,11 +35,11 @@ jobs:
           set -o pipefail
           go test ./... -count=1 -race 2>&1 | tee /tmp/vet.log
 
-      - name: build (all binaries incl. osb-checker)
+      - name: build (all binaries incl. osb-gate)
         run: go build ./...
 
   conformance:
-    name: L2 — Conformance-Gate (kind + CNPG + osb-checker)
+    name: L2 — Conformance-Gate (kind + CNPG + osb-gate)
     runs-on: ubuntu-latest
     needs: verify
     steps:
@@ -58,7 +58,7 @@ jobs:
       - name: Build broker + checker binaries from PR code
         run: |
           go build -o /tmp/broker .
-          go build -o /tmp/osb-checker ./cmd/osb-checker/
+          go build -o /tmp/osb-gate ./cmd/osb-gate/
 
       - name: Create kind cluster
         uses: helm/kind-action@v1
@@ -126,14 +126,14 @@ jobs:
           echo "can-i create bindings: $(kubectl auth can-i --as=system:serviceaccount:osb:osb-broker-go create osbservicebindings.broker.osb.io -n osb)"
           kubectl get role,rolebinding -n osb || true
 
-      - name: Run osb-checker against the PR broker
+      - name: Run osb-gate against the PR broker
         run: |
           kubectl port-forward -n osb svc/osb-broker-go 18080:80 &
           PF_PID=$!
           sleep 3
           curl -s -o /dev/null -w "healthz: %{http_code}\n" http://localhost:18080/healthz
           set +e
-          /tmp/osb-checker --url http://localhost:18080 --user chk --pass chkpass \
+          /tmp/osb-gate --url http://localhost:18080 --user chk --pass chkpass \
             --id-prefix pr-${{ github.event.number }} | tee /tmp/checker.log
           RC="${PIPESTATUS[0]}"
           set -e
@@ -153,7 +153,7 @@ jobs:
 
       - name: Zweitmeinung — standalone osb-checker
         # Zwei Werkzeuge fuer dieselbe Aufgabe koennen auseinanderdriften.
-        # Deshalb ist die Rollentrennung festgelegt: cmd/osb-checker prueft
+        # Deshalb ist die Rollentrennung festgelegt: osb-gate prueft
         # gegen die eigene Auslegung der Spezifikation, dieser Lauf ist die
         # unabhaengige Gegenprobe. Widersprechen sich beide, gewinnt die
         # Spezifikation - ein Widerspruch ist ein Befund, kein Grund, eine
@@ -224,7 +224,7 @@ jobs:
           path: /tmp/checker.log
 
   conformance-tls:
-    name: L2b — TLS/mTLS-Conformance (kind + Helm + osb-checker über HTTPS)
+    name: L2b — TLS/mTLS-Conformance (kind + Helm + osb-gate über HTTPS)
     runs-on: ubuntu-latest
     needs: verify
     steps:
@@ -236,7 +236,7 @@ jobs:
           cache: true
 
       - name: Build checker from PR code
-        run: go build -o /tmp/osb-checker ./cmd/osb-checker/
+        run: go build -o /tmp/osb-gate ./cmd/osb-gate/
 
       - name: Generate CA, server and client certificates
         run: |
@@ -253,7 +253,7 @@ jobs:
             -days 1 -sha256 -out tls.crt \
             -extfile <(printf "subjectAltName=DNS:localhost,DNS:osb-broker-go,DNS:osb-broker-go.osb.svc,DNS:osb-broker-go.osb.svc.cluster.local,IP:127.0.0.1\nextendedKeyUsage=serverAuth\n")
           openssl req -newkey rsa:2048 -nodes -keyout client.key -out client.csr \
-            -subj "/CN=osb-checker"
+            -subj "/CN=osb-gate"
           openssl x509 -req -in client.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
             -days 1 -sha256 -out client.crt \
             -extfile <(printf "extendedKeyUsage=clientAuth\n")
@@ -286,7 +286,7 @@ jobs:
             --wait --timeout 180s
           kubectl rollout status deployment/osb-broker-go -n osb --timeout=120s
 
-      - name: Run osb-checker over HTTPS with a client certificate
+      - name: Run osb-gate over HTTPS with a client certificate
         run: |
           kubectl port-forward -n osb svc/osb-broker-go 18443:443 &
           PF_PID=$!
@@ -296,7 +296,7 @@ jobs:
           curl -sS --cacert /tmp/certs/ca.crt \
             -o /dev/null -w "healthz: %{http_code}\n" https://localhost:18443/healthz
           set +e
-          /tmp/osb-checker --url https://localhost:18443 \
+          /tmp/osb-gate --url https://localhost:18443 \
             --ca-cert /tmp/certs/ca.crt \
             --client-cert /tmp/certs/client.crt --client-key /tmp/certs/client.key \
             --user chk --pass chkpass \

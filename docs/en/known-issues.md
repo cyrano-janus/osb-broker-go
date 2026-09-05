@@ -21,13 +21,6 @@ are registered and permanently report 0.
 
 ## Structural problems
 
-**Nothing demonstrates that the gate's checks can fail.** `cmd/osb-checker`
-has no mutation suite: only `pickService` and `checkServiceBindingSpec` are
-tested, not the checks themselves. A gate whose checks are ineffective is
-indistinguishable from a green one — which is exactly what happened while the
-selection always hit the demo service (*FINDINGS #20*, fixed). The standalone
-checker has such a suite.
-
 ## Definitions and deployment
 
 **The readiness paths of five definitions are unverified.**
@@ -110,5 +103,8 @@ visible or cheaper.
    the deadline is enforced, a wrong path ends in `failed` after ten minutes
    instead of an endless poll — it still only becomes visible when somebody
    looks.
-2. **A mutation suite for `cmd/osb-checker`** — the standalone checker has one,
-   and on its first run it found two ineffective checks.
+2. **The checks both tools lack** — version negotiation (a missing
+   `X-Broker-API-Version` → 412), `409 Conflict` on differing parameters,
+   unbind of an unknown binding → 410, and checking the error body for `error`
+   and `description`. Every new check comes with its mutation, otherwise the
+   check itself is unchecked.

@@ -75,7 +75,7 @@ hat sie nicht angefasst.
 | `internal/broker/crdstate.go` und Umfeld | unverändert |
 | `internal/config`, `server`, `auth` | unverändert |
 | `internal/apis/v1alpha1` | unverändert |
-| `cmd/osb-checker` | unverändert |
+| `cmd/osb-gate` | unverändert |
 | Doppelpfad in den Handlern | ersetzt |
 | `internal/broker/broker.go` | auf den Zustandszugang reduziert |
 | `internal/store` | gelöscht |

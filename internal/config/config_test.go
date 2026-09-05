@@ -156,7 +156,7 @@ func TestLoad_MinVersion(t *testing.T) {
 func TestLoad_AuthMethodsExplicit(t *testing.T) {
 	kv := map[string]string{
 		"TLS_ENABLED": "true", "TLS_CERT_FILE": "/c", "TLS_KEY_FILE": "/k",
-		"MTLS_ENABLED": "true", "MTLS_CLIENT_CA_FILE": "/ca", "MTLS_ALLOWED_CNS": "osb-checker",
+		"MTLS_ENABLED": "true", "MTLS_CLIENT_CA_FILE": "/ca", "MTLS_ALLOWED_CNS": "osb-gate",
 		"BROKER_AUTH_USER": "u", "BROKER_AUTH_PASSWORD": "p",
 		"AUTH_METHODS": "mtls,basic",
 	}
@@ -182,12 +182,12 @@ func TestLoad_CSVParsing(t *testing.T) {
 	c, err := LoadFrom(env(map[string]string{
 		"TLS_ENABLED": "true", "TLS_CERT_FILE": "/c", "TLS_KEY_FILE": "/k",
 		"MTLS_ENABLED": "true", "MTLS_CLIENT_CA_FILE": "/ca",
-		"MTLS_ALLOWED_CNS":       " osb-checker , korifi ,, ",
+		"MTLS_ALLOWED_CNS":       " osb-gate , korifi ,, ",
 		"MTLS_ALLOWED_DNS_NAMES": "broker.example.com",
 		"MTLS_ALLOWED_URIS":      "spiffe://osb/checker",
 	}))
 	require.NoError(t, err)
-	assert.Equal(t, []string{"osb-checker", "korifi"}, c.Auth.MTLS.AllowedCNs)
+	assert.Equal(t, []string{"osb-gate", "korifi"}, c.Auth.MTLS.AllowedCNs)
 	assert.Equal(t, []string{"broker.example.com"}, c.Auth.MTLS.AllowedDNSNames)
 	assert.Equal(t, []string{"spiffe://osb/checker"}, c.Auth.MTLS.AllowedURIs)
 }

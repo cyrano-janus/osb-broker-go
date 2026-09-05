@@ -25,13 +25,13 @@ auth:
   mtls:
     enabled: true
     # Optional, nicht erzwungen: so bleiben die /healthz-Probes ohne
-    # Client-Zertifikat erreichbar, und der Checker kann die 401-Erwartung
+    # Client-Zertifikat erreichbar, und das Gate kann die 401-Erwartung
     # aus auth-enforcement überhaupt beobachten.
     required: false
     caSecretName: osb-broker-clientca
     caKey: ca.crt
     allowedCNs:
-      - osb-checker
+      - osb-gate
 
 tls:
   enabled: true

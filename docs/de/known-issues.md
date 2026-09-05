@@ -21,13 +21,6 @@ Gauges sind registriert und melden dauerhaft 0.
 
 ## Strukturelle Probleme
 
-**Nichts belegt, dass die Prüfungen des Gates fehlschlagen können.**
-`cmd/osb-checker` hat keine Mutationssuite: geprüft sind nur `pickService` und
-`checkServiceBindingSpec`, nicht die Prüfungen selbst. Ein Gate, dessen
-Prüfungen wirkungslos sind, ist von einem grünen nicht zu unterscheiden — genau
-das war lange der Fall, als die Auswahl immer den Demo-Service traf
-(*FINDINGS #20*, behoben). Der eigenständige Checker hat eine solche Suite.
-
 ## Definitionen und Deployment
 
 **Die Readiness-Pfade von fünf Definitionen sind ungeprüft.**
@@ -110,5 +103,8 @@ nächsten sichtbar oder billiger.
    Seit das Zeitlimit greift, endet ein falscher Pfad nach zehn Minuten in
    `failed` statt in einer endlosen Abfrage — sichtbar ist er trotzdem erst,
    wenn jemand hinsieht.
-2. **Mutationssuite für `cmd/osb-checker`** — der eigenständige Checker hat
-   eine, und sie hat beim ersten Lauf zwei wirkungslose Prüfungen gefunden.
+2. **Die Prüfungen, die beiden Werkzeugen fehlen** — Versionsaushandlung
+   (fehlender `X-Broker-API-Version` → 412), `409 Conflict` bei abweichenden
+   Parametern, Unbind einer unbekannten Binding → 410, und die Prüfung des
+   Fehlerkörpers auf `error` und `description`. Jede neue Prüfung kommt mit
+   ihrer Mutation, sonst ist sie selbst ungeprüft.

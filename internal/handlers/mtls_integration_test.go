@@ -90,7 +90,7 @@ func newMTLSServer(t *testing.T, ca *mtlsCA) *httptest.Server {
 	h := New(broker.New(nil))
 	h.SetAuthenticator(auth.NewChain(
 		auth.NewBasic("broker-user", "broker-secret", "osb-broker"),
-		auth.NewMTLS([]string{"osb-checker"}, nil, nil),
+		auth.NewMTLS([]string{"osb-gate"}, nil, nil),
 	))
 
 	srv := httptest.NewUnstartedServer(h.SetupRouter())
@@ -132,7 +132,7 @@ func get(t *testing.T, c *http.Client, url string, basicUser, basicPass string) 
 func TestMTLS_AllowlistedClientCertificateIsAuthenticated(t *testing.T) {
 	ca := newMTLSCA(t)
 	srv := newMTLSServer(t, ca)
-	cert := ca.clientCert(t, "osb-checker")
+	cert := ca.clientCert(t, "osb-gate")
 
 	resp := get(t, tlsClient(srv, &cert), srv.URL+"/v2/catalog", "", "")
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "a listed client certificate authenticates without any credentials")

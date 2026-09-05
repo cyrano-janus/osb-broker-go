@@ -66,7 +66,7 @@ lifecycle.
 In practice this means two things. First, fields that Cloud Foundry generously
 ignores may be mandatory here — a real `dashboard_url`, for instance, instead of
 the currently hardcoded `https://dashboard.example.com/instances/<id>`. Second,
-the conformance suite `cmd/osb-checker` is the only tool that exercises this
+the conformance suite `cmd/osb-gate` is the only tool that exercises this
 case at all; here it stands in for the platform.
 
 ## State of verification

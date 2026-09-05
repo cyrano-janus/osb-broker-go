@@ -67,6 +67,6 @@ named stay — so `GET /v2/service_instances` reports the same set the instance
 actually runs under, even when the platform only sends what changed. Reasoning
 in [ADR 0007](../adr/0007-user-parameters.md).
 
-The conformance suite `cmd/osb-checker` runs twice in CI: once over HTTP against
+The conformance suite `cmd/osb-gate` runs twice in CI: once over HTTP against
 CloudNativePG, once over HTTPS with a client certificate against the Helm chart.
 The standalone checker runs alongside it as a blocking counter-check.

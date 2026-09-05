@@ -1,10 +1,20 @@
-// Package checks implements the osb-checker conformance checks against an
-// OSB 2.17 broker. Exit contract: Run() returns the failure count.
+// Package checks traegt die Konformitaetspruefungen von osb-gate gegen einen
+// OSB-2.17-Broker. Exit-Vertrag: Run() liefert die Zahl der Fehlschlaege.
 //
-// The suite mirrors the 21-check full audit of the standalone osb-checker
-// (development-open-service-broker/osb-checker) plus broker-specific checks
-// (auth enforcement, plan_updateable advertisement, 410-Gone mapping).
-package checker
+// Die Pruefungen selbst sind nicht broker-spezifisch: keine Service-ID, kein
+// Plan und kein Katalogeintrag dieses Repos steht in diesem Paket. Was hier
+// geprueft wird, gilt fuer jeden OSB-Broker - was es zum *Gate* macht, ist
+// allein, wo es laeuft: in der CI dieses Repos, blockierend, bei jedem Push.
+//
+// Die Zweitmeinung ist github.com/cyrano-janus/osb-checker, ein eigenes
+// oeffentliches Werkzeug. Beide blockieren, und beide bleiben getrennt: zwei
+// unabhaengig geschriebene Pruefer finden zusammen mehr als einer, der sich
+// selbst bestaetigt.
+//
+// Dass die Pruefungen ueberhaupt anschlagen koennen, belegt die
+// Mutationssuite in mockbroker_test.go - ein Gate, dessen Pruefungen
+// wirkungslos sind, ist von einem gruenen nicht zu unterscheiden.
+package checks
 
 import (
 	"bytes"
@@ -25,7 +35,17 @@ type Config struct {
 	User     string
 	Pass     string
 	IDPrefix string
-	Timeout  int64 // seconds; reserved for future per-check deadlines
+
+	// Timeout begrenzt jeden einzelnen HTTP-Request (Sekunden, 0 = Vorgabe).
+	// Ohne diese Schranke haengt ein stummer Broker den ganzen Lauf: der
+	// Client wartet unbegrenzt, und aus einem Befund wird ein Prozess, den
+	// jemand von Hand abbrechen muss.
+	Timeout int64
+
+	// AsyncTimeout begrenzt das Warten auf einen asynchronen Vorgang
+	// (Sekunden, 0 = Vorgabe). Ein Broker, der ewig `in progress` meldet,
+	// ist ein Befund und kein Geduldsspiel.
+	AsyncTimeout int64
 
 	// TLS options. CACert verifies the broker certificate;
 	// ClientCert/ClientKey authenticate the checker via mTLS.
@@ -43,9 +63,6 @@ type Config struct {
 	PlanID    string
 }
 
-const cnpgServiceID = "f48a9e21-cnpg-0000-0000-000000000001"
-const smallPlanID = "plan-small-0000-0000-000000000001"
-
 // demoServiceIDs sind Angebote, die ein Lifecycle-Audit nie pruefen darf: sie
 // beweisen nichts ueber den Broker, weil hinter ihnen kein Operator steht.
 //
@@ -59,18 +76,50 @@ const smallPlanID = "plan-small-0000-0000-000000000001"
 // nicht wieder unbemerkt zum Prueffall werden.
 var demoServiceIDs = map[string]bool{"service-1": true, "service-2": true}
 
-var failures int
+// Report ist das Ergebnis eines Laufs. Die Zahl allein genuegt nicht: eine
+// Mutationssuite muss belegen, dass genau die zustaendige Pruefung anschlaegt
+// und nicht irgendeine - und ein Aufrufer, der den Checker einbettet, will
+// wissen, welche.
+type Report struct {
+	// Failed und Passed tragen die Namen der Pruefungen in Laufreihenfolge.
+	// Eine Pruefung kann mehrfach auftauchen: sie prueft mehrere Zusagen.
+	Failed  []string
+	Passed  []string
+	Skipped []string
+}
 
-func fail(check string, format string, args ...interface{}) {
-	failures++
+// Failures ist die Zahl der Fehlschlaege und zugleich der Exit-Code.
+func (r *Report) Failures() int { return len(r.Failed) }
+
+// HasFailed meldet, ob eine Pruefung dieses Namens angeschlagen hat.
+func (r *Report) HasFailed(check string) bool {
+	for _, n := range r.Failed {
+		if n == check {
+			return true
+		}
+	}
+	return false
+}
+
+// Der Zustand haengt am Lauf, nicht am Paket. Eine Paketvariable machte zwei
+// gleichzeitige Laeufe unmoeglich und verhinderte, dass ein Test das Ergebnis
+// eines Laufs fuer sich betrachtet.
+func (c *client) fail(check string, format string, args ...interface{}) {
+	c.rep.Failed = append(c.rep.Failed, check)
 	msg := fmt.Sprintf("FAIL [%s]: %s", check, fmt.Sprintf(format, args...))
 	fmt.Println(msg)
 	// GitHub Actions annotation: appears in the run UI and annotations API.
 	fmt.Printf("::error::%s\n", msg)
 }
 
-func pass(check string, format string, args ...interface{}) {
+func (c *client) pass(check string, format string, args ...interface{}) {
+	c.rep.Passed = append(c.rep.Passed, check)
 	fmt.Printf("PASS [%s]: %s\n", check, fmt.Sprintf(format, args...))
+}
+
+func (c *client) skip(check string, format string, args ...interface{}) {
+	c.rep.Skipped = append(c.rep.Skipped, check)
+	fmt.Printf("SKIP [%s]: %s\n", check, fmt.Sprintf(format, args...))
 }
 
 type client struct {
@@ -83,6 +132,7 @@ type client struct {
 	// and the expected 401 would never appear.
 	anon *http.Client
 	cfg  Config
+	rep  *Report
 }
 
 // newHTTPClients builds the credentialled and the anonymous client.
@@ -104,8 +154,9 @@ func newHTTPClients(cfg Config) (authed, anon *http.Client, err error) {
 		authedTLS.Certificates = []tls.Certificate{pair}
 	}
 
-	return &http.Client{Transport: &http.Transport{TLSClientConfig: authedTLS}},
-		&http.Client{Transport: &http.Transport{TLSClientConfig: anonTLS}},
+	to := requestTimeout(cfg)
+	return &http.Client{Transport: &http.Transport{TLSClientConfig: authedTLS}, Timeout: to},
+		&http.Client{Transport: &http.Transport{TLSClientConfig: anonTLS}, Timeout: to},
 		nil
 }
 
@@ -203,25 +254,33 @@ func catalogHasService(c *client, serviceID string) bool {
 }
 
 // Run executes all conformance checks and returns the failure count.
-func Run(cfg Config) int {
-	failures = 0
+func Run(cfg Config) int { return RunReport(cfg).Failures() }
+
+// RunReport fuehrt denselben Lauf und gibt zurueck, welche Pruefungen
+// bestanden, fehlgeschlagen und uebersprungen wurden.
+//
+// Die Zahl allein genuegt nicht: eine Mutationssuite muss belegen, dass genau
+// die zustaendige Pruefung anschlaegt und nicht irgendeine.
+func RunReport(cfg Config) *Report {
+	rep := &Report{}
 
 	authed, anon, err := newHTTPClients(cfg)
 	if err != nil {
-		fail("tls-setup", "%v", err)
-		return failures
+		c := &client{cfg: cfg, rep: rep}
+		c.fail("tls-setup", "%v", err)
+		return rep
 	}
-	c := &client{http: authed, anon: anon, cfg: cfg}
+	c := &client{http: authed, anon: anon, cfg: cfg, rep: rep}
 
-	checkAuthEnforcement(c)
-	svcs := checkCatalogStructure(c)
-	checkErrorMapping(c)
+	c.checkAuthEnforcement()
+	svcs := c.checkCatalogStructure()
+	c.checkErrorMapping(svcs)
 
 	// Full lifecycle + fetch + update audit (mirrors the standalone
 	// osb-checker's provision/bind/update/fetch categories).
-	serviceID, planID := pickService(cfg, svcs)
+	serviceID, planID := c.pickService(svcs)
 	if serviceID == "" {
-		fmt.Println("SKIP [lifecycle-*]: kein pruefbarer Service im Katalog")
+		c.skip("lifecycle", "kein pruefbarer Service im Katalog")
 	} else {
 		inst := runLifecycleAudit(c, serviceID, planID)
 		if inst != "" {
@@ -230,7 +289,7 @@ func Run(cfg Config) int {
 			cleanupAudit(c, inst, serviceID, planID)
 		}
 	}
-	return failures
+	return rep
 }
 
 // awaitOperation pollt last_operation, bis der Vorgang abgeschlossen ist.
@@ -242,31 +301,32 @@ func awaitOperation(c *client, instanceID, serviceID, planID string) bool {
 	path := fmt.Sprintf("/v2/service_instances/%s/last_operation?service_id=%s&plan_id=%s&operation=provision",
 		instanceID, serviceID, planID)
 
-	deadline := time.Now().Add(asyncDeadline)
+	limit := c.asyncDeadline()
+	deadline := time.Now().Add(limit)
 	wait := time.Second
 	for {
 		status, body := c.do("GET", path, nil)
 		if status != 200 {
-			fail(check, "last_operation -> expected 200, got %d: %s", status, truncate(body))
+			c.fail(check, "last_operation -> expected 200, got %d: %s", status, truncate(body))
 			return false
 		}
 		var resp struct {
 			State string `json:"state"`
 		}
 		if err := json.Unmarshal(body, &resp); err != nil {
-			fail(check, "last_operation: invalid JSON: %s", truncate(body))
+			c.fail(check, "last_operation: invalid JSON: %s", truncate(body))
 			return false
 		}
 		switch resp.State {
 		case "succeeded":
-			pass(check, "last_operation -> succeeded")
+			c.pass(check, "last_operation -> succeeded")
 			return true
 		case "failed":
-			fail(check, "last_operation -> failed: %s", truncate(body))
+			c.fail(check, "last_operation -> failed: %s", truncate(body))
 			return false
 		}
 		if time.Now().After(deadline) {
-			fail(check, "last_operation still %q after %s", resp.State, asyncDeadline)
+			c.fail(check, "last_operation still %q after %s", resp.State, limit)
 			return false
 		}
 		time.Sleep(wait)
@@ -276,9 +336,26 @@ func awaitOperation(c *client, instanceID, serviceID, planID string) bool {
 	}
 }
 
-// asyncDeadline begrenzt das Warten. Ein CloudNativePG-Cluster braucht auf
-// kind gut eine Minute; laenger als das ist ein Befund, kein Geduldsspiel.
-const asyncDeadline = 4 * time.Minute
+// Vorgabewerte, wenn die Konfiguration schweigt. Ein CloudNativePG-Cluster
+// braucht auf kind gut eine Minute; laenger als vier Minuten ist ein Befund.
+const (
+	defaultRequestTimeout = 30 * time.Second
+	defaultAsyncDeadline  = 4 * time.Minute
+)
+
+func (c *client) asyncDeadline() time.Duration {
+	if c.cfg.AsyncTimeout > 0 {
+		return time.Duration(c.cfg.AsyncTimeout) * time.Second
+	}
+	return defaultAsyncDeadline
+}
+
+func requestTimeout(cfg Config) time.Duration {
+	if cfg.Timeout > 0 {
+		return time.Duration(cfg.Timeout) * time.Second
+	}
+	return defaultRequestTimeout
+}
 
 // pickService waehlt Service und Plan fuer den Lifecycle-Audit.
 //
@@ -288,8 +365,9 @@ const asyncDeadline = 4 * time.Minute
 // KEIN Demo-Angebot ist - also einer aus einer ServiceDefinition. Nur wenn es
 // keinen gibt, faellt die Wahl auf das Demo-Angebot; das ist der Fall, wenn der
 // Broker ohne DEFINITIONS_DIR laeuft.
-func pickService(cfg Config, svcs []catalogService) (serviceID, planID string) {
+func (c *client) pickService(svcs []catalogService) (serviceID, planID string) {
 	const check = "lifecycle-service-selection"
+	cfg := c.cfg
 
 	if cfg.ServiceID != "" {
 		for _, s := range svcs {
@@ -298,13 +376,13 @@ func pickService(cfg Config, svcs []catalogService) (serviceID, planID string) {
 			}
 			plan, err := resolvePlan(s, cfg.PlanID)
 			if err != nil {
-				fail(check, "service %q: %v", s.ID, err)
+				c.fail(check, "service %q: %v", s.ID, err)
 				return "", ""
 			}
-			pass(check, "service %q (%s), plan %q - vorgegeben", s.ID, s.Name, plan)
+			c.pass(check, "service %q (%s), plan %q - vorgegeben", s.ID, s.Name, plan)
 			return s.ID, plan
 		}
-		fail(check, "service %q steht nicht im Katalog", cfg.ServiceID)
+		c.fail(check, "service %q steht nicht im Katalog", cfg.ServiceID)
 		return "", ""
 	}
 
@@ -316,7 +394,7 @@ func pickService(cfg Config, svcs []catalogService) (serviceID, planID string) {
 		if err != nil {
 			continue
 		}
-		pass(check, "service %q (%s), plan %q - erste ServiceDefinition im Katalog", s.ID, s.Name, plan)
+		c.pass(check, "service %q (%s), plan %q - erste ServiceDefinition im Katalog", s.ID, s.Name, plan)
 		return s.ID, plan
 	}
 
@@ -325,7 +403,7 @@ func pickService(cfg Config, svcs []catalogService) (serviceID, planID string) {
 		if err != nil {
 			continue
 		}
-		pass(check, "service %q (%s), plan %q - nur Demo-Angebote im Katalog", s.ID, s.Name, plan)
+		c.pass(check, "service %q (%s), plan %q - nur Demo-Angebote im Katalog", s.ID, s.Name, plan)
 		return s.ID, plan
 	}
 	return "", ""
@@ -348,95 +426,92 @@ func resolvePlan(s catalogService, wanted string) (string, error) {
 	return s.Plans[0].ID, nil
 }
 
-func checkAuthEnforcement(c *client) {
+func (c *client) checkAuthEnforcement() {
 	const check = "auth-enforcement"
 	req, err := http.NewRequest("GET", strings.TrimSuffix(c.cfg.BaseURL, "/")+"/v2/catalog", nil)
 	if err != nil {
-		fail(check, "build request: %v", err)
+		c.fail(check, "build request: %v", err)
 		return
 	}
 	req.Header.Set("X-Broker-API-Version", "2.17")
 	resp, err := c.anon.Do(req)
 	if err != nil {
-		fail(check, "request failed: %v", err)
+		c.fail(check, "request failed: %v", err)
 		return
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 401 {
-		fail(check, "expected 401 without credentials, got %d", resp.StatusCode)
+		c.fail(check, "expected 401 without credentials, got %d", resp.StatusCode)
 		return
 	}
 	if resp.Header.Get("WWW-Authenticate") == "" {
-		fail(check, "401 without WWW-Authenticate header")
+		c.fail(check, "401 without WWW-Authenticate header")
 		return
 	}
-	pass(check, "unauthenticated request -> 401 with WWW-Authenticate")
+	c.pass(check, "unauthenticated request -> 401 with WWW-Authenticate")
 
 	hreq, _ := http.NewRequest("GET", strings.TrimSuffix(c.cfg.BaseURL, "/")+"/healthz", nil)
 	hresp, err := c.anon.Do(hreq)
 	if err != nil {
-		fail(check, "healthz request failed: %v", err)
+		c.fail(check, "healthz request failed: %v", err)
 		return
 	}
 	hresp.Body.Close()
 	if hresp.StatusCode != 200 {
-		fail(check, "healthz expected 200 unauthenticated, got %d", hresp.StatusCode)
+		c.fail(check, "healthz expected 200 unauthenticated, got %d", hresp.StatusCode)
 		return
 	}
-	pass(check, "/healthz reachable without credentials")
+	c.pass(check, "/healthz reachable without credentials")
 }
 
 // checkCatalogStructure validates the catalog shape: unique ids, required
 // fields, plans present — and (broker-specific) plan_updateable on the
 // definition service. Returns the services for downstream audits.
-func checkCatalogStructure(c *client) []catalogService {
+func (c *client) checkCatalogStructure() []catalogService {
 	const check = "catalog-conformance"
 	svcs, ok := fetchCatalog(c)
 	if !ok {
-		fail(check, "GET /v2/catalog failed or returned invalid JSON")
+		c.fail(check, "GET /v2/catalog failed or returned invalid JSON")
 		return nil
 	}
 	if len(svcs) == 0 {
-		fail(check, "catalog has no services")
+		c.fail(check, "catalog has no services")
 		return nil
 	}
 	seenSvc := map[string]bool{}
 	for _, s := range svcs {
 		if s.ID == "" || seenSvc[s.ID] {
-			fail(check, "service id empty or duplicated: %q", s.ID)
+			c.fail(check, "service id empty or duplicated: %q", s.ID)
 			return svcs
 		}
 		seenSvc[s.ID] = true
 		if s.Name == "" || s.Description == "" {
-			fail(check, "service %q missing name/description", s.ID)
+			c.fail(check, "service %q missing name/description", s.ID)
 			return svcs
 		}
 		seenPlan := map[string]bool{}
 		for _, p := range s.Plans {
 			if p.ID == "" || seenPlan[p.ID] {
-				fail(check, "service %q: plan id empty or duplicated: %q", s.ID, p.ID)
+				c.fail(check, "service %q: plan id empty or duplicated: %q", s.ID, p.ID)
 				return svcs
 			}
 			if p.Name == "" {
-				fail(check, "service %q: plan %q missing name", s.ID, p.ID)
+				c.fail(check, "service %q: plan %q missing name", s.ID, p.ID)
 				return svcs
 			}
 			seenPlan[p.ID] = true
 		}
 		if len(s.Plans) == 0 {
-			fail(check, "service %q has no plans", s.ID)
+			c.fail(check, "service %q has no plans", s.ID)
 			return svcs
 		}
-		if s.ID == cnpgServiceID && !s.PlanUpdateable {
-			fail(check, "definition service %q must advertise plan_updateable", s.Name)
-			return svcs
-		}
+
 	}
-	pass(check, "%d services, unique ids, required fields, plans present", len(svcs))
+	c.pass(check, "%d services, unique ids, required fields, plans present", len(svcs))
 	return svcs
 }
 
-func checkErrorMapping(c *client) {
+func (c *client) checkErrorMapping(svcs []catalogService) {
 	const check = "error-mapping"
 
 	status, _ := c.do("PUT", "/v2/service_instances/"+c.cfg.IDPrefix+"-err-1", map[string]interface{}{
@@ -444,17 +519,39 @@ func checkErrorMapping(c *client) {
 		"plan_id":    "also-not",
 	})
 	if status != 400 {
-		fail(check, "unknown service_id -> expected 400, got %d", status)
+		c.fail(check, "unknown service_id -> expected 400, got %d", status)
 	} else {
-		pass(check, "unknown service_id -> 400")
+		c.pass(check, "unknown service_id -> 400")
 	}
 
-	status, body := c.do("DELETE", "/v2/service_instances/"+c.cfg.IDPrefix+"-err-2?service_id="+cnpgServiceID+"&plan_id="+smallPlanID, nil)
-	if status != 410 {
-		fail(check, "deprovision nonexistent -> expected 410, got %d (%s)", status, truncate(body))
-	} else {
-		pass(check, "deprovision nonexistent -> 410 Gone")
+	// Service und Plan kommen aus dem Katalog des geprueften Brokers, nicht
+	// aus einer Konstante in dieser Datei. Hartverdrahtete IDs machen aus
+	// einem allgemeinen Konformitaetswerkzeug eines, das nur gegen genau
+	// diesen Broker etwas aussagt - gegen jeden anderen prueft es einen
+	// unbekannten Service und misst damit die falsche Regel.
+	sid, pid := anyServiceAndPlan(svcs)
+	if sid == "" {
+		c.skip(check, "kein Service im Katalog, deprovision-410 nicht pruefbar")
+		return
 	}
+	status, body := c.do("DELETE", "/v2/service_instances/"+c.cfg.IDPrefix+"-err-2?service_id="+sid+"&plan_id="+pid, nil)
+	if status != 410 {
+		c.fail(check, "deprovision nonexistent -> expected 410, got %d (%s)", status, truncate(body))
+	} else {
+		c.pass(check, "deprovision nonexistent -> 410 Gone")
+	}
+}
+
+// anyServiceAndPlan liefert irgendeinen Service mit Plan aus dem Katalog.
+// Fuer Pruefungen, die zwar gueltige IDs brauchen, denen aber gleich ist,
+// welche - etwa das Deprovision einer Instanz, die es nicht gibt.
+func anyServiceAndPlan(svcs []catalogService) (string, string) {
+	for _, s := range svcs {
+		if len(s.Plans) > 0 {
+			return s.ID, s.Plans[0].ID
+		}
+	}
+	return "", ""
 }
 
 // runLifecycleAudit provisions and binds; returns the instance id for the
@@ -475,9 +572,9 @@ func runLifecycleAudit(c *client, serviceID, planID string) string {
 	})
 	switch status {
 	case 201:
-		pass("lifecycle-provision", "provision -> 201 (synchron)")
+		c.pass("lifecycle-provision", "provision -> 201 (synchron)")
 	case 202:
-		pass("lifecycle-provision", "provision -> 202 (asynchron)")
+		c.pass("lifecycle-provision", "provision -> 202 (asynchron)")
 		// Erst wenn last_operation Vollzug meldet, ist der Dienst da. Wer
 		// hier nicht wartet, bindet gegen Zugangsdaten, die es noch nicht
 		// gibt - genau das hat der Checker frueher getan.
@@ -486,7 +583,7 @@ func runLifecycleAudit(c *client, serviceID, planID string) string {
 		}
 	default:
 		fmt.Printf("::error::PROVISION FULL RESPONSE (status %d): %s\n", status, string(body))
-		fail("lifecycle-provision", "provision -> expected 201 or 202, got %d: %s", status, truncate(body))
+		c.fail("lifecycle-provision", "provision -> expected 201 or 202, got %d: %s", status, truncate(body))
 		return ""
 	}
 
@@ -496,9 +593,9 @@ func runLifecycleAudit(c *client, serviceID, planID string) string {
 		"plan_id":    planID,
 	})
 	if st2 != 200 {
-		fail("lifecycle-provision-idempotent", "re-provision same params -> expected 200, got %d", st2)
+		c.fail("lifecycle-provision-idempotent", "re-provision same params -> expected 200, got %d", st2)
 	} else {
-		pass("lifecycle-provision-idempotent", "re-provision same params -> 200")
+		c.pass("lifecycle-provision-idempotent", "re-provision same params -> 200")
 	}
 
 	// Missing ids must fail with 400.
@@ -506,83 +603,125 @@ func runLifecycleAudit(c *client, serviceID, planID string) string {
 		"plan_id": planID,
 	})
 	if st3 != 400 {
-		fail("lifecycle-provision-missing-service", "provision without service_id -> expected 400, got %d", st3)
+		c.fail("lifecycle-provision-missing-service", "provision without service_id -> expected 400, got %d", st3)
 	} else {
-		pass("lifecycle-provision-missing-service", "provision without service_id -> 400")
+		c.pass("lifecycle-provision-missing-service", "provision without service_id -> 400")
 	}
 
 	st4, _ := c.do("PUT", "/v2/service_instances/"+c.cfg.IDPrefix+"-miss-plan", map[string]interface{}{
 		"service_id": serviceID,
 	})
 	if st4 != 400 {
-		fail("lifecycle-provision-missing-plan", "provision without plan_id -> expected 400, got %d", st4)
+		c.fail("lifecycle-provision-missing-plan", "provision without plan_id -> expected 400, got %d", st4)
 	} else {
-		pass("lifecycle-provision-missing-plan", "provision without plan_id -> 400")
+		c.pass("lifecycle-provision-missing-plan", "provision without plan_id -> 400")
 	}
 
-	bStatus, bBody := c.do("PUT", "/v2/service_instances/"+instanceID+"/service_bindings/"+instanceID+"-b1", map[string]interface{}{
+	bindingID := instanceID + "-b1"
+	bindPath := "/v2/service_instances/" + instanceID + "/service_bindings/" + bindingID
+
+	// Ein neuer Bind ist 201. 200 hiesse "gab es schon", und das ist fuer
+	// eine frisch erzeugte binding_id falsch.
+	//
+	// Frueher stand hier ein switch, dessen default nur eine INFO-Zeile
+	// druckte: ein fehlgeschlagener Bind zaehlte nicht als Fehlschlag und
+	// nahm fuenf Folgepruefungen stumm mit. Genauso lagen die Folgepruefungen
+	// im else-Zweig des Re-Binds - schlug der fehl, verschwanden sie
+	// ebenfalls. Deshalb steht hier nichts mehr verschachtelt: jede Pruefung
+	// laeuft und meldet fuer sich.
+	bStatus, bBody := c.do("PUT", bindPath, map[string]interface{}{
 		"service_id": serviceID,
 		"plan_id":    planID,
 	})
-	switch bStatus {
-	case 201:
-		pass("lifecycle-bind", "bind -> 201")
-	default:
-		fmt.Printf("INFO [lifecycle-bind]: bind -> %d (credentials secret not pre-created): %s\n",
-			bStatus, truncate(bBody))
+	bindOK := bStatus == 201
+	if !bindOK {
+		c.fail("lifecycle-bind", "bind -> expected 201, got %d: %s", bStatus, truncate(bBody))
+	} else if !hasCredentials(bBody) {
+		bindOK = false
+		c.fail("lifecycle-bind", "bind -> 201 without a credentials object: %s", truncate(bBody))
+	} else {
+		c.pass("lifecycle-bind", "bind -> 201 with credentials")
+		c.checkServiceBindingSpec(bBody)
 	}
 
-	if bStatus == 201 {
-		checkServiceBindingSpec(bBody)
+	// Idempotent re-bind returns 200 with the same credentials.
+	rbStatus, rbBody := c.do("PUT", bindPath, map[string]interface{}{
+		"service_id": serviceID,
+		"plan_id":    planID,
+	})
+	switch {
+	case rbStatus != 200:
+		c.fail("lifecycle-bind-idempotent", "re-bind -> expected 200, got %d", rbStatus)
+	case !hasCredentials(rbBody):
+		c.fail("lifecycle-bind-idempotent", "re-bind response lacks credentials object")
+	default:
+		c.pass("lifecycle-bind-idempotent", "re-bind -> 200 with credentials")
+	}
 
-		// Idempotent re-bind returns 200 with the same credentials.
-		rbStatus, rbBody := c.do("PUT", "/v2/service_instances/"+instanceID+"/service_bindings/"+instanceID+"-b1", map[string]interface{}{
-			"service_id": serviceID,
-			"plan_id":    planID,
-		})
-		if rbStatus != 200 {
-			fail("lifecycle-bind-idempotent", "re-bind -> expected 200, got %d", rbStatus)
-		} else if !strings.Contains(string(rbBody), "credentials") {
-			fail("lifecycle-bind-idempotent", "re-bind response lacks credentials object")
-		} else {
-			pass("lifecycle-bind-idempotent", "re-bind -> 200 with credentials")
+	// Bind validation errors.
+	bm1, _ := c.do("PUT", "/v2/service_instances/"+instanceID+"/service_bindings/"+c.cfg.IDPrefix+"-bm1", map[string]interface{}{
+		"plan_id": planID,
+	})
+	if bm1 != 400 {
+		c.fail("lifecycle-bind-missing-service", "bind without service_id -> expected 400, got %d", bm1)
+	} else {
+		c.pass("lifecycle-bind-missing-service", "bind without service_id -> 400")
+	}
+	bm2, _ := c.do("PUT", "/v2/service_instances/"+instanceID+"/service_bindings/"+c.cfg.IDPrefix+"-bm2", map[string]interface{}{
+		"service_id": serviceID,
+	})
+	if bm2 != 400 {
+		c.fail("lifecycle-bind-missing-plan", "bind without plan_id -> expected 400, got %d", bm2)
+	} else {
+		c.pass("lifecycle-bind-missing-plan", "bind without plan_id -> 400")
+	}
+	bm3, _ := c.do("PUT", "/v2/service_instances/"+c.cfg.IDPrefix+"-noinst"+"/service_bindings/"+c.cfg.IDPrefix+"-bm3", map[string]interface{}{
+		"service_id": serviceID,
+		"plan_id":    planID,
+	})
+	if bm3 != 404 {
+		c.fail("lifecycle-bind-nonexistent-instance", "bind to nonexistent instance -> expected 404, got %d", bm3)
+	} else {
+		c.pass("lifecycle-bind-nonexistent-instance", "bind to nonexistent instance -> 404")
+	}
 
-			// Bind validation errors.
-			bm1, _ := c.do("PUT", "/v2/service_instances/"+instanceID+"/service_bindings/"+c.cfg.IDPrefix+"-bm1", map[string]interface{}{
-				"plan_id": planID,
-			})
-			if bm1 != 400 {
-				fail("lifecycle-bind-missing-service", "bind without service_id -> expected 400, got %d", bm1)
-			} else {
-				pass("lifecycle-bind-missing-service", "bind without service_id -> 400")
-			}
-			bm2, _ := c.do("PUT", "/v2/service_instances/"+instanceID+"/service_bindings/"+c.cfg.IDPrefix+"-bm2", map[string]interface{}{
-				"service_id": serviceID,
-			})
-			if bm2 != 400 {
-				fail("lifecycle-bind-missing-plan", "bind without plan_id -> expected 400, got %d", bm2)
-			} else {
-				pass("lifecycle-bind-missing-plan", "bind without plan_id -> 400")
-			}
-			bm3, _ := c.do("PUT", "/v2/service_instances/"+c.cfg.IDPrefix+"-noinst"+"/service_bindings/"+c.cfg.IDPrefix+"-bm3", map[string]interface{}{
-				"service_id": serviceID,
-				"plan_id":    planID,
-			})
-			if bm3 != 404 {
-				fail("lifecycle-bind-nonexistent-instance", "bind to nonexistent instance -> expected 404, got %d", bm3)
-			} else {
-				pass("lifecycle-bind-nonexistent-instance", "bind to nonexistent instance -> 404")
-			}
-
-			st, _ := c.do("DELETE", "/v2/service_instances/"+instanceID+"/service_bindings/"+instanceID+"-b1?service_id="+serviceID+"&plan_id="+planID, nil)
-			if st != 200 {
-				fail("lifecycle-unbind", "unbind -> expected 200, got %d", st)
-			} else {
-				pass("lifecycle-unbind", "unbind -> 200")
-			}
+	// GET auf eine bestehende Binding. Nur hier ist sie noch da - nach dem
+	// Unbind laesst sich das nicht mehr pruefen, und geprueft wurde bislang
+	// ausschliesslich der 404 fuer eine unbekannte.
+	if bindOK {
+		gbStatus, gbBody := c.do("GET", bindPath, nil)
+		switch {
+		case gbStatus != 200:
+			c.fail("fetch-get-binding", "GET binding -> expected 200, got %d: %s", gbStatus, truncate(gbBody))
+		case !hasCredentials(gbBody):
+			c.fail("fetch-get-binding", "GET binding -> 200 without a credentials object")
+		default:
+			c.pass("fetch-get-binding", "GET binding -> 200 with credentials")
 		}
 	}
+
+	st, _ := c.do("DELETE", bindPath+"?service_id="+serviceID+"&plan_id="+planID, nil)
+	if st != 200 {
+		c.fail("lifecycle-unbind", "unbind -> expected 200, got %d", st)
+	} else {
+		c.pass("lifecycle-unbind", "unbind -> 200")
+	}
 	return instanceID
+}
+
+// hasCredentials meldet, ob der Antwortkoerper ein credentials-Objekt traegt.
+//
+// Eine Textsuche nach "credentials" genuegte nicht: sie findet das Wort auch
+// in einer Fehlermeldung und macht aus einer abgelehnten Bind-Anfrage eine
+// bestandene Pruefung.
+func hasCredentials(body []byte) bool {
+	var resp struct {
+		Credentials map[string]interface{} `json:"credentials"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return false
+	}
+	return len(resp.Credentials) > 0
 }
 
 // runFetchAudit exercises GET instance / GET binding / last_operation incl.
@@ -591,7 +730,7 @@ func runFetchAudit(c *client, instanceID, serviceID, planID string) {
 	const check = "fetch-get-instance"
 	status, body := c.do("GET", "/v2/service_instances/"+instanceID+"?service_id="+serviceID+"&plan_id="+planID, nil)
 	if status != 200 {
-		fail(check, "GET instance -> expected 200, got %d: %s", status, truncate(body))
+		c.fail(check, "GET instance -> expected 200, got %d: %s", status, truncate(body))
 		return
 	}
 	var gi struct {
@@ -600,35 +739,35 @@ func runFetchAudit(c *client, instanceID, serviceID, planID string) {
 	}
 	json.Unmarshal(body, &gi)
 	if gi.ServiceID != serviceID || gi.PlanID != planID {
-		fail(check, "GET instance response missing/incorrect service_id/plan_id")
+		c.fail(check, "GET instance response missing/incorrect service_id/plan_id")
 		return
 	}
-	pass(check, "GET instance -> 200 with service_id+plan_id")
+	c.pass(check, "GET instance -> 200 with service_id+plan_id")
 
 	checkLO := "fetch-last-operation"
 	stLO, loBody := c.do("GET", "/v2/service_instances/"+instanceID+"/last_operation?service_id="+serviceID+"&plan_id="+planID, nil)
 	if stLO != 200 {
-		fail(checkLO, "last_operation -> expected 200, got %d: %s", stLO, truncate(loBody))
+		c.fail(checkLO, "last_operation -> expected 200, got %d: %s", stLO, truncate(loBody))
 	} else if !strings.Contains(string(loBody), "state") {
-		fail(checkLO, "last_operation response lacks state field")
+		c.fail(checkLO, "last_operation response lacks state field")
 	} else {
-		pass(checkLO, "last_operation -> 200 with state")
+		c.pass(checkLO, "last_operation -> 200 with state")
 	}
 
 	checkGhostInst := "fetch-nonexistent-instance"
 	st404, _ := c.do("GET", "/v2/service_instances/"+c.cfg.IDPrefix+"-ghost?service_id="+serviceID+"&plan_id="+planID, nil)
 	if st404 != 404 {
-		fail(checkGhostInst, "GET nonexistent instance -> expected 404, got %d", st404)
+		c.fail(checkGhostInst, "GET nonexistent instance -> expected 404, got %d", st404)
 	} else {
-		pass(checkGhostInst, "GET nonexistent instance -> 404")
+		c.pass(checkGhostInst, "GET nonexistent instance -> 404")
 	}
 
 	checkGhostBind := "fetch-nonexistent-binding"
 	st404b, _ := c.do("GET", "/v2/service_instances/"+instanceID+"/service_bindings/"+c.cfg.IDPrefix+"-ghost-b?service_id="+serviceID+"&plan_id="+planID, nil)
 	if st404b != 404 {
-		fail(checkGhostBind, "GET nonexistent binding -> expected 404, got %d", st404b)
+		c.fail(checkGhostBind, "GET nonexistent binding -> expected 404, got %d", st404b)
 	} else {
-		pass(checkGhostBind, "GET nonexistent binding -> 404")
+		c.pass(checkGhostBind, "GET nonexistent binding -> 404")
 	}
 }
 
@@ -641,10 +780,10 @@ func runUpdateAudit(c *client, instanceID, serviceID, planID string) {
 		"plan_id":    planID,
 	})
 	if status != 200 {
-		fail(check, "update -> expected 200, got %d: %s", status, truncate(body))
+		c.fail(check, "update -> expected 200, got %d: %s", status, truncate(body))
 		return
 	}
-	pass(check, "update -> 200")
+	c.pass(check, "update -> 200")
 
 	checkGhost := "update-nonexistent-instance"
 	st404, _ := c.do("PATCH", "/v2/service_instances/"+c.cfg.IDPrefix+"-ghost", map[string]interface{}{
@@ -652,9 +791,9 @@ func runUpdateAudit(c *client, instanceID, serviceID, planID string) {
 		"plan_id":    planID,
 	})
 	if st404 != 404 {
-		fail(checkGhost, "update nonexistent instance -> expected 404, got %d", st404)
+		c.fail(checkGhost, "update nonexistent instance -> expected 404, got %d", st404)
 	} else {
-		pass(checkGhost, "update nonexistent instance -> 404")
+		c.pass(checkGhost, "update nonexistent instance -> 404")
 	}
 }
 
@@ -664,24 +803,24 @@ func cleanupAudit(c *client, instanceID, serviceID, planID string) {
 	st, _ := c.do("DELETE", "/v2/service_instances/"+instanceID+"/service_bindings/"+instanceID+"-b1?service_id="+serviceID+"&plan_id="+planID, nil)
 	switch st {
 	case 200, 404, 410:
-		pass("cleanup-unbind", "unbind during cleanup -> %d", st)
+		c.pass("cleanup-unbind", "unbind during cleanup -> %d", st)
 	default:
-		fail("cleanup-unbind", "unbind during cleanup -> unexpected %d", st)
+		c.fail("cleanup-unbind", "unbind during cleanup -> unexpected %d", st)
 	}
 
 	st, dbody := c.do("DELETE", "/v2/service_instances/"+instanceID+"?service_id="+serviceID+"&plan_id="+planID, nil)
 	if st != 200 {
-		fail("lifecycle-deprovision", "deprovision -> expected 200, got %d: %s", st, truncate(dbody))
+		c.fail("lifecycle-deprovision", "deprovision -> expected 200, got %d: %s", st, truncate(dbody))
 		return
 	}
-	pass("lifecycle-deprovision", "deprovision -> 200")
+	c.pass("lifecycle-deprovision", "deprovision -> 200")
 
 	st, _ = c.do("DELETE", "/v2/service_instances/"+instanceID+"?service_id="+serviceID+"&plan_id="+planID, nil)
 	if st != 410 {
-		fail("lifecycle-deprovision-gone", "second deprovision -> expected 410, got %d", st)
+		c.fail("lifecycle-deprovision-gone", "second deprovision -> expected 410, got %d", st)
 		return
 	}
-	pass("lifecycle-deprovision-gone", "second deprovision -> 410 Gone")
+	c.pass("lifecycle-deprovision-gone", "second deprovision -> 410 Gone")
 }
 
 // wellKnownBindingKeys nennt je Diensttyp die Felder, die die CNCF Service
@@ -706,33 +845,33 @@ var wellKnownBindingKeys = map[string][]string{
 // passen. Ohne type ist der Dienst schlicht nicht spec-konform; das ist
 // erlaubt und wird als SKIP gemeldet, nicht als Fehler - sonst waere jeder
 // bestehende Broker ueber Nacht rot.
-func checkServiceBindingSpec(body []byte) {
+func (c *client) checkServiceBindingSpec(body []byte) {
 	const check = "service-binding-spec"
 
 	var resp struct {
 		Credentials map[string]interface{} `json:"credentials"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
-		fail(check, "bind response is not valid JSON: %s", truncate(body))
+		c.fail(check, "bind response is not valid JSON: %s", truncate(body))
 		return
 	}
 
 	rawType, ok := resp.Credentials["type"]
 	if !ok {
-		fmt.Printf("SKIP [%s]: binding carries no 'type' - service is not declared as specification-conformant\n", check)
+		c.skip(check, "binding carries no 'type' - service is not declared as specification-conformant")
 		return
 	}
 
 	serviceType, ok := rawType.(string)
 	if !ok || serviceType == "" {
-		fail(check, "'type' must be a non-empty string, got %v", rawType)
+		c.fail(check, "'type' must be a non-empty string, got %v", rawType)
 		return
 	}
 	if serviceType != strings.ToLower(serviceType) {
-		fail(check, "'type' %q must be lower-case", serviceType)
+		c.fail(check, "'type' %q must be lower-case", serviceType)
 		return
 	}
-	pass(check, "binding declares type %q", serviceType)
+	c.pass(check, "binding declares type %q", serviceType)
 
 	expected, known := wellKnownBindingKeys[serviceType]
 	if !known {
@@ -746,8 +885,8 @@ func checkServiceBindingSpec(body []byte) {
 		}
 	}
 	if len(missing) > 0 {
-		fail(check, "type %q is missing well-known keys: %s", serviceType, strings.Join(missing, ", "))
+		c.fail(check, "type %q is missing well-known keys: %s", serviceType, strings.Join(missing, ", "))
 		return
 	}
-	pass(check, "type %q carries all well-known keys", serviceType)
+	c.pass(check, "type %q carries all well-known keys", serviceType)
 }

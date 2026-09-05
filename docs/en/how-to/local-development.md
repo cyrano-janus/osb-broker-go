@@ -123,18 +123,21 @@ not yet evidence for a target system — see
 
 ## The conformance suite
 
-`cmd/osb-checker` tests the broker against OSB 2.17 and is the gate that
-changes to the HTTP layer are measured by.
+`cmd/osb-gate` tests the broker against OSB 2.17 and is the gate that
+changes to the HTTP layer are measured by. **The name states the role, not the
+scope:** the checks themselves know no service id and no catalogue entry of
+this repository and hold for any OSB broker. What makes it the *gate* is only
+where it runs — in this repository's CI, blocking, on every push.
 
 ```bash
-go build -o /tmp/osb-checker ./cmd/osb-checker/
-/tmp/osb-checker --url http://localhost:8080 --user dev --pass dev
+go build -o /tmp/osb-gate ./cmd/osb-gate/
+/tmp/osb-gate --url http://localhost:8080 --user dev --pass dev
 ```
 
 Over HTTPS with a client certificate:
 
 ```bash
-/tmp/osb-checker \
+/tmp/osb-gate \
   --url https://localhost:8443 \
   --user dev --pass dev \
   --ca-cert ca.crt --client-cert client.crt --client-key client.key
@@ -148,7 +151,7 @@ choice it takes the first service that is **not** a demo offering — that is, a
 ServiceDefinition, and therefore the engine. To choose deliberately:
 
 ```bash
-/tmp/osb-checker --url http://localhost:8080 --user dev --pass dev \
+/tmp/osb-gate --url http://localhost:8080 --user dev --pass dev \
   --service-id f48a9e21-cnpg-0000-0000-000000000001 \
   --plan-id plan-small-0000-0000-000000000001
 ```
@@ -164,10 +167,15 @@ Besides the built-in one there is a standalone tool,
 `github.com/cyrano-janus/osb-checker`. The roles are fixed so that the two do
 not drift apart:
 
-| Tool | Role | Runs |
-|---|---|---|
-| `cmd/osb-checker` | fast gate, blocking | L2 and L2b, every push |
-| standalone `osb-checker` | full audit, independent counter-check | L2, blocking |
+| Tool | What it is | Checks | Runs |
+|---|---|---|---|
+| `cmd/osb-gate` | this repository's gate | **this** broker on every push | L2 and L2b, blocking |
+| `osb-checker` | the independent second opinion, own repository, public, MIT | **any** OSB broker | L2, blocking |
+
+The difference is the **role**, not the capability. Both check the same
+specification; `osb-gate` is tied to this build and decides whether it goes
+through, `osb-checker` is a tool in its own right and usable against foreign
+brokers.
 
 **If the two disagree, the specification wins, not the tool.** A disagreement is
 a finding for [known-issues.md](../known-issues.md), not a reason to adjust
@@ -175,6 +183,21 @@ either suite.
 
 Both runs block. A counter-check that only reports gets skimmed past; and a
 tool whose verdict has no consequence is indistinguishable from a broken one.
+
+**Both prove that their checks can fire.** A gate whose checks are ineffective
+is indistinguishable from a green one — it reports the same colour and thereby
+says nothing. `osb-gate` carries that proof in `checks/mockbroker_test.go`: a conformant httptest broker must yield zero
+failures, each of the 20 mutations — exactly one violated rule — must trigger
+exactly the check responsible for it, and against a closed server **nothing**
+may pass. The last promise is the most important one: a negative check that
+reads a transport error as "the broker rejected it" reports an unreachable
+broker as conformant.
+
+```bash
+go test ./cmd/osb-gate/checks/ -run TestMock -v
+```
+
+Whoever adds a check adds its mutation. Otherwise the check itself is unchecked.
 
 The checker repository is public; CI clones it without credentials and without
 a pinned revision — the counter-check should run whatever the current checker

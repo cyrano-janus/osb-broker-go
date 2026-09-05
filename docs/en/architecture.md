@@ -73,7 +73,7 @@ what stood here before, is in [ADR 0003](adr/0003-replace-http-layer.md).
 | `internal/auth` | 299 | authenticator chain, independent of gin |
 | `internal/migrate` | 208 | imports state from a ConfigMap in the `state.json` format |
 | `main.go` | 135 | wiring, nothing else |
-| `cmd/osb-checker` | 658 | conformance suite, CI gate |
+| `cmd/osb-gate` | 954 | conformance suite, CI gate |
 | `cmd/osb-state-migrate` | 66 | tool around `internal/migrate` |
 
 ## The layers in detail
@@ -221,7 +221,7 @@ between the layers, not across them:
 | `internal/broker/crdstate.go` and around it | ~700 | carries |
 | `internal/config`, `server`, `auth` | 1,011 | carries |
 | `internal/apis/v1alpha1` | 309 | carries |
-| `cmd/osb-checker` | 797 | carries |
+| `cmd/osb-gate` | 954 | carries |
 | logging, metrics, docs endpoints | ~290 | carries, decoupled cross-cutting concerns |
 
 That the engine carries is demonstrated: two operators with different CRD

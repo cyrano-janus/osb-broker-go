@@ -66,7 +66,7 @@ Praktisch heißt das zweierlei. Erstens sind die Felder, die Cloud Foundry
 großzügig ignoriert, hier möglicherweise Pflicht — etwa ein echter
 `dashboard_url` statt des heute fest verdrahteten
 `https://dashboard.example.com/instances/<id>`. Zweitens ist die Konformitäts-
-suite `cmd/osb-checker` das einzige Werkzeug, das diesen Fall überhaupt prüft;
+suite `cmd/osb-gate` das einzige Werkzeug, das diesen Fall überhaupt prüft;
 sie ersetzt hier die Plattform.
 
 ## Verifikationsstand
