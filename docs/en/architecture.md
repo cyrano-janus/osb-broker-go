@@ -158,6 +158,13 @@ reason lives that a new service needs no code.
    version, kind, namespace, name) — the bookkeeping deprovision later relies on
    to know what to delete.
 
+**When a provision aborts, it is rolled back.** Whatever was already created
+is deleted — including when only the record write fails. Either case would
+otherwise leave objects no record points at: the operator would run an instance
+that never existed for the broker, and no deprovision would ever find it again.
+The abort reason wins in the message; if the cleanup fails too, that is appended
+rather than replacing it.
+
 **Deprovision** works through that bookkeeping in three tiers: first the
 `AppliedRefs` (multi-doc, each with its own kind), then `AppliedObjects` (names
 only, kind from the definition), finally the fallback to a single CR under

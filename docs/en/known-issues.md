@@ -16,10 +16,6 @@ target platform or only the development platform?** What separates the two is in
 
 None of the open points currently blocks a target platform.
 
-**A failed provision leaves orphaned CRs behind.** If applying breaks between
-two documents, the first one stays without any record pointing at it.
-*FINDINGS #6.*
-
 **`osb_active_instances` and `osb_active_bindings` are never set.** Both gauges
 are registered and permanently report 0.
 
@@ -109,15 +105,10 @@ closer to the target platform than Korifi. Classification in
 The points are connected; worked through in this order each one makes the next
 visible or cheaper.
 
-1. **User parameters** — `cf create-service -c` has no effect as long as
-   `TemplateData.Parameters` is populated by no caller. The check against
-   `allowedParameters` is already in place, it just has nothing to check yet.
-2. **Enforce `readiness.timeoutSeconds`** — until then a stuck operator reports
-   `in progress` until the platform itself gives up. Only after that is a wrong
-   readiness path visible even when nobody is looking.
-3. **The five unverified readiness paths** — create one CR per operator and
-   compute the path against it. Needs the operators in the cluster.
-4. **Orphaned CRs after a failed provision** — attached to 2., because both
-   concern the engine's abort path.
-5. **A mutation suite for `cmd/osb-checker`** — the standalone checker has one,
+1. **The five unverified readiness paths** — create one CR per operator and
+   compute the path against it. Needs the operators in the cluster. Now that
+   the deadline is enforced, a wrong path ends in `failed` after ten minutes
+   instead of an endless poll — it still only becomes visible when somebody
+   looks.
+2. **A mutation suite for `cmd/osb-checker`** — the standalone checker has one,
    and on its first run it found two ineffective checks.

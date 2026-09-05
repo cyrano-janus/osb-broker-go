@@ -165,6 +165,13 @@ Grund, warum ein neuer Service ohne Code auskommt.
    Namespace, Name) am Datensatz vermerkt — das ist die Buchführung, aus der
    Deprovision später weiß, was es zu löschen gibt.
 
+**Bricht das Provision ab, wird zurückgerollt.** Was schon angelegt ist, wird
+gelöscht — auch dann, wenn erst das Schreiben des Datensatzes scheitert. Beides
+hinterließe sonst Objekte, auf die kein Datensatz zeigt: der Operator betriebe
+eine Instanz, die es für den Broker nie gab, und kein Deprovision fände sie je
+wieder. Der Grund des Abbruchs gewinnt in der Meldung; scheitert auch das
+Aufräumen, wird das angehängt statt ihn zu ersetzen.
+
 **Deprovision** arbeitet diese Buchführung in drei Stufen ab: erst die
 `AppliedRefs` (Multi-Doc, jede mit eigener Art), dann `AppliedObjects` (nur
 Namen, Art aus der Definition), zuletzt der Rückfall auf ein einzelnes CR unter

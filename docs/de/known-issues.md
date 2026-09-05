@@ -16,10 +16,6 @@ in [target-platforms.md](target-platforms.md).
 
 Keiner der offenen Punkte blockiert derzeit eine Zielplattform.
 
-**Fehlgeschlagenes Provision hinterlässt verwaiste CRs.** Bricht das Anwenden
-zwischen zwei Dokumenten ab, bleibt das erste stehen, ohne dass ein Datensatz
-darauf verweist. *FINDINGS #6.*
-
 **`osb_active_instances` und `osb_active_bindings` werden nie gesetzt.** Beide
 Gauges sind registriert und melden dauerhaft 0.
 
@@ -114,7 +110,5 @@ nächsten sichtbar oder billiger.
    Seit das Zeitlimit greift, endet ein falscher Pfad nach zehn Minuten in
    `failed` statt in einer endlosen Abfrage — sichtbar ist er trotzdem erst,
    wenn jemand hinsieht.
-2. **Verwaiste CRs nach fehlgeschlagenem Provision** — der Abbruchpfad der
-   Engine räumt nicht auf.
-3. **Mutationssuite für `cmd/osb-checker`** — der eigenständige Checker hat
+2. **Mutationssuite für `cmd/osb-checker`** — der eigenständige Checker hat
    eine, und sie hat beim ersten Lauf zwei wirkungslose Prüfungen gefunden.

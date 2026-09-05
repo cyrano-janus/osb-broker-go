@@ -17,6 +17,9 @@ import (
 // multiDocRegistry is an in-memory InstanceRegistry for engine tests.
 type multiDocRegistry struct {
 	records map[string]*InstanceRecord
+	// putErr laesst PutInstance scheitern - fuer den Fall, dass Objekte
+	// angelegt sind, der Datensatz aber nicht geschrieben werden kann.
+	putErr error
 }
 
 func newMultiDocRegistry() *multiDocRegistry {
@@ -24,6 +27,9 @@ func newMultiDocRegistry() *multiDocRegistry {
 }
 
 func (r *multiDocRegistry) PutInstance(_ context.Context, rec *InstanceRecord) error {
+	if r.putErr != nil {
+		return r.putErr
+	}
 	r.records[rec.ID] = rec
 	return nil
 }

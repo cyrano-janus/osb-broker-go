@@ -157,7 +157,11 @@ func (e *Engine) provisionDefinition(ctx context.Context, sd *ServiceDefinition,
 	applied, err := e.op.ApplyManifestRefs(ctx,
 		sd.Spec.Provision.APIVersion, sd.Spec.Provision.Kind, namespace, rendered)
 	if err != nil {
-		return err
+		// Abbruch mitten im Anwenden: was schon steht, gehoert weg. Sonst
+		// laeuft der Operator fuer eine Instanz, die es fuer den Broker nie
+		// gab - kein Datensatz verweist darauf, also findet auch kein
+		// Deprovision sie je wieder (FINDINGS #6).
+		return e.rollbackPartialProvision(ctx, namespace, applied, err)
 	}
 	// Record the instance so deprovision/bind existence checks work. The
 	// applied-object list enables multi-doc deprovision.
@@ -174,10 +178,30 @@ func (e *Engine) provisionDefinition(ctx context.Context, sd *ServiceDefinition,
 			AppliedRefs:    applied,
 			Parameters:     parameters,
 		}); err != nil {
-			return fmt.Errorf("record instance: %w", err)
+			// Objekte ohne Datensatz sind derselbe Fall: das Deprovision
+			// antwortet 410 und findet nie etwas zum Loeschen.
+			return e.rollbackPartialProvision(ctx, namespace, applied,
+				fmt.Errorf("record instance: %w", err))
 		}
 	}
 	return nil
+}
+
+// rollbackPartialProvision entfernt, was ein abgebrochenes Provision angelegt
+// hat, und gibt den Grund des Abbruchs zurueck.
+//
+// Der Grund gewinnt: schlaegt auch das Aufraeumen fehl, wird das angehaengt
+// statt ihn zu ersetzen. Wer die Meldung liest, soll zuerst erfahren, warum
+// das Provision scheiterte, und danach, was liegen blieb - die zweite Angabe
+// ist eine Aufforderung zum Nachsehen, nicht die Diagnose.
+func (e *Engine) rollbackPartialProvision(ctx context.Context, namespace string, applied []ObjectRef, cause error) error {
+	if len(applied) == 0 {
+		return cause
+	}
+	if _, err := e.op.DeleteManifestRefs(ctx, namespace, applied); err != nil {
+		return fmt.Errorf("%w (Aufraeumen unvollstaendig, es koennen Objekte zurueckbleiben: %v)", cause, err)
+	}
+	return cause
 }
 
 // DeprovisionInstance removes all objects created for the instance and
