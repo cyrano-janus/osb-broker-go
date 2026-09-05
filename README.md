@@ -21,6 +21,11 @@ The effort therefore goes into depth: a plan **enforces** its sizes
 does not lose its data to a keystroke (`retainOnDeprovision`), and the
 inventory is broken down by offering and plan.
 
+**A changed definition reaches existing instances too.** The broker reads
+definitions at start-up; `RECONCILE_INTERVAL` reconciles the running ones
+against them periodically. It never deletes and never creates — what it cannot
+resolve it reports rather than tidies away.
+
 **The catalogue says what the broker can do — and only that.** It is the only
 thing a marketplace sees of the broker before it uses it: every offering and
 every plan carries its display block, every plan states explicitly whether it is

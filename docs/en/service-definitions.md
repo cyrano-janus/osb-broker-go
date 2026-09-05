@@ -486,6 +486,55 @@ So that nobody loses time over them:
 |---|---|---|
 | `metadata.annotations` | control over behaviour | the Go type only knows `name` |
 
+## Reconciling existing instances
+
+The broker reads the definitions **at start-up**. A changed definition therefore
+only reaches new instances by itself: raise plan `small` from 1Gi to 2Gi and the
+next instance gets it while the running ones stay put. After a few changes
+"which state is this customer on" can only be answered by looking in the
+cluster.
+
+`RECONCILE_INTERVAL` turns the reconciler on. It holds every stored record
+against the definition that applies now: it renders from the **stored plan** and
+the **stored user parameters**, and writes only on a real difference — a no-op
+write bumps `resourceVersion` and wakes the operator for nothing.
+
+### What it deliberately does not do
+
+This is the more important part. A reconciler that tidies up is more dangerous
+than none at all.
+
+| Situation | What it does |
+|---|---|
+| The definition is gone from the directory | **reports it and touches nothing.** Deleting would cost a customer's database over a typo in a filename |
+| The plan no longer exists in the definition | the same |
+| The instance's resources are gone, the record is there | **creates nothing.** A freshly created database is empty and looks healthy; a visible gap beats a silent data loss that looks like success |
+| The record carries no namespace | skipped — rendering into the fallback namespace would mean writing into the wrong space |
+| The operator rejects the change | counted and logged, with the instance ID |
+
+A failure does **not** abort the run. If it did, one orphaned instance would
+hold up every upgrade of all the others, and nobody would see why.
+
+### How you tell it is running
+
+| Metric | What for |
+|---|---|
+| `osb_reconcile_last_run_timestamp_seconds` | if it stops moving, the reconciler stopped. **This is where the alert belongs.** |
+| `osb_reconcile_unresolvable_instances` | records with no definition, plan or namespace |
+| `osb_reconcile_missing_objects` | records whose resources are gone |
+| `osb_reconcile_instances_total{outcome}` | `up-to-date`, `applied`, `unresolvable`, `objects-missing`, `failed` |
+| `osb_reconcile_runs_total{result}` | `ok` or `error`; `error` means the run could not take place at all |
+
+The two gauges are gauges and not counters because the question is "how many are
+there right now": after cleanup they have to fall.
+
+### The plan change stays out
+
+Switching to another plan is not the reconciler's business. It is only safe in
+one direction — CloudNativePG grows storage and cannot shrink it — and
+`planUpdateable` knows no direction. As long as no definition promises it, the
+broker refuses it with `422`.
+
 ## When a definition is rolled out
 
 The broker reads the definitions directory **at start-up**. A changed definition

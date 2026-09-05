@@ -168,7 +168,7 @@ Punkt wiegt für einen Betreiber schwerer als ein vierter Dienst im Marketplace.
 | **Planwechsel** | offen, und zwar bewusst: der Broker kann ihn, sagt ihn aber für keine Definition zu und lehnt ihn mit `422` ab. Er ist nur in eine Richtung sicher — CloudNativePG lässt Speicher wachsen, nicht schrumpfen —, und ein Katalogflag kennt keine Richtung |
 | **Sicherung und Wiederherstellung** | offen. CloudNativePG kann es (`Backup`, `ScheduledBackup`, Barman) — der Broker bietet es weder als Planmerkmal noch als Service-Key an |
 | **Point-in-Time-Recovery beim Provision** | offen; eine Instanz entsteht immer leer |
-| **Upgrades bestehender Instanzen** | offen. Definitionen werden beim Start gelesen, eine geänderte Definition fasst bestehende Instanzen nicht an |
+| **Upgrades bestehender Instanzen** | ✅ `RECONCILE_INTERVAL` gleicht bestehende Instanzen gegen die geladenen Definitionen ab; er löscht nie und legt nie an |
 | **Verhalten unter Last, echte Mandantentrennung** | ungeprüft — siehe Verifikationsstand |
 
 **Was der Broker bewusst nicht misst: die Gesundheit der Dienste.** Ein Broker,
@@ -182,11 +182,9 @@ der Operator, der den Dienst betreibt.
 - **Sicherung und PITR** hängen am Zielsystem-Durchlauf. Dort entscheidet sich,
   wohin Sicherungen gehen und wer sie verwaltet; die Broker-Seite ist ohne
   diese Antwort nicht sinnvoll zu entwerfen.
-- **Upgrades und der Planwechsel** hängen **nicht** daran, sondern an einem
-  Reconcile-Loop: eine geänderte Definition müsste bestehende Instanzen erneut
-  anwenden, und ein Planwechsel müsste geprüft werden, bevor er angewendet
-  wird. Dafür braucht es etwas, das läuft, ohne dass ein Request kommt —
-  [ADR 0009](adr/0009-deployment-model.md) erlaubt dafür einen Controller.
+- **Der Planwechsel** hängt **nicht** daran. Er ist nur in eine Richtung
+  sicher, und ein Katalogflag kennt keine Richtung; der Abgleich könnte den
+  Übergang prüfen, bevor er ihn anwendet.
 - **Last und Mandantentrennung** sind keine Funktion, sondern eine
   Messung — die braucht ein Zielsystem.
 

@@ -22,6 +22,11 @@ Die Arbeit geht deshalb in die Tiefe: ein Plan **erzwingt** seine Größen
 verliert seine Daten nicht auf einen Tastendruck (`retainOnDeprovision`), und
 der Bestand ist nach Angebot und Plan aufgeschlüsselt.
 
+**Eine geänderte Definition erreicht auch bestehende Instanzen.** Der Broker
+liest Definitionen beim Start; `RECONCILE_INTERVAL` gleicht die laufenden
+periodisch dagegen ab. Er löscht nie und legt nie an — was er nicht auflösen
+kann, meldet er, statt es aufzuräumen.
+
 **Der Katalog sagt, was der Broker kann — und nur das.** Er ist das Einzige,
 was ein Marktplatz vom Broker sieht, bevor er ihn benutzt: jedes Angebot und
 jeder Plan trägt seinen Anzeigeblock, jeder Plan sagt ausdrücklich, ob er

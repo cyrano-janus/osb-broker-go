@@ -23,6 +23,26 @@ Neustart.
 | `DEFINITIONS_DIR` | leer | Verzeichnis mit den ServiceDefinitions. Leer heißt: leerer Katalog, der Broker bietet nichts an. |
 | `METRICS_ENABLED` | an | **Nur der exakte Wert `0` schaltet ab.** Kein `ParseBool`: `false` lässt die Metriken an. |
 
+### Abgleich bestehender Instanzen
+
+| Variable | Vorgabe | Wirkung |
+|---|---|---|
+| `RECONCILE_INTERVAL` | leer (**aus**) | Abstand zwischen zwei Durchläufen, z. B. `30m`. Leer oder `0` schaltet ab. Unter einer Minute wird gewarnt — je Instanz wird mindestens ein Objekt gelesen. |
+
+Ohne ihn wirkt eine geänderte Definition nur auf neue Instanzen. Mit ihm zieht
+der Broker die bestehenden nach: er rendert aus dem gespeicherten Plan und den
+gespeicherten Benutzerparametern gegen die Definition, die jetzt geladen ist,
+und schreibt nur bei echter Abweichung.
+
+**Ausdrücklich einzuschalten**, weil er das Einzige ist, was ohne einen Request
+in fremde Namespaces schreibt. Was er nicht tut, steht in
+[../service-definitions.md](../service-definitions.md#der-abgleich-bestehender-instanzen).
+
+Er braucht einen Zustandsspeicher, der aufzählen kann — mit
+`STORE_BACKEND=memory` gibt es nach einem Neustart nichts abzugleichen.
+Kann der Speicher es nicht, bleibt der Abgleich aus statt eine leere Liste als
+„nichts zu tun" zu lesen.
+
 ### Authentifizierung
 
 | Variable | Vorgabe | Wirkung |

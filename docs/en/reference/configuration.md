@@ -22,6 +22,25 @@ dangerous answer: the broker would run and lose all state on restart.
 | `DEFINITIONS_DIR` | empty | Directory holding the ServiceDefinitions. Empty means an empty catalogue; the broker offers nothing. |
 | `METRICS_ENABLED` | on | **Only the exact value `0` turns it off.** No `ParseBool`: `false` leaves metrics on. |
 
+### Reconciling existing instances
+
+| Variable | Default | Effect |
+|---|---|---|
+| `RECONCILE_INTERVAL` | empty (**off**) | Gap between two runs, e.g. `30m`. Empty or `0` disables it. Below one minute triggers a warning — at least one object is read per instance. |
+
+Without it a changed definition only affects new instances. With it the broker
+pulls the existing ones along: it renders from the stored plan and the stored
+user parameters against the definition loaded right now, and writes only on a
+real difference.
+
+**Explicitly opt-in**, because it is the only thing that writes into foreign
+namespaces without a request arriving. What it does not do is in
+[../service-definitions.md](../service-definitions.md#reconciling-existing-instances).
+
+It needs a state store that can enumerate — with `STORE_BACKEND=memory` there is
+nothing to reconcile after a restart. If the store cannot, the reconciler stays
+off rather than reading an empty list as "nothing to do".
+
 ### Authentication
 
 | Variable | Default | Effect |

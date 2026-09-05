@@ -79,16 +79,15 @@ closer to the target platform than Korifi. Classification in
    [ADR 0008](adr/0008-depth-over-breadth.md) the effort goes there rather than
    into further catalogue entries.
 
-   **Upgrades do not depend on the target system but on a reconcile loop** — a
-   changed definition would have to re-apply to existing instances, and that
-   needs something that runs without a request arriving.
-   [ADR 0009](adr/0009-deployment-model.md) permits a Kubernetes controller for
-   that.
+   **Upgrades are done:** `RECONCILE_INTERVAL` reconciles existing instances
+   against the loaded definitions. It never deletes and never creates — what it
+   cannot resolve it reports.
 
-   **The plan change belongs here.** No definition sets `planUpdateable`, and
+   **What stays open is the plan change.** No definition sets `planUpdateable`, and
    without the promise the broker refuses it with `422`. The reason is not
    missing capability but direction: CloudNativePG grows storage and cannot
    shrink it, and a catalogue flag knows no direction. A reconcile loop could
-   check the transition before applying it.
+   The reconciler could check the transition before applying it — today it does
+   not, because "upwards only" is not something a definition states.
 3. **`seaweedfs-s3` against a running operator** — the CRD schema says
    `status.conditions` exists, not that the operator writes `Ready` there.

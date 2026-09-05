@@ -79,17 +79,17 @@ Zielplattform näher wäre als Korifi. Einordnung in
    [ADR 0008](adr/0008-depth-over-breadth.md) geht die Arbeit dorthin und nicht
    in weitere Katalogeinträge.
 
-   **Upgrades hängen nicht am Zielsystem, sondern an einem Reconcile-Loop** —
-   eine geänderte Definition müsste bestehende Instanzen erneut anwenden, und
-   dafür braucht es etwas, das läuft, ohne dass ein Request kommt.
-   [ADR 0009](adr/0009-deployment-model.md) erlaubt dafür einen
-   Kubernetes-Controller.
+   **Upgrades sind erledigt:** `RECONCILE_INTERVAL` gleicht bestehende
+   Instanzen gegen die geladenen Definitionen ab. Er löscht nie und legt nie
+   an — was er nicht auflösen kann, meldet er.
 
-   **Der Planwechsel gehört dazu.** Keine Definition setzt `planUpdateable`,
+   **Offen bleibt der Planwechsel.** Keine Definition setzt `planUpdateable`,
    und ohne die Zusage lehnt der Broker ihn mit `422` ab. Der Grund ist nicht
    fehlende Fähigkeit, sondern Richtung: CloudNativePG lässt Speicher wachsen
    und nicht schrumpfen, und ein Katalogflag kennt keine Richtung. Ein
-   Reconcile-Loop könnte den Übergang prüfen, bevor er ihn anwendet.
+   Der Abgleich könnte den Übergang prüfen, bevor er ihn anwendet — er tut es
+   heute nicht, weil „nur nach oben" keine Aussage ist, die eine Definition
+   trifft.
 3. **`seaweedfs-s3` gegen einen laufenden Operator** — das CRD-Schema sagt,
    dass es `status.conditions` gibt, nicht dass der Operator dort `Ready`
    schreibt.
