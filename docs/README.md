@@ -35,6 +35,7 @@ Gliederung und keine toten Verweise haben.
 | 0006 | The OSB API is the only coupling · Die OSB-API ist die einzige Kopplung | accepted | [en](en/adr/0006-platform-independence.md) | [de](de/adr/0006-platform-independence.md) |
 | 0007 | User parameters overlay the plan · Benutzerparameter überlagern den Plan | accepted | [en](en/adr/0007-user-parameters.md) | [de](de/adr/0007-user-parameters.md) |
 | 0008 | Depth over breadth · Tiefe statt Breite | accepted | [en](en/adr/0008-depth-over-breadth.md) | [de](de/adr/0008-depth-over-breadth.md) |
+| 0009 | Deployment model · Betriebsmodell | accepted | [en](en/adr/0009-deployment-model.md) | [de](de/adr/0009-deployment-model.md) |
 
 ## Machine-readable sources · Maschinenlesbare Quellen
 
