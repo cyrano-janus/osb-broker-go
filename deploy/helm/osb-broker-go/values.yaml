@@ -99,14 +99,10 @@ rbac:
     - group: postgresql.cnpg.io
       resources: [clusters]
       verbs: [create, get, list, update, delete]
-    - group: hyperspike.io
-      resources: [valkeys]
-      verbs: [create, get, list, update, delete]
-    # minio.min.io und redis.redis.opstreelabs.in fehlten hier, obwohl beide
-    # Definitionen mitgeliefert werden: jedes Provision endete mit 403, und
-    # zwar erst beim Kunden. internal/chart/sync_test.go haelt Liste und
-    # definitions/ jetzt zusammen - in beide Richtungen, denn ein Recht auf
-    # eine Gruppe, die niemand anfasst, ist clusterweit eines zu viel.
+    # Diese Liste und definitions/ haelt internal/chart/sync_test.go zusammen,
+    # und zwar in beide Richtungen: eine fehlende Gruppe ist 403 beim Provision
+    # (also erst beim Kunden), eine ueberfluessige ein clusterweites Recht zu
+    # viel.
     # Der Plural einer CRD laesst sich aus dem Kind nicht sicher ableiten -
     # deshalb wird diese Liste von Hand gepflegt und nur ihre Vollstaendigkeit
     # geprueft (internal/chart/sync_test.go), in beide Richtungen.

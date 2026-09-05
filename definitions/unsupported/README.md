@@ -5,6 +5,10 @@ Unterverzeichnisse. Die Dateien bleiben, weil sie Arbeit und einen Befund
 tragen — ausgeliefert werden sie nicht, weil sie nachweislich nicht
 funktionieren würden.
 
+**Der Katalog hat damit keinen In-Memory-Cache mehr.** Das ist eine
+Entscheidung, kein Versehen: die CNCF führt kein Cache-Projekt, und die beiden
+naheliegenden Kandidaten scheitern aus verschiedenen Gründen — siehe unten.
+
 ## `redis-standalone.yaml`
 
 Zwei Gründe, unabhängig voneinander. Der zweite wiegt schwerer.
@@ -77,5 +81,29 @@ lässt Grund 1 unberührt; wer sie baut, sollte das mit einem anderen Operator
 begründen. Eine Definition kommt hier nur heraus, wenn **beide** Gründe
 entfallen — und der erste entfällt nicht durch Code.
 
-`internal/definition/testdata/crds/unsupported-redis-standalone.yaml` hält den
-Schema-Ausschnitt fest, damit der Befund nachprüfbar bleibt.
+## `valkey-cluster.yaml`
+
+Lizenzrechtlich wäre Valkey der saubere Weg: BSD-3-Clause, Linux Foundation,
+Fork von Redis 7.2.4, protokollkompatibel — die Antwort, die das Ökosystem auf
+die Redis-Umstellung gegeben hat. Daran liegt es nicht.
+
+**Der Operator kann nicht binden.** `hyperspike/valkey-operator` legt kein
+Credentials-Secret an. Die Definition trug deshalb die Konvention „ein
+Platform-Admin erzeugt das Secret vor dem ersten Bind" — das ist kein Broker,
+das ist ein Ticket. Ein Service, dessen Bind einen manuellen Schritt braucht,
+gehört nicht in einen Marketplace-Katalog.
+
+Dazu die eigene Annotation der Definition,
+`broker.osb.io/status: experimental-operator-incompatible`, und ein
+Readiness-Pfad, der nur gegen das CRD-Schema geprüft ist, nie gegen ein
+laufendes CR.
+
+Valkey selbst ist nicht das Problem — sein Operator-Ökosystem ist noch nicht
+so weit. Wenn sich das ändert (ein Operator, der ein Secret erzeugt und es in
+seinem Status nennt), ist die Definition schnell wieder gültig.
+
+## Die Schema-Ausschnitte bleiben
+
+`internal/definition/testdata/crds/unsupported-*.yaml` hält je einen
+`status`-Ausschnitt aus dem CRD des Operators fest, damit die Befunde
+nachprüfbar bleiben, ohne den Operator zu installieren.
