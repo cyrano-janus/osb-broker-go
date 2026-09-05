@@ -123,12 +123,33 @@ the broker's catalogue.
 
 | Deviation | on Korifi | on production CF / TAS |
 |---|---|---|
-| Five readiness paths are unverified | the operators are not installed at all | a path that misses costs one platform timeout per instance |
+| `seaweedfs-s3`: readiness path checked against the CRD schema only | the operator is not installed | a path that misses costs one platform timeout per instance |
 
 None of these deviations is an exclusion criterion. The points that were sat in
 the HTTP layer and were replaced along with it —
 [ADR 0003](adr/0003-replace-http-layer.md). What remains are functional gaps
 and diligence on the definitions.
+
+## What a managed service needs and does not have here
+
+Since [ADR 0008](adr/0008-depth-over-breadth.md) the effort goes into the depth
+of the few services rather than into further catalogue entries. This table is
+the list for that — not tasks with dates, but the gap as it stands. Each point
+weighs more for an operator than a fourth service in the marketplace.
+
+| | State |
+|---|---|
+| **Backup and restore** | CloudNativePG can do it (`Backup`, `ScheduledBackup`, Barman) — the broker offers it neither as a plan attribute nor as a service key |
+| **Point-in-time recovery on provision** | not provided for; an instance is always created empty |
+| **Upgrades of existing instances** | there is no path. Definitions are read at start-up, a changed definition does not touch existing instances |
+| **Quotas** | plans describe sizes, but nothing enforces them — a user parameter can exceed them as far as `allowedParameters` permits |
+| **Per-instance monitoring** | the broker measures itself (`osb_*`), not the services it creates |
+| **Deletion protection** | `cf delete-service` removes the backing resource immediately; there is no grace period and no recycle bin |
+| **Behaviour under load, real multi-tenancy** | unverified — see the state of verification |
+
+The order of these points is not settled, and it depends on the target-system
+run: that is where it is decided how backups are stored and who administers
+them.
 
 ## What happens to Korifi
 

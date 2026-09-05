@@ -37,10 +37,14 @@ folgen. Ein Operator ist anbindbar, wenn er **alle drei** Punkte erfüllt:
 2. Credentials als Kubernetes-Secret,
 3. ein Statusfeld für Readiness.
 
-Das ist zugleich die Grenze der Entscheidung. Von den sieben mitgelieferten
-Definitionen können vier nicht binden, weil ihr Operator kein Credential-Secret
-erzeugt. Das Versprechen lautet nicht „jeder Operator mit nur YAML", sondern
-„jeder Operator, der dem Dreier-Muster folgt, mit nur YAML".
+Das ist zugleich die Grenze der Entscheidung. Das Versprechen lautet nicht
+„jeder Operator mit nur YAML", sondern „jeder Operator, der dem Dreier-Muster
+folgt, mit nur YAML".
+
+Wie eng diese Grenze in der Praxis ist, hält [ADR 0008](0008-depth-over-breadth.md)
+fest: von sieben Definitionen sind drei geblieben, und keine der vier Absagen
+hatte eine Ursache im Broker-Code. Der Mechanismus dieser Entscheidung bleibt
+davon unberührt — begrenzt ist das Angebot, nicht die Bauform.
 
 ## Konsequenzen
 

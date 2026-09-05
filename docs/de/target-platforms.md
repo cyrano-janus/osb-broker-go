@@ -124,12 +124,33 @@ den Katalog des Brokers.
 
 | Abweichung | auf Korifi | auf produktivem CF / TAS |
 |---|---|---|
-| Fünf Readiness-Pfade sind ungeprüft | die Operatoren sind gar nicht installiert | ein danebenliegender Pfad kostet ein Plattform-Zeitlimit je Instanz |
+| `seaweedfs-s3`: Readiness-Pfad nur gegen das CRD-Schema geprüft | der Operator ist nicht installiert | ein danebenliegender Pfad kostet ein Plattform-Zeitlimit je Instanz |
 
 Keine dieser Abweichungen ist ein Ausschlusskriterium. Die Punkte, die es waren,
 lagen alle in der HTTP-Schicht und sind mit ihr ersetzt worden —
 [ADR 0003](adr/0003-replace-http-layer.md). Was bleibt, sind funktionale
 Lücken und Sorgfaltsarbeit an den Definitionen.
+
+## Was ein managed Dienst braucht und hier fehlt
+
+Seit [ADR 0008](adr/0008-depth-over-breadth.md) geht die Arbeit in die Tiefe der
+wenigen Dienste statt in weitere Katalogeinträge. Diese Tabelle ist die Liste
+dazu — nicht Aufgaben mit Terminen, sondern die Lücke, so wie sie ist. Jeder
+Punkt wiegt für einen Betreiber schwerer als ein vierter Dienst im Marketplace.
+
+| | Stand |
+|---|---|
+| **Sicherung und Wiederherstellung** | CloudNativePG kann es (`Backup`, `ScheduledBackup`, Barman) — der Broker bietet es weder als Planmerkmal noch als Service-Key an |
+| **Point-in-Time-Recovery beim Provision** | nicht vorgesehen; eine Instanz entsteht immer leer |
+| **Upgrades bestehender Instanzen** | es gibt keinen Pfad. Definitionen werden beim Start gelesen, eine geänderte Definition fasst bestehende Instanzen nicht an |
+| **Kontingente** | Pläne beschreiben Größen, aber nichts erzwingt sie — ein Benutzerparameter kann sie überschreiten, soweit `allowedParameters` es zulässt |
+| **Monitoring je Instanz** | der Broker misst sich selbst (`osb_*`), nicht die Dienste, die er herstellt |
+| **Löschschutz** | `cf delete-service` löscht die Backing-Ressource sofort; es gibt keine Schonfrist und keinen Papierkorb |
+| **Verhalten unter Last, echte Mandantentrennung** | ungeprüft — siehe Verifikationsstand |
+
+Die Reihenfolge dieser Punkte steht noch nicht fest, und sie hängt am
+Zielsystem-Durchlauf: dort entscheidet sich, wie Sicherungen abgelegt werden
+und wer sie verwaltet.
 
 ## Was mit Korifi passiert
 

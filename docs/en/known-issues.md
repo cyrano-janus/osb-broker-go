@@ -63,12 +63,16 @@ closer to the target platform than Korifi. Classification in
 
 ## Suggested order
 
-The points are connected; worked through in this order each one makes the next
-visible or cheaper.
-
-1. **`valkey-cluster` and `seaweedfs-s3` against a running operator** — the
-   CRD schema says `status.conditions` exists, not that the operator writes
-   `Ready` there. Needs those operators in the cluster.
-2. **A run against a target system** — everything up to here is evidence from
-   the development platform, and that is not the same as being deployable. See
-   [target-platforms.md](target-platforms.md).
+1. **A run against a target system.** This is the gate for everything else,
+   not one point among several: all evidence so far comes from the development
+   platform, and that decides neither how certificate trust is established nor
+   whether the broker runs as a Kubernetes Deployment beside the platform or as
+   a CF app on it. While that is open, any depth work is built on an
+   assumption. See [target-platforms.md](target-platforms.md).
+2. **What a managed service needs** — backup and restore, upgrades of existing
+   instances, quotas, per-instance monitoring, deletion protection. The list is
+   in [target-platforms.md](target-platforms.md); since
+   [ADR 0008](adr/0008-depth-over-breadth.md) the effort goes there rather than
+   into further catalogue entries.
+3. **`seaweedfs-s3` against a running operator** — the CRD schema says
+   `status.conditions` exists, not that the operator writes `Ready` there.

@@ -6,9 +6,16 @@
 
 > [English](README.md) · Führende Fassung: deutsch
 
-Ein gehärteter Prozess macht beliebige Kubernetes-Operatoren über die
+Ein gehärteter Prozess macht Kubernetes-Operatoren über die
 Open-Service-Broker-API verfügbar. Ein neuer Service ist eine YAML-Datei, kein
 neuer Broker: kein Code je Service, keine externe Datenbank.
+
+**Angeboten werden drei Dienste** — PostgreSQL, RabbitMQ und SeaweedFS —, davon
+zwei Ende zu Ende gegen einen laufenden Operator belegt. Der Katalog wächst
+entlang eines benannten Bedarfs, nicht entlang des Möglichen: ein Dienst kommt
+hinzu, wenn ihn eine konkrete Last verlangt **und** sein Operator das
+Dreier-Muster erfüllt. Warum das so ist, steht in
+[ADR 0008](docs/de/adr/0008-depth-over-breadth.md).
 
 ## Wofür das gebaut wird
 

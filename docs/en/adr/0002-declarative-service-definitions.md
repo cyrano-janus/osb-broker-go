@@ -35,10 +35,15 @@ operator can be integrated if it satisfies **all three** points:
 2. credentials as a Kubernetes secret,
 3. a status field for readiness.
 
-That is at the same time the limit of this decision. Of the seven shipped
-definitions four cannot bind, because their operator creates no credential
-secret. The promise is not "any operator with just YAML" but "any operator that
-follows the three-part pattern, with just YAML".
+That is at the same time the limit of this decision. The promise is not "any
+operator with just YAML" but "any operator that follows the three-part pattern,
+with just YAML".
+
+How narrow that limit is in practice is recorded in
+[ADR 0008](0008-depth-over-breadth.md): of seven definitions three remain, and
+none of the four rejections had a cause in the broker's code. The mechanism of
+this decision is untouched by that — what is limited is the offering, not the
+shape.
 
 ## Consequences
 

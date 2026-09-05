@@ -63,12 +63,19 @@ Zielplattform näher wäre als Korifi. Einordnung in
 
 ## Empfohlene Reihenfolge
 
-Die Punkte hängen zusammen; in dieser Reihenfolge abgearbeitet macht jeder den
-nächsten sichtbar oder billiger.
-
-1. **`valkey-cluster` und `seaweedfs-s3` gegen einen laufenden Operator** —
-   das CRD-Schema sagt, dass es `status.conditions` gibt, nicht dass der
-   Operator dort `Ready` schreibt. Braucht diese Operatoren im Cluster.
-2. **Ein Durchlauf gegen ein Zielsystem** — bis hierhin ist alles auf der
-   Entwicklungsplattform belegt, und das ist nicht dasselbe wie einsatzfähig.
-   Siehe [target-platforms.md](target-platforms.md).
+1. **Ein Durchlauf gegen ein Zielsystem.** Das ist das Tor für alles andere,
+   nicht ein Punkt unter mehreren: alles bisher Belegte stammt von der
+   Entwicklungsplattform, und dort entscheidet sich weder, wie das
+   Zertifikatsvertrauen hergestellt wird, noch ob der Broker als
+   Kubernetes-Deployment neben der Plattform läuft oder als CF-App auf ihr.
+   Solange das offen ist, ist jede Tiefenarbeit auf Verdacht gebaut. Siehe
+   [target-platforms.md](target-platforms.md).
+2. **Was ein managed Dienst braucht** — Sicherung und Wiederherstellung,
+   Upgrades bestehender Instanzen, Kontingente, Monitoring je Instanz,
+   Löschschutz. Die Liste steht in
+   [target-platforms.md](target-platforms.md); seit
+   [ADR 0008](adr/0008-depth-over-breadth.md) geht die Arbeit dorthin und nicht
+   in weitere Katalogeinträge.
+3. **`seaweedfs-s3` gegen einen laufenden Operator** — das CRD-Schema sagt,
+   dass es `status.conditions` gibt, nicht dass der Operator dort `Ready`
+   schreibt.
