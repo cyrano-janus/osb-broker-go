@@ -161,6 +161,32 @@ ServiceDefinition, and therefore the engine. To choose deliberately:
 otherwise CI would happily audit something other than intended. Which service
 was chosen appears as the first `PASS` line of the report.
 
+### Checking the update path for real
+
+`cf update-service -c '{...}'` sends a `PATCH` carrying **only parameters** and
+no `plan_id` — in OSB 2.17 that field is optional there. The `update-parameters`
+check covers exactly that shape: the request must not fail over the missing
+`plan_id`, and whatever the broker accepts, `GET /v2/service_instances` must
+report.
+
+Without a hint it probes with an invented key. A broker with
+`allowedParameters` rightly rejects that with `400` — the check then says
+nothing and is skipped. Name a permitted key like this:
+
+```bash
+/tmp/osb-gate --url http://localhost:8080 --user dev --pass dev \
+  --service-id f48a9e21-cnpg-0000-0000-000000000001 \
+  --plan-id plan-small-0000-0000-000000000001 \
+  --update-parameter storageSize=2Gi
+```
+
+**This check exists because the development platform cannot stand in for it.**
+Korifi does not forward a `cf update-service -c` to the broker at all: the CLI
+reports "Update of service instance complete" and no `PATCH` ever arrives.
+Checked through the CLI, that path is unchecked — on a target system a breakage
+then reaches a customer first. The development platform has `make conformance`
+for it, which runs exactly this audit against the deployed broker.
+
 ## Two checkers, two roles
 
 Besides the built-in one there is a standalone tool,

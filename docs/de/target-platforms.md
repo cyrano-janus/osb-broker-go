@@ -115,6 +115,13 @@ nicht. Die Langfassung je Punkt steht in
 [known-issues.md](known-issues.md), die Codestellen in
 [reference/osb-api.md](reference/osb-api.md).
 
+**Was Korifi nicht prüfen kann.** `cf update-service -c '{...}'` erreicht den
+Broker über Korifi nicht: die CLI meldet Erfolg, ein `PATCH` kommt nie an. Der
+Update-Pfad ist deshalb nur direkt gegen den Broker prüfbar —
+`cmd/osb-gate` mit `--update-parameter`, in der Entwicklungsplattform als
+`make conformance`. Ebenso zeigt `cf marketplace` Korifis Katalogkopie, nicht
+den Katalog des Brokers.
+
 | Abweichung | auf Korifi | auf produktivem CF / TAS |
 |---|---|---|
 | Fünf Readiness-Pfade sind ungeprüft | die Operatoren sind gar nicht installiert | ein danebenliegender Pfad kostet ein Plattform-Zeitlimit je Instanz |

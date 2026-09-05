@@ -19,6 +19,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/example/osb-broker/cmd/osb-gate/checks"
 )
@@ -36,7 +37,11 @@ func main() {
 	planID := flag.String("plan-id", "", "OSB plan_id to audit; empty = first plan of the chosen service")
 	timeout := flag.Int64("timeout", 0, "per-request timeout in seconds (0 = 30s)")
 	asyncTimeout := flag.Int64("async-timeout", 0, "deadline for an asynchronous operation in seconds (0 = 240s)")
+	updateParam := flag.String("update-parameter", "",
+		"key=value of a parameter the audited plan permits; makes the update-parameters check conclusive")
 	flag.Parse()
+
+	upKey, upVal, _ := strings.Cut(*updateParam, "=")
 
 	if *insecure {
 		fmt.Fprintln(os.Stderr, "osb-gate: WARNING --insecure disables broker certificate verification; never use this in CI")
@@ -44,15 +49,17 @@ func main() {
 
 	cfg := checks.Config{
 		BaseURL: *url, User: *user, Pass: *pass,
-		IDPrefix:     *prefix,
-		CACert:       *caCert,
-		ClientCert:   *clientCert,
-		ClientKey:    *clientKey,
-		Insecure:     *insecure,
-		ServiceID:    *serviceID,
-		PlanID:       *planID,
-		Timeout:      *timeout,
-		AsyncTimeout: *asyncTimeout,
+		IDPrefix:             *prefix,
+		CACert:               *caCert,
+		ClientCert:           *clientCert,
+		ClientKey:            *clientKey,
+		Insecure:             *insecure,
+		ServiceID:            *serviceID,
+		PlanID:               *planID,
+		Timeout:              *timeout,
+		AsyncTimeout:         *asyncTimeout,
+		UpdateParameterKey:   upKey,
+		UpdateParameterValue: upVal,
 	}
 	failures := checks.Run(cfg)
 	if failures > 0 {

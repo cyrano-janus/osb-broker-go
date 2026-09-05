@@ -61,6 +61,15 @@ type Config struct {
 	// ServiceDefinition sind auf Dauer stabil, der Katalog ist es nicht.
 	ServiceID string
 	PlanID    string
+
+	// UpdateParameterKey/Value benennen einen Parameter, den der gepruefte
+	// Plan erlaubt. Ohne diese Angabe sondiert update-parameters mit einem
+	// erfundenen Schluessel - und ein Broker mit Allowlist lehnt den zu Recht
+	// ab, womit die Pruefung nichts aussagen kann und uebersprungen wird.
+	// Wer den Update-Pfad wirklich belegen will, nennt hier einen gueltigen
+	// Schluessel.
+	UpdateParameterKey   string
+	UpdateParameterValue string
 }
 
 // demoServiceIDs sind Angebote, die ein Lifecycle-Audit nie pruefen darf: sie
@@ -795,6 +804,106 @@ func runUpdateAudit(c *client, instanceID, serviceID, planID string) {
 	} else {
 		c.pass(checkGhost, "update nonexistent instance -> 404")
 	}
+
+	c.checkUpdateParameters(instanceID, serviceID, planID)
+}
+
+// checkUpdateParameters prueft den Weg von `cf update-service -c '{...}'`:
+// ein PATCH, der nur Parameter traegt und kein plan_id.
+//
+// **Warum das eine eigene Pruefung ist.** Cloud Foundry auf Korifi - die
+// Entwicklungsplattform dieses Brokers - reicht ein `cf update-service -c`
+// ueberhaupt nicht an den Broker weiter: die CLI meldet Erfolg, ohne dass je
+// ein PATCH ankommt. Ueber die Plattform ist dieser Pfad also nicht pruefbar,
+// und ein Bruch faellt dort nicht auf. Auf einem Zielsystem faellt er auf.
+// Deshalb wird er hier direkt gegen den Broker geprueft.
+//
+// Zwei Zusagen, beide aus OSB 2.17:
+//
+//  1. `plan_id` ist im PATCH optional. Ein Broker, der ihn verlangt, lehnt
+//     eine Anfrage ab, die die Spezifikation erlaubt.
+//  2. Was der Broker angenommen hat, muss er auch berichten - sofern er
+//     GET /v2/service_instances mit `parameters` beantwortet. Tut er das
+//     nicht, ist das erlaubt und wird uebersprungen, nicht bemaengelt: ohne
+//     Rueckmeldung laesst sich die Zusage nicht pruefen.
+func (c *client) checkUpdateParameters(instanceID, serviceID, planID string) {
+	const check = "update-parameters"
+
+	// Ohne Vorgabe: ein Schluessel, den kein Plan vorgibt. Ein Broker mit
+	// Allowlist lehnt den zu Recht ab - dann sagt die Pruefung nichts und
+	// wird uebersprungen. Mit Vorgabe ist sie belastbar.
+	probeKey := "osbGateProbe"
+	probe := fmt.Sprintf("v%d", time.Now().UnixNano()%100000)
+	if c.cfg.UpdateParameterKey != "" {
+		probeKey = c.cfg.UpdateParameterKey
+		probe = c.cfg.UpdateParameterValue
+	}
+
+	status, body := c.do("PATCH", "/v2/service_instances/"+instanceID, map[string]interface{}{
+		"service_id": serviceID,
+		"parameters": map[string]interface{}{probeKey: probe},
+	})
+	switch status {
+	case 200, 202:
+		c.pass(check, "PATCH mit parameters und ohne plan_id -> %d", status)
+	case 400, 422:
+		// Ein Broker darf einen Parameter ablehnen, den er nicht kennt -
+		// eine Allowlist ist zulaessig. Was er nicht darf, ist die Anfrage
+		// allein wegen des fehlenden plan_id ablehnen. Das laesst sich von
+		// aussen nicht sicher trennen, deshalb die Gegenprobe: dieselbe
+		// Anfrage mit plan_id. Geht die durch, lag es am plan_id.
+		c.probeMissingPlanID(check, instanceID, serviceID, planID, probeKey, probe, status, body)
+		return
+	default:
+		c.fail(check, "PATCH mit parameters -> expected 200/202, got %d: %s", status, truncate(body))
+		return
+	}
+
+	gStatus, gBody := c.do("GET", "/v2/service_instances/"+instanceID, nil)
+	if gStatus != 200 {
+		c.skip(check, "GET instance -> %d, die Rueckmeldung der Parameter ist nicht pruefbar", gStatus)
+		return
+	}
+	var got struct {
+		Parameters map[string]interface{} `json:"parameters"`
+	}
+	if err := json.Unmarshal(gBody, &got); err != nil {
+		c.fail(check, "GET instance is not valid JSON: %s", truncate(gBody))
+		return
+	}
+	if got.Parameters == nil {
+		c.skip(check, "GET instance meldet kein parameters-Objekt - der Broker gibt Parameter nicht zurueck")
+		return
+	}
+	if got.Parameters[probeKey] != probe {
+		c.fail(check, "der Parameter %q wurde angenommen, aber nicht berichtet: %s",
+			probeKey, truncate(gBody))
+		return
+	}
+	c.pass(check, "der gesetzte Parameter steht in GET /v2/service_instances")
+}
+
+// probeMissingPlanID trennt "der Broker mag diesen Parameter nicht" von "der
+// Broker verlangt ein plan_id, das die Spezifikation nicht verlangt".
+func (c *client) probeMissingPlanID(check, instanceID, serviceID, planID, probeKey, probe string, firstStatus int, firstBody []byte) {
+	plan := planID
+	if plan == "" {
+		c.skip(check, "PATCH ohne plan_id -> %d; ohne bekannten Plan nicht weiter eingrenzbar: %s",
+			firstStatus, truncate(firstBody))
+		return
+	}
+	status, _ := c.do("PATCH", "/v2/service_instances/"+instanceID, map[string]interface{}{
+		"service_id": serviceID,
+		"plan_id":    plan,
+		"parameters": map[string]interface{}{probeKey: probe},
+	})
+	if status == 200 || status == 202 {
+		c.fail(check, "PATCH ohne plan_id -> %d, mit plan_id -> %d: plan_id ist im PATCH optional (OSB 2.17)",
+			firstStatus, status)
+		return
+	}
+	c.skip(check, "der Broker nimmt %q nicht an (%d mit und ohne plan_id) - keine Aussage ueber plan_id; "+
+		"mit --update-parameter key=wert einen erlaubten Schluessel nennen", probeKey, firstStatus)
 }
 
 // cleanupAudit unbinds and deprovisions the audit instance and asserts the

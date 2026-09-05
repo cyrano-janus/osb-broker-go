@@ -160,6 +160,33 @@ ServiceDefinition, und damit die Engine. Gezielt wählen geht so:
 Rückfall — sonst prüfte die CI klaglos etwas anderes als gemeint. Welcher
 Service gewählt wurde, steht als erste `PASS`-Zeile im Bericht.
 
+### Den Update-Pfad wirklich prüfen
+
+`cf update-service -c '{...}'` schickt ein `PATCH`, das **nur Parameter** trägt
+und kein `plan_id` — im OSB 2.17 ist das Feld dort optional. Die Prüfung
+`update-parameters` deckt genau diese Form ab: die Anfrage darf nicht am
+fehlenden `plan_id` scheitern, und was der Broker annimmt, muss
+`GET /v2/service_instances` auch berichten.
+
+Ohne Vorgabe sondiert sie mit einem erfundenen Schlüssel. Ein Broker mit
+`allowedParameters` lehnt den zu Recht mit `400` ab — dann sagt die Prüfung
+nichts und wird übersprungen. Einen erlaubten Schlüssel nennt man so:
+
+```bash
+/tmp/osb-gate --url http://localhost:8080 --user dev --pass dev \
+  --service-id f48a9e21-cnpg-0000-0000-000000000001 \
+  --plan-id plan-small-0000-0000-000000000001 \
+  --update-parameter storageSize=2Gi
+```
+
+**Diese Prüfung existiert, weil die Entwicklungsplattform sie nicht ersetzen
+kann.** Korifi reicht ein `cf update-service -c` gar nicht an den Broker weiter:
+die CLI meldet „Update of service instance complete", und beim Broker kommt kein
+`PATCH` an. Über die CLI geprüft ist der Pfad also ungeprüft — auf einem
+Zielsystem fällt ein Bruch dann zuerst einem Kunden auf. In der
+Entwicklungsplattform gibt es dafür `make conformance`, das genau diesen Lauf
+gegen den ausgerollten Broker fährt.
+
 ## Zwei Checker, zwei Rollen
 
 Neben dem eingebauten gibt es ein eigenstaendiges Werkzeug,

@@ -114,6 +114,13 @@ unnoticed on the development platform and which do not pass on a target system.
 The long form of each point is in [known-issues.md](known-issues.md), the code
 locations in [reference/osb-api.md](reference/osb-api.md).
 
+**What Korifi cannot check.** `cf update-service -c '{...}'` does not reach the
+broker through Korifi: the CLI reports success, a `PATCH` never arrives. The
+update path is therefore only checkable directly against the broker —
+`cmd/osb-gate` with `--update-parameter`, in the development platform as
+`make conformance`. Likewise `cf marketplace` shows Korifi's catalogue copy, not
+the broker's catalogue.
+
 | Deviation | on Korifi | on production CF / TAS |
 |---|---|---|
 | Five readiness paths are unverified | the operators are not installed at all | a path that misses costs one platform timeout per instance |

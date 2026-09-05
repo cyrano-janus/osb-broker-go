@@ -53,6 +53,8 @@ type mutation struct {
 	getBindingStatus     int  // statt 200
 	lastOperationNoState bool
 	updateStatus         int  // statt 200
+	updateNeedsPlanID    bool // PATCH ohne plan_id wird abgelehnt
+	updateDropsParams    bool // PATCH nimmt parameters an und verwirft sie
 	unbindStatus         int  // statt 200
 	bindingTypeNotString bool // credentials.type ist keine Zeichenkette
 }
@@ -69,14 +71,16 @@ const (
 type mockBroker struct {
 	*httptest.Server
 	mu        sync.Mutex
-	instances map[string][2]string // id -> {service_id, plan_id}
-	bindings  map[string]string    // bindingID -> instanceID
+	instances map[string][2]string              // id -> {service_id, plan_id}
+	params    map[string]map[string]interface{} // id -> zuletzt gesetzte parameters
+	bindings  map[string]string                 // bindingID -> instanceID
 	mut       mutation
 }
 
 func newMockBroker(m mutation) *mockBroker {
 	b := &mockBroker{
 		instances: map[string][2]string{},
+		params:    map[string]map[string]interface{}{},
 		bindings:  map[string]string{},
 		mut:       m,
 	}
@@ -161,8 +165,9 @@ func (b *mockBroker) instance(w http.ResponseWriter, r *http.Request, id string)
 	switch r.Method {
 	case "PUT":
 		var req struct {
-			ServiceID string `json:"service_id"`
-			PlanID    string `json:"plan_id"`
+			ServiceID  string                 `json:"service_id"`
+			PlanID     string                 `json:"plan_id"`
+			Parameters map[string]interface{} `json:"parameters"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&req)
 
@@ -188,13 +193,35 @@ func (b *mockBroker) instance(w http.ResponseWriter, r *http.Request, id string)
 			return
 		}
 		b.instances[id] = [2]string{req.ServiceID, req.PlanID}
+		b.params[id] = req.Parameters
 		writeJSON(w, orDefault(b.mut.provisionStatus, 202), map[string]interface{}{
 			"dashboard_url": "https://example.invalid/" + id, "operation": "provision"})
 
 	case "PATCH":
-		if _, ok := b.instances[id]; !ok {
+		inst, ok := b.instances[id]
+		if !ok {
 			writeErr(w, 404, "NotFound", "instance not found")
 			return
+		}
+		var req struct {
+			PlanID     string                 `json:"plan_id"`
+			Parameters map[string]interface{} `json:"parameters"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		if req.PlanID == "" && b.mut.updateNeedsPlanID {
+			writeErr(w, 400, "BadRequest", "plan_id is required")
+			return
+		}
+		if req.PlanID != "" {
+			b.instances[id] = [2]string{inst[0], req.PlanID}
+		}
+		if len(req.Parameters) > 0 && !b.mut.updateDropsParams {
+			if b.params[id] == nil {
+				b.params[id] = map[string]interface{}{}
+			}
+			for k, v := range req.Parameters {
+				b.params[id][k] = v
+			}
 		}
 		writeJSON(w, orDefault(b.mut.updateStatus, 200), map[string]interface{}{"operation": "update"})
 
@@ -204,8 +231,12 @@ func (b *mockBroker) instance(w http.ResponseWriter, r *http.Request, id string)
 			writeErr(w, 404, "NotFound", "instance not found")
 			return
 		}
-		writeJSON(w, orDefault(b.mut.getInstanceStatus, 200), map[string]interface{}{
-			"service_id": inst[0], "plan_id": inst[1]})
+		p := b.params[id]
+		if p == nil {
+			p = map[string]interface{}{}
+		}
+		body := map[string]interface{}{"service_id": inst[0], "plan_id": inst[1], "parameters": p}
+		writeJSON(w, orDefault(b.mut.getInstanceStatus, 200), body)
 
 	case "DELETE":
 		if _, ok := b.instances[id]; !ok {
@@ -384,6 +415,8 @@ func TestMock_JedeMutationWirdBemerkt(t *testing.T) {
 		{"GET instance antwortet 404", mutation{getInstanceStatus: 404}, "fetch-get-instance"},
 		{"GET binding antwortet 404", mutation{getBindingStatus: 404}, "fetch-get-binding"},
 		{"Update antwortet 500", mutation{updateStatus: 500}, "update-instance"},
+		{"PATCH ohne plan_id wird abgelehnt", mutation{updateNeedsPlanID: true}, "update-parameters"},
+		{"PATCH nimmt parameters an und verwirft sie", mutation{updateDropsParams: true}, "update-parameters"},
 		{"Unbind antwortet 500", mutation{unbindStatus: 500}, "lifecycle-unbind"},
 		{"credentials.type ist eine Zahl", mutation{bindingTypeNotString: true}, "service-binding-spec"},
 	} {
