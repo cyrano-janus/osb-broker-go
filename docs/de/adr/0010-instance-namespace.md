@@ -2,7 +2,7 @@
 
 > [English](../../en/adr/0010-instance-namespace.md) · Führende Fassung: deutsch
 
-**Status:** vorgeschlagen · **Betrifft:** `targetNamespace`, das Chart, die Rechte
+**Status:** angenommen · **Betrifft:** `targetNamespace`, das Chart, die Rechte
 
 ## Kontext
 

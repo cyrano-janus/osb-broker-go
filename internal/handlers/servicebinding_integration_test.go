@@ -83,6 +83,7 @@ func newSpecBindingRouter(t *testing.T) (*gin.Engine, *definition.OperatorClient
 	b := broker.New(stateStore)
 	h := New(b)
 	h.SetEngine(&EngineHolder{Engine: engine, Op: oc})
+	h.SetNamespaceStrategy(mustStrategy(t, testNamespaceTemplate, true))
 	return h.SetupRouter(), oc
 }
 

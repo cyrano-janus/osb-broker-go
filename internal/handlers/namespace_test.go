@@ -46,9 +46,19 @@ func crIn(t *testing.T, oc *definition.OperatorClient, namespace, instanceID str
 	return u, err
 }
 
+// Diese Datei prueft NICHT, dass der Space die Regel ist - sie stellt die
+// Regel ausdruecklich auf den Space ein (ADR 0010) und prueft, dass der
+// AUFGELOESTE Namespace ueberall durchschlaegt: beim Anlegen, beim Loeschen,
+// beim Lesen des Status und beim Bind.
+func newSpaceRouter(t *testing.T) (*gin.Engine, *definition.OperatorClient) {
+	t.Helper()
+	withNamespaceTemplate(t, "{{ .spaceGUID }}")
+	return newDefinitionRouter(t)
+}
+
 func TestNamespace_ProvisionLandetImSpaceNamespace(t *testing.T) {
 	// Der Kern von #3: space_guid kommt ausschliesslich Top-Level.
-	router, oc := newDefinitionRouter(t)
+	router, oc := newSpaceRouter(t)
 	const instanceID = "ns-inst-1"
 
 	w := provisionJSON(router, "/v2/service_instances/"+instanceID, map[string]interface{}{
@@ -64,18 +74,20 @@ func TestNamespace_ProvisionLandetImSpaceNamespace(t *testing.T) {
 	assert.Error(t, err, "und nicht mehr nach default")
 }
 
-func TestNamespace_OhneSpaceGUIDBleibtEsDefault(t *testing.T) {
-	// Rueckwaertskompatibilitaet: Plattformen ohne Space-Begriff.
-	router, oc := newDefinitionRouter(t)
-	const instanceID = "ns-inst-2"
+// Ohne Space gibt es keinen Rueckfall mehr, sondern eine klare Absage: die
+// Regel ist auf den Space eingestellt, und ohne Space kann sie keinen Namen
+// bilden. Frueher landete die Instanz still in "default" - also dort, wo
+// niemand sie vermutet.
+func TestNamespace_OhneSpaceGUIDIstEineKlareAbsage(t *testing.T) {
+	router, _ := newSpaceRouter(t)
 
-	w := provisionJSON(router, "/v2/service_instances/"+instanceID, map[string]interface{}{
+	w := provisionJSON(router, "/v2/service_instances/ns-inst-2", map[string]interface{}{
 		"service_id": "def-svc-0001", "plan_id": "def-plan-free",
 	})
-	require.Equal(t, http.StatusAccepted, w.Code)
 
-	_, err := crIn(t, oc, "default", instanceID)
-	assert.NoError(t, err)
+	assert.Equal(t, http.StatusInternalServerError, w.Code,
+		"lieber ein sichtbarer Fehler als eine Instanz an einem unerwarteten Ort: %s", w.Body.String())
+	assert.Contains(t, w.Body.String(), "empty name")
 }
 
 func TestNamespace_DeprovisionLoeschtImRichtigenNamespace(t *testing.T) {
@@ -83,7 +95,7 @@ func TestNamespace_DeprovisionLoeschtImRichtigenNamespace(t *testing.T) {
 	// Namespace daraus abgeleitet, loeschte der Broker in "default" - und weil
 	// OperatorClient.Delete IsNotFound ignoriert, meldete er Erfolg, waehrend
 	// die Datenbank weiterlief.
-	router, oc := newDefinitionRouter(t)
+	router, oc := newSpaceRouter(t)
 	const instanceID = "ns-inst-3"
 
 	require.Equal(t, http.StatusAccepted, provisionJSON(router, "/v2/service_instances/"+instanceID,
@@ -105,7 +117,7 @@ func TestNamespace_LastOperationFindetDieInstanzImSpaceNamespace(t *testing.T) {
 	// Legacy-Pfad zurueck, der hart "succeeded" meldet - Erfolg fuer eine
 	// Instanz, die der Broker gar nicht gefunden hat. Erkennbar an der
 	// Beschreibung.
-	router, oc := newDefinitionRouter(t)
+	router, oc := newSpaceRouter(t)
 	const instanceID = "ns-inst-4"
 
 	require.Equal(t, http.StatusAccepted, provisionJSON(router, "/v2/service_instances/"+instanceID,
@@ -139,7 +151,7 @@ func TestNamespace_LastOperationFindetDieInstanzImSpaceNamespace(t *testing.T) {
 func TestNamespace_BindLiestDasSecretImSpaceNamespace(t *testing.T) {
 	// Der Bind-Request traegt ebenfalls keine Space-GUID; der Namespace muss
 	// aus der Instanz kommen.
-	router, oc := newDefinitionRouter(t)
+	router, oc := newSpaceRouter(t)
 	const instanceID = "ns-inst-5"
 
 	require.Equal(t, http.StatusAccepted, provisionJSON(router, "/v2/service_instances/"+instanceID,
@@ -164,7 +176,7 @@ func TestNamespace_BindLiestDasSecretImSpaceNamespace(t *testing.T) {
 func TestNamespace_UnbekannteInstanzFaelltAufDefaultZurueck(t *testing.T) {
 	// Kein Datensatz, kein Namespace - dann bleibt es beim bisherigen
 	// Verhalten, statt mit einem leeren Namespace zu arbeiten.
-	router, _ := newDefinitionRouter(t)
+	router, _ := newSpaceRouter(t)
 	w := deleteJSON(router, "/v2/service_instances/gibt-es-nicht?service_id=def-svc-0001&plan_id=def-plan-free")
 	assert.Equal(t, http.StatusGone, w.Code)
 }
@@ -174,7 +186,7 @@ func TestNamespace_WirdAmDatensatzGespeichert(t *testing.T) {
 	// er greift nur, solange ueberhaupt Objekte angelegt wurden. Der
 	// Namespace gehoert als eigenes Feld an den Datensatz, sonst haengt die
 	// Zuordnung an einem Nebeneffekt.
-	router, _ := newDefinitionRouter(t)
+	router, _ := newSpaceRouter(t)
 	const instanceID = "ns-inst-6"
 
 	require.Equal(t, http.StatusAccepted, provisionJSON(router, "/v2/service_instances/"+instanceID,

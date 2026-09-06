@@ -87,6 +87,25 @@ config:
   # stumm laeuft, ist im Fehlerfall nicht nachvollziehbar. Abschaltbar, weil
   # das bei hoher Last teuer wird und manche Betreiber es am Ingress fuehren.
   logRequests: true
+  # Wohin die Ressourcen einer Instanz gehören (ADR 0010).
+  #
+  # Ein Go-Template über den Provision-Kontext; verfügbar sind .platform,
+  # .orgGUID, .orgName, .spaceGUID, .spaceName. Ohne Platzhalter ist es ein
+  # fester Name — und das ist die Vorgabe, weil sie auf JEDER Plattform trägt:
+  # sie setzt nichts darüber voraus, was die Plattform an Kubernetes-Objekten
+  # anlegt, und braucht kein Recht, das der Broker nicht ohnehin hat.
+  #
+  # Ein Ergebnis, das kein gültiger Namespace-Name ist, wird ABGELEHNT und
+  # nicht zurechtgebogen: ein still verstümmelter Name führt zwei Mandanten in
+  # denselben Namespace, und das fällt niemandem auf.
+  instanceNamespaceTemplate: "osb-instances"
+  # Darf der Broker einen fehlenden Namespace anlegen?
+  #
+  # Vorgabe nein, und das ist eine Zusage: er entfernt ihn NIE wieder. OSB
+  # kennt das Löschen einer Instanz, nicht das Ende eines Mandanten — was hier
+  # entsteht, räumt niemand ab. Wer es einschaltet, braucht dazu
+  # rbac.manageNamespaces.
+  instanceNamespaceCreate: false
 
 # ServiceDefinitions als ConfigMap gerendert.
 # Jeder Eintrag unter `files` wird zu einer Datei in DEFINITIONS_DIR.
@@ -120,6 +139,10 @@ rbac:
     - group: seaweed.seaweedfs.com
       resources: [seaweeds]
       verbs: [create, get, list, update, delete]
+  # Erlaubt dem Broker, Namespaces ANZULEGEN. Nur nötig, wenn
+  # config.instanceNamespaceCreate an ist. Lesen darf er sie immer — sonst
+  # könnte er nicht sagen, welcher Namespace fehlt.
+  manageNamespaces: false
   secretsAcrossNamespaces: true   # ClusterRole für Secret-Reads (Bind)
   # Schreibrechte auf Secrets in allen Namespaces. Nur nötig für Definitionen
   # mit spec.bind.projectSecret (Phase 6.4) - sie legen das Binding

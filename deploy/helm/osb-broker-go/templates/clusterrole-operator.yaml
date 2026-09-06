@@ -19,6 +19,30 @@ rules:
   resources: ["secrets"]
   verbs: [get]
 {{- end }}
+# Namespaces LESEN, immer. Der Broker prueft vor dem Provision, ob der
+# Ziel-Namespace da ist - nur so kann er sagen, WELCHER fehlt, statt den
+# Betreiber mit einem Apply-Fehler auf die Suche im Broker zu schicken.
+#
+# `get` auf Namespaces verraet nichts, was ein Betreiber nicht ohnehin sieht,
+# und fehlt das Recht doch, laesst der Broker die Pruefung aus statt
+# abzulehnen: ein verweigertes Lesen ist kein Beweis, dass etwas fehlt.
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: [get]
+{{- if .Values.rbac.manageNamespaces }}
+# Namespaces ANLEGEN - noetig fuer config.instanceNamespaceCreate.
+#
+# Das weitreichendste Recht im Chart und deshalb ausdruecklich einzuschalten:
+# wer es gibt, erlaubt dem Broker, ueberall im Cluster einen Namespace zu
+# erzeugen.
+#
+# `delete` steht bewusst NICHT dabei: der Broker raeumt keinen Namespace ab,
+# weil OSB nur das Loeschen einer Instanz kennt und nicht das Ende eines
+# Mandanten (ADR 0010).
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: [create]
+{{- end }}
 {{- if .Values.rbac.projectedBindingSecrets }}
 # Schreibrechte auf Secrets in JEDEM Namespace - noetig fuer Definitionen mit
 # spec.bind.projectSecret (Phase 6.4), die das Binding zusaetzlich als

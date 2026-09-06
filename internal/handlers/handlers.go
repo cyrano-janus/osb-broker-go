@@ -25,7 +25,15 @@ type Handlers struct {
 	authChain *auth.Chain
 	// metrics is the Prometheus collector set; nil = metrics disabled.
 	metrics *Metrics
+	// namespaces bestimmt, wohin die Ressourcen einer Instanz gehoeren
+	// (ADR 0010). nil = die Vorgabe, ein fester Namespace.
+	namespaces *NamespaceStrategy
 }
+
+// SetNamespaceStrategy setzt die Namespace-Strategie. nil bleibt zulaessig und
+// bedeutet die Vorgabe - so bleibt ein Handlers, den ein Test direkt baut,
+// benutzbar, ohne dass er die Strategie kennen muss.
+func (h *Handlers) SetNamespaceStrategy(s *NamespaceStrategy) { h.namespaces = s }
 
 // SetEngine wires the Generic Engine (Phase 2). nil disables
 // definition-based services.

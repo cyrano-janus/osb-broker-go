@@ -68,6 +68,8 @@ type OSBContext struct {
 	Platform            string `json:"platform,omitempty"`
 	OrganizationGUID    string `json:"organizationGuid,omitempty"`
 	SpaceGUID           string `json:"spaceGuid,omitempty"`
+	OrganizationName    string `json:"organizationName,omitempty"`
+	SpaceName           string `json:"spaceName,omitempty"`
 	ClusterID           string `json:"clusterId,omitempty"`
 	Namespace           string `json:"namespace,omitempty"`
 	OriginatingIdentity string `json:"originatingIdentity,omitempty"`

@@ -361,8 +361,10 @@ func TestChart_JederConfigWertErreichtDenBroker(t *testing.T) {
 	require.NoError(t, err, out)
 
 	for key, env := range map[string]string{
-		"storeBackend": "STORE_BACKEND",
-		"logRequests":  "LOG_REQUESTS",
+		"storeBackend":              "STORE_BACKEND",
+		"logRequests":               "LOG_REQUESTS",
+		"instanceNamespaceTemplate": "INSTANCE_NAMESPACE_TEMPLATE",
+		"instanceNamespaceCreate":   "INSTANCE_NAMESPACE_CREATE",
 	} {
 		assert.Contains(t, out, "name: "+env,
 			"config.%s wird von keinem Template gerendert - der Schalter waere wirkungslos", key)

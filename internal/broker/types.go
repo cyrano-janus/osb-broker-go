@@ -5,9 +5,15 @@ const APIVersion = "2.17"
 
 // Context represents platform context
 type Context struct {
-	Platform            string `json:"platform"`
-	OrganizationGUID    string `json:"organization_guid,omitempty"`
-	SpaceGUID           string `json:"space_guid,omitempty"`
+	Platform         string `json:"platform"`
+	OrganizationGUID string `json:"organization_guid,omitempty"`
+	SpaceGUID        string `json:"space_guid,omitempty"`
+	// OrganizationName und SpaceName schickt Cloud Foundry in jedem Provision
+	// mit (context_hash in lib/services/service_brokers/v2/client.rb). Sie
+	// taugen als Namensbestandteil eines Namespace - anders als die GUIDs sind
+	// sie lesbar, dafuer freier Text und nicht zwingend ein gueltiges Label.
+	OrganizationName    string `json:"organization_name,omitempty"`
+	SpaceName           string `json:"space_name,omitempty"`
 	ClusterID           string `json:"cluster_id,omitempty"`
 	Namespace           string `json:"namespace,omitempty"`
 	OriginatingIdentity string `json:"originating_identity,omitempty"`

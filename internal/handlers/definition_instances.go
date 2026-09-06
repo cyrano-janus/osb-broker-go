@@ -49,23 +49,17 @@ func ValidatePlanParamsForService(h *Handlers, serviceID, planID string, paramet
 // defaultNamespace gilt, wo die Plattform keinen Space kennt.
 const defaultNamespace = "default"
 
-// targetNamespace bildet den Cloud-Foundry-Space auf einen Namespace ab.
+// ensureNamespace stellt sicher, dass der Ziel-Namespace da ist.
 //
-// **Die Abbildung ist eine Annahme, und sie traegt nicht ueberall.** Sie geht
-// auf, wenn die Plattform je Space einen Kubernetes-Namespace mit der
-// Space-GUID als Namen anlegt. Cloud Foundry tut das NICHT - dort sind Spaces
-// Datensaetze im Cloud Controller, keine Kubernetes-Objekte, und jedes
-// Provision endet mit `namespaces "<space-guid>" not found`.
-//
-// Welche Abbildung stattdessen gilt, ist eine offene Entscheidung mit Folgen
-// fuer die Mandantentrennung: ein fester Namespace, einer je Org oder Space vom
-// Broker selbst angelegt, oder eine vom Betreiber gepflegte Zuordnung. Die
-// Langfassung steht in docs/de/known-issues.md.
-func targetNamespace(ctx broker.Context) string {
-	if ctx.SpaceGUID != "" {
-		return ctx.SpaceGUID
+// Ohne Erlaubnis legt der Broker nichts an - er meldet, was fehlt. Das ist die
+// Zusage aus ADR 0010: was er anlegte, raeumte nie jemand wieder ab, weil OSB
+// nur das Loeschen einer INSTANZ kennt und nicht das Ende eines Mandanten.
+func (h *Handlers) ensureNamespace(ctx context.Context, name string) error {
+	if h.engine == nil || h.engine.Op == nil {
+		return nil // ohne Cluster-Zugang gibt es nichts zu pruefen
 	}
-	return defaultNamespace
+	erlaubt := h.namespaces != nil && h.namespaces.Create
+	return h.engine.Op.EnsureNamespace(ctx, name, erlaubt)
 }
 
 // instanceNamespace ermittelt, in welchem Namespace die Ressourcen einer

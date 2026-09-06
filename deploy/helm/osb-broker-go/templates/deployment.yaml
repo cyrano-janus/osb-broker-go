@@ -42,6 +42,10 @@ spec:
           value: {{ .Values.config.storeBackend | quote }}
         - name: LOG_REQUESTS
           value: {{ .Values.config.logRequests | quote }}
+        - name: INSTANCE_NAMESPACE_TEMPLATE
+          value: {{ .Values.config.instanceNamespaceTemplate | quote }}
+        - name: INSTANCE_NAMESPACE_CREATE
+          value: {{ .Values.config.instanceNamespaceCreate | quote }}
         {{- if eq .Values.config.storeBackend "crd" }}
         # Der CRD-Store legt seine Objekte in diesem Namespace an.
         - name: POD_NAMESPACE

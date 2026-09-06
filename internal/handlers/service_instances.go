@@ -93,7 +93,26 @@ func (h *Handlers) ProvisionServiceInstance(c *gin.Context) {
 	// veraltet, aber es gibt Plattformen, die space_guid ausschliesslich dort
 	// senden - wer nur `context` liest, bekommt von ihnen nie eine
 	// Space-GUID (FINDINGS #3).
-	namespace := targetNamespace(req.ResolvedContext())
+	//
+	// Wohin die Ressourcen gehoeren, sagt die Konfiguration und nicht eine
+	// Annahme ueber die Plattform (ADR 0010). Ein unbrauchbares Ergebnis wird
+	// hier abgelehnt - spaeter waere es ein Apply in einen Namespace, den
+	// niemand gemeint hat.
+	namespace, err := h.namespaces.Resolve(req.ResolvedContext())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "NamespaceUnresolvable", "description": err.Error()})
+		return
+	}
+	// Der Namespace muss existieren. Ohne diese Pruefung scheitert erst das
+	// Apply, und die Meldung des API-Servers nennt zwar den Namen, aber nicht
+	// den Grund - ein Betreiber sucht dann im Broker statt in seiner
+	// Konfiguration.
+	if err := h.ensureNamespace(c.Request.Context(), namespace); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "NamespaceUnavailable", "description": err.Error()})
+		return
+	}
 	if err := h.engine.Engine.ProvisionInstance(c.Request.Context(), req.ServiceID, instanceID, namespace, req.PlanID, req.Parameters); err != nil {
 		respondOSBError(c, err)
 		return

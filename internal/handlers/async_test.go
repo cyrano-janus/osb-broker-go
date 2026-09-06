@@ -118,7 +118,7 @@ func TestAsync_VerschwundenesObjektIstFehlgeschlagen(t *testing.T) {
 			"service_id": "def-svc-0001", "plan_id": "def-plan-free", "space_guid": spaceNS,
 		}).Code)
 
-	cr, err := crIn(t, oc, spaceNS, instanceID)
+	cr, err := crIn(t, oc, testNS, instanceID)
 	require.NoError(t, err)
 	require.NoError(t, oc.Client.Delete(context.Background(), cr))
 
@@ -133,7 +133,7 @@ func TestAsync_VerschwundenesObjektIstFehlgeschlagen(t *testing.T) {
 // es im Test nicht gibt.
 func setPhase(t *testing.T, oc *definition.OperatorClient, instanceID, phase string) {
 	t.Helper()
-	cr, err := crIn(t, oc, spaceNS, instanceID)
+	cr, err := crIn(t, oc, testNS, instanceID)
 	require.NoError(t, err)
 	require.NoError(t, unstructured.SetNestedField(cr.Object, phase, "status", "phase"))
 	require.NoError(t, oc.Client.Update(context.Background(), cr))

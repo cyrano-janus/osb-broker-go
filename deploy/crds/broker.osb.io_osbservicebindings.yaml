@@ -79,6 +79,8 @@ spec:
                     platform: {type: string}
                     organizationGuid: {type: string}
                     spaceGuid: {type: string}
+                    organizationName: {type: string}
+                    spaceName: {type: string}
                     clusterId: {type: string}
                     namespace: {type: string}
                     originatingIdentity: {type: string}

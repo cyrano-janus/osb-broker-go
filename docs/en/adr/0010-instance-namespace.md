@@ -2,7 +2,7 @@
 
 > [Deutsch](../../de/adr/0010-instance-namespace.md) · Leading version: German
 
-**Status:** proposed · **Affects:** `targetNamespace`, the chart, the rights
+**Status:** accepted · **Affects:** `targetNamespace`, the chart, the rights
 
 ## Context
 

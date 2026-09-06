@@ -23,6 +23,33 @@ Neustart.
 | `DEFINITIONS_DIR` | leer | Verzeichnis mit den ServiceDefinitions. Leer heißt: leerer Katalog, der Broker bietet nichts an. |
 | `METRICS_ENABLED` | an | **Nur der exakte Wert `0` schaltet ab.** Kein `ParseBool`: `false` lässt die Metriken an. |
 
+### Ziel-Namespace der Instanzen
+
+| Variable | Vorgabe | Wirkung |
+|---|---|---|
+| `INSTANCE_NAMESPACE_TEMPLATE` | `osb-instances` | Go-Template über den Provision-Kontext. Verfügbar: `.platform`, `.orgGUID`, `.orgName`, `.spaceGUID`, `.spaceName`. Ohne Platzhalter ein fester Name. |
+| `INSTANCE_NAMESPACE_CREATE` | `false` | Darf der Broker einen fehlenden Namespace anlegen? |
+
+**Warum das konfiguriert wird und nicht abgeleitet:** OSB kennt kein Kubernetes,
+und die Plattform legt keine Namespaces an — Cloud-Foundry-Spaces sind
+Datensätze im Cloud Controller. Wohin die Ressourcen gehören, weiß nur der
+Betreiber ([ADR 0010](../adr/0010-instance-namespace.md)).
+
+**Fehler fallen beim Start auf.** Ein unbekannter Feldname im Template
+(`{{ .spaceNam }}`) beendet den Start mit einer Meldung, die ihn nennt — nicht
+erst die erste Bestellung.
+
+**Ein unbrauchbares Ergebnis wird abgelehnt, nicht zurechtgebogen.** Ergibt das
+Template keinen gültigen RFC-1123-Namen, weil ein Space „Team Grün (Q3)" heißt,
+scheitert das Provision mit genau dieser Begründung. Ein stillschweigend
+verstümmelter Name führte zwei Mandanten in denselben Namespace.
+
+**`INSTANCE_NAMESPACE_CREATE=true` braucht `rbac.manageNamespaces` im Chart** —
+und es ist eine Einbahnstraße: der Broker **entfernt einen Namespace nie
+wieder**. OSB kennt das Löschen einer Instanz, nicht das Ende eines Mandanten.
+Wer die Namespaces ohnehin vorab anlegt, lässt beides aus; der Broker meldet
+dann beim Provision, welcher fehlt.
+
 ### Authentifizierung
 
 | Variable | Vorgabe | Wirkung |

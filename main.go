@@ -71,6 +71,16 @@ func main() {
 	h := handlers.New(b)
 	h.SetEngine(engineHolder)
 
+	// Wohin die Ressourcen einer Instanz gehoeren, sagt die Konfiguration und
+	// nicht eine Annahme ueber die Plattform (ADR 0010). Ein Tippfehler im
+	// Template faellt HIER auf - ein Broker, der damit startet und erst bei
+	// der ersten Bestellung scheitert, hat den Fehler nur verschoben.
+	nsStrategy, err := handlers.NewNamespaceStrategy(cfg.InstanceNamespaceTemplate, cfg.InstanceNamespaceCreate)
+	if err != nil {
+		log.Fatalf("Konfiguration: %v", err)
+	}
+	h.SetNamespaceStrategy(nsStrategy)
+
 	// Zugriffsprotokoll (LOG_REQUESTS). Standard an - ein Broker, der stumm
 	// laeuft, ist im Fehlerfall nicht nachvollziehbar.
 	h.SetLogRequests(cfg.LogRequests)

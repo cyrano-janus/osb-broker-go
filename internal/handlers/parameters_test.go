@@ -32,7 +32,7 @@ func TestProvision_BenutzerparameterErreichenDasCR(t *testing.T) {
 	})
 	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
 
-	cr, err := crIn(t, oc, spaceNS, instanceID)
+	cr, err := crIn(t, oc, testNS, instanceID)
 	require.NoError(t, err)
 	assert.Equal(t, "xl", crSize(t, cr),
 		"der Parameter muss den Planwert small ersetzen")
@@ -78,7 +78,7 @@ func TestUpdate_OhnePlanIDIstEinParameterUpdate(t *testing.T) {
 	})
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	cr, err := crIn(t, oc, spaceNS, instanceID)
+	cr, err := crIn(t, oc, testNS, instanceID)
 	require.NoError(t, err)
 	assert.Equal(t, "xl", crSize(t, cr))
 }

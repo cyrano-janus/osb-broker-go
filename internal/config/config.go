@@ -35,11 +35,19 @@ const (
 
 // Config is the fully resolved broker configuration.
 type Config struct {
-	Port           string
-	StoreBackend   string
-	PodNamespace   string
-	DefinitionsDir string
-	MetricsEnabled bool
+	Port         string
+	StoreBackend string
+	PodNamespace string
+	// InstanceNamespaceTemplate bestimmt, in welchen Namespace die Ressourcen
+	// einer Instanz gehoeren - ein Go-Template ueber den Provision-Kontext
+	// (ADR 0010). Leer = die Vorgabe, ein fester Namespace.
+	InstanceNamespaceTemplate string
+	// InstanceNamespaceCreate erlaubt dem Broker, einen fehlenden Namespace
+	// anzulegen. Vorgabe aus: er entfernt ihn nie wieder, weil OSB nur das
+	// Loeschen einer INSTANZ kennt und nicht das Ende eines Mandanten.
+	InstanceNamespaceCreate bool
+	DefinitionsDir          string
+	MetricsEnabled          bool
 	// LogRequests schaltet das Zugriffsprotokoll. Standardmaessig an.
 	LogRequests bool
 
@@ -113,10 +121,15 @@ func LoadFrom(get func(string) string) (*Config, error) {
 	l := &loader{get: get}
 
 	c := &Config{
-		Port:           l.str("PORT", "8080"),
-		StoreBackend:   l.str("STORE_BACKEND", BackendMemory),
-		PodNamespace:   l.str("POD_NAMESPACE", ""),
-		DefinitionsDir: l.str("DEFINITIONS_DIR", ""),
+		Port:         l.str("PORT", "8080"),
+		StoreBackend: l.str("STORE_BACKEND", BackendMemory),
+		PodNamespace: l.str("POD_NAMESPACE", ""),
+		// Wohin die Ressourcen einer Instanz gehoeren (ADR 0010). Leer =
+		// die Vorgabe; der Broker legt einen fehlenden Namespace nur an,
+		// wenn es ihm ausdruecklich erlaubt wird.
+		InstanceNamespaceTemplate: l.str("INSTANCE_NAMESPACE_TEMPLATE", ""),
+		InstanceNamespaceCreate:   l.boolean("INSTANCE_NAMESPACE_CREATE", false),
+		DefinitionsDir:            l.str("DEFINITIONS_DIR", ""),
 		// Legacy contract from Phase 4.3: metrics are on unless the value is
 		// exactly "0". Deliberately not ParseBool - "false" kept metrics on
 		// before this package existed and must keep doing so.

@@ -69,6 +69,36 @@ func newDefinitionRouter(t *testing.T) (*gin.Engine, *definition.OperatorClient)
 	return routerForYAML(t, testDefYAML)
 }
 
+// testNamespaceTemplate steuert, welchen Namespace die Testroute benutzt.
+//
+// "default" und nicht die Vorgabe aus ADR 0010: die allermeisten Tests hier
+// pruefen nicht, WOHIN eine Instanz geht, sondern was mit ihr passiert - sie
+// holen ihre Ressource aus "default". Die ausgelieferte Vorgabe deckt
+// TestNamespace_VorgabeGiltAuchImProvision ab, den Space-Fall setzt
+// namespace_test.go.
+var testNamespaceTemplate = "default"
+
+// testNS ist der Namespace, den die Testroute damit aufloest. Tests, die den
+// Namespace nicht zum Gegenstand haben, benutzen ihn statt einer festen
+// Zeichenkette - sonst verschiebt eine geaenderte Vorgabe wieder die halbe
+// Suite.
+const testNS = "default"
+
+func mustStrategy(t *testing.T, tmpl string, create bool) *NamespaceStrategy {
+	t.Helper()
+	s, err := NewNamespaceStrategy(tmpl, create)
+	require.NoError(t, err)
+	return s
+}
+
+// withNamespaceTemplate stellt das Template fuer die Dauer eines Tests um.
+func withNamespaceTemplate(t *testing.T, tmpl string) {
+	t.Helper()
+	vorher := testNamespaceTemplate
+	testNamespaceTemplate = tmpl
+	t.Cleanup(func() { testNamespaceTemplate = vorher })
+}
+
 // newNoPlanChangeRouter baut dieselbe Route aus einer Definition, die keinen
 // Planwechsel zusagt - die Gegenprobe zu testDefYAML.
 func newNoPlanChangeRouter(t *testing.T) (*gin.Engine, *definition.OperatorClient) {
@@ -94,6 +124,10 @@ func routerForYAML(t *testing.T, defYAML string) (*gin.Engine, *definition.Opera
 	b := broker.New(stateStore)
 	h := New(b)
 	h.SetEngine(&EngineHolder{Engine: engine, Op: oc})
+	// Die Vorgabe aus ADR 0010, mit Create: der Fake-Client kennt keinen
+	// vorab angelegten Namespace, und ein Test soll nicht daran scheitern,
+	// dass jemand vergessen hat, ihn hinzustellen.
+	h.SetNamespaceStrategy(mustStrategy(t, testNamespaceTemplate, true))
 
 	// Der zuletzt gebaute Broker, damit Tests den gespeicherten Datensatz
 	// pruefen koennen.

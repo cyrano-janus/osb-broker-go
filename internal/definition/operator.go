@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -421,4 +422,42 @@ func (o *OperatorClient) LabelCR(ctx context.Context, apiVersion, kind, namespac
 		obj.SetLabels(merged)
 		return o.Client.Update(ctx, obj)
 	})
+}
+
+// EnsureNamespace prueft, ob der Namespace da ist, und legt ihn nur an, wenn
+// es ausdruecklich erlaubt ist.
+//
+// Die Fehlermeldung nennt den Namen UND den Weg: ein Betreiber, der nur
+// "not found" liest, sucht den Fehler im Broker statt in seiner Konfiguration.
+func (oc *OperatorClient) EnsureNamespace(ctx context.Context, name string, create bool) error {
+	var ns corev1.Namespace
+	err := oc.Client.Get(ctx, types.NamespacedName{Name: name}, &ns)
+	if err == nil {
+		return nil
+	}
+	if apierrors.IsForbidden(err) {
+		// Kein Leserecht auf Namespaces. Das ist KEIN Beweis, dass der
+		// Namespace fehlt - also wird nicht abgelehnt, sondern durchgelassen.
+		// Fehlt er wirklich, scheitert gleich das Apply; die Meldung ist dann
+		// duerftiger, aber ein Broker, der wegen eines fehlenden Leserechts
+		// gar nichts mehr provisioniert, waere schlimmer.
+		return nil
+	}
+	if !apierrors.IsNotFound(err) {
+		return fmt.Errorf("cannot check namespace %q: %w", name, err)
+	}
+	if !create {
+		return fmt.Errorf(
+			"namespace %q does not exist. Create it, or point INSTANCE_NAMESPACE_TEMPLATE "+
+				"at one that exists, or allow the broker to create it with "+
+				"INSTANCE_NAMESPACE_CREATE=true (it never removes them again)", name)
+	}
+	ns = corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
+		Name:   name,
+		Labels: map[string]string{"app.kubernetes.io/managed-by": "osb-broker-go"},
+	}}
+	if err := oc.Client.Create(ctx, &ns); err != nil && !apierrors.IsAlreadyExists(err) {
+		return fmt.Errorf("cannot create namespace %q: %w", name, err)
+	}
+	return nil
 }

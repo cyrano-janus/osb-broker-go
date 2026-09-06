@@ -22,6 +22,33 @@ dangerous answer: the broker would run and lose all state on restart.
 | `DEFINITIONS_DIR` | empty | Directory holding the ServiceDefinitions. Empty means an empty catalogue; the broker offers nothing. |
 | `METRICS_ENABLED` | on | **Only the exact value `0` turns it off.** No `ParseBool`: `false` leaves metrics on. |
 
+### Target namespace of the instances
+
+| Variable | Default | Effect |
+|---|---|---|
+| `INSTANCE_NAMESPACE_TEMPLATE` | `osb-instances` | Go template over the provision context. Available: `.platform`, `.orgGUID`, `.orgName`, `.spaceGUID`, `.spaceName`. Without placeholders, a fixed name. |
+| `INSTANCE_NAMESPACE_CREATE` | `false` | May the broker create a missing namespace? |
+
+**Why this is configured rather than derived:** OSB knows nothing about
+Kubernetes, and the platform creates no namespaces — Cloud Foundry spaces are
+records in the Cloud Controller. Only the operator knows where the resources
+belong ([ADR 0010](../adr/0010-instance-namespace.md)).
+
+**Errors surface at start-up.** An unknown field name in the template
+(`{{ .spaceNam }}`) ends the start with a message naming it — not the first
+order.
+
+**An unusable result is refused, not bent into shape.** If the template yields
+no valid RFC 1123 name, because a space is called "Team Grün (Q3)", the
+provision fails saying exactly that. A silently mangled name would put two
+tenants into the same namespace.
+
+**`INSTANCE_NAMESPACE_CREATE=true` needs `rbac.manageNamespaces` in the chart** —
+and it is a one-way street: the broker **never removes a namespace again**. OSB
+knows the deletion of an instance, not the end of a tenant. Whoever creates the
+namespaces up front leaves both off; the broker then reports on provision which
+one is missing.
+
 ### Authentication
 
 | Variable | Default | Effect |
