@@ -194,14 +194,11 @@ what the running broker really offers.
 |---|---|---|
 | Trust anchor | unchecked, `skip_cert_verify: true` | the platform really validates the broker's certificate |
 
-**The target namespace is an exclusion criterion**, and it is the only open
-question of that kind. The broker derives the namespace of the operator
-resources from the space GUID; on a platform that creates no namespace per
-space, it never exists. That is not carelessness but a decision up for
-acceptance as [ADR 0010](adr/0010-instance-namespace.md): the operator
-configures the mapping, the default is a fixed namespace, and the broker creates
-none unless allowed to. None of it is built. The long form is in
-[known-issues.md](known-issues.md).
+**The target namespace comes from configuration**
+([ADR 0010](adr/0010-instance-namespace.md)): the operator supplies a template
+over the provision context, the default is a fixed namespace, and the broker
+creates none unless allowed to. The broker therefore carries no assumption about
+what the platform creates in Kubernetes.
 
 All remaining points are functional gaps and diligence on the definitions. The
 protocol layer itself carries no exclusion criterion: it consists of one engine
