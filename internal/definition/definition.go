@@ -114,6 +114,67 @@ type Plan struct {
 	// ihn verlaesst. Beides haengt am grossen Plan - also sagt der kleine zu
 	// und der grosse nicht.
 	PlanUpdateable *bool `json:"planUpdateable,omitempty"`
+	// MaintenanceInfo nennt den Stand, auf dem dieser Plan steht.
+	//
+	// Es ist der Weg, einen neuen Stand ANZUBIETEN statt ihn zu verhaengen:
+	// die Version steht im Katalog und an der Instanz, Cloud Foundry zeigt die
+	// Abweichung als `upgrade available`, und `cf upgrade-service` loest den
+	// Vorgang aus. Der Besitzer der Instanz entscheidet, wann sie nachzieht -
+	// und er sieht ueberhaupt, dass etwas ansteht.
+	//
+	// Wer die Version hebt, sagt damit: das Gerenderte dieses Plans hat sich
+	// geaendert. Wer sie nicht hebt, obwohl es das hat, laesst bestehende
+	// Instanzen auf einem Stand stehen, den niemand mehr nennt.
+	MaintenanceInfo *MaintenanceInfo `json:"maintenanceInfo,omitempty"`
+}
+
+// MaintenanceInfo ist der Stand eines Plans, wie OSB 2.17 ihn fuehrt.
+type MaintenanceInfo struct {
+	// Version MUSS Semantic Versioning 2.0 sein - so steht es in der
+	// Spezifikation, und Cloud Foundry vergleicht darauf.
+	Version string `json:"version"`
+	// Description sagt dem Besitzer einer Instanz, was ein Upgrade mit ihr
+	// macht. Sie steht in `cf services` neben dem Hinweis.
+	Description string `json:"description,omitempty"`
+}
+
+// semverPattern ist der offizielle Ausdruck von semver.org fuer Semantic
+// Versioning 2.0. Er steht hier statt einer Abhaengigkeit, weil genau eine
+// Frage zu beantworten ist.
+var semverPattern = regexp.MustCompile(
+	`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)` +
+		`(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?` +
+		`(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$`)
+
+// validate prueft die Wartungsinformation beim LADEN.
+//
+// Eine unbrauchbare Version faellt sonst erst auf, wenn eine Plattform den
+// Katalog liest - und dann ist sie schon ausgerollt.
+func (m *MaintenanceInfo) validate() error {
+	if m == nil {
+		return nil
+	}
+	if m.Version == "" {
+		return fmt.Errorf("maintenanceInfo.version is required - a block without a version states nothing")
+	}
+	if !semverPattern.MatchString(m.Version) {
+		return fmt.Errorf("maintenanceInfo.version %q is not a semantic version 2.0", m.Version)
+	}
+	return nil
+}
+
+// MaintenanceVersion liefert den Stand des Plans planID, oder "" wenn der Plan
+// keinen nennt oder es ihn nicht gibt.
+func MaintenanceVersion(sd *ServiceDefinition, planID string) string {
+	if sd == nil {
+		return ""
+	}
+	for _, p := range sd.Spec.Offering.Plans {
+		if p.ID == planID && p.MaintenanceInfo != nil {
+			return p.MaintenanceInfo.Version
+		}
+	}
+	return ""
 }
 
 // PlanChangeAllowed meldet, ob eine Instanz den Plan planID verlassen darf.
@@ -309,6 +370,9 @@ func (sd *ServiceDefinition) Validate() error {
 		// Grenzen beim Laden pruefen, nicht beim ersten Provision: eine
 		// Grenze, die nie greifen kann, taeuscht Schutz vor.
 		if err := p.validateLimits(); err != nil {
+			return fmt.Errorf("spec.offering.plans[%d]: %w", i, err)
+		}
+		if err := p.MaintenanceInfo.validate(); err != nil {
 			return fmt.Errorf("spec.offering.plans[%d]: %w", i, err)
 		}
 	}

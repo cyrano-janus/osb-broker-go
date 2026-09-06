@@ -193,13 +193,14 @@ func (r *Reconciler) Once(ctx context.Context) Result {
 // damit die Engine nicht am Zustandsspeicher haengt.
 func recordOf(i *broker.Instance) *definition.InstanceRecord {
 	return &definition.InstanceRecord{
-		ID:             i.ID,
-		ServiceID:      i.ServiceID,
-		PlanID:         i.PlanID,
-		Namespace:      i.Namespace,
-		Parameters:     i.Parameters,
-		AppliedObjects: i.AppliedObjects,
-		AppliedRefs:    refsOf(i.AppliedRefs),
+		ID:                     i.ID,
+		ServiceID:              i.ServiceID,
+		PlanID:                 i.PlanID,
+		Namespace:              i.Namespace,
+		Parameters:             i.Parameters,
+		AppliedObjects:         i.AppliedObjects,
+		AppliedRefs:            refsOf(i.AppliedRefs),
+		MaintenanceInfoVersion: i.MaintenanceInfoVersion,
 	}
 }
 

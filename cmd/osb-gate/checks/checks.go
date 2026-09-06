@@ -277,6 +277,14 @@ type catalogPlan struct {
 	// zu, der Plan zieht zurueck, oder er sagt nichts und das Angebot
 	// entscheidet. Die Zusage gilt fuer den Plan, den eine Instanz VERLAESST.
 	PlanUpdateable *bool `json:"plan_updateable"`
+	// MaintenanceInfo als Zeiger: "kein Stand genannt" und "Stand genannt"
+	// sind verschiedene Aussagen, und nur die zweite ist pruefbar.
+	MaintenanceInfo *maintenanceInfo `json:"maintenance_info"`
+}
+
+type maintenanceInfo struct {
+	Version     string `json:"version"`
+	Description string `json:"description"`
 }
 
 // planChangePromised loest die Zusage fuer den Plan auf, auf dem eine Instanz
@@ -374,6 +382,7 @@ func RunReport(cfg Config) *Report {
 			runFetchAudit(c, inst, serviceID, planID, svc)
 			runUpdateAudit(c, inst, serviceID, planID)
 			c.checkCatalogPromises(inst, serviceID, planID, svcs)
+			c.checkMaintenanceInfo(inst, serviceID, planID, svcs)
 			cleanupAudit(c, inst, serviceID, planID)
 		}
 	}

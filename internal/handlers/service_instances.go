@@ -44,6 +44,9 @@ func (h *Handlers) ProvisionServiceInstance(c *gin.Context) {
 		respondOSBError(c, err)
 		return
 	}
+	if !maintenanceInfoMatches(c, sd, req.PlanID, req.MaintenanceInfo) {
+		return
+	}
 
 	// OSB 2.17: ein wiederholtes Provision derselben Instanz mit denselben
 	// Parametern ist 200, nicht 201 - die Plattform wiederholt Requests, und
@@ -224,6 +227,14 @@ func (h *Handlers) UpdateServiceInstance(c *gin.Context) {
 		return
 	}
 
+	// Geprueft wird gegen den Plan, auf dem die Instanz NACH dem Update steht:
+	// er liefert das Manifest, das gleich gerendert wird. Bei `cf
+	// upgrade-service` ist das derselbe Plan, bei einem Planwechsel mit
+	// maintenance_info der neue - in beiden Faellen der, dessen Stand gilt.
+	if !maintenanceInfoMatches(c, sd, planID, req.MaintenanceInfo) {
+		return
+	}
+
 	// Der PATCH-Request traegt keinen Space; der Namespace kommt aus dem
 	// gespeicherten Datensatz (FINDINGS #16).
 	namespace := namespaceOf(inst)
@@ -236,6 +247,43 @@ func (h *Handlers) UpdateServiceInstance(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, broker.UpdateInstanceResponse{Operation: "update"})
+}
+
+// maintenanceInfoMatches prueft den Stand, den die Plattform mitschickt, gegen
+// den des Plans - und antwortet selbst, wenn er nicht passt.
+//
+// Der Fall ist banal und die Folge nicht: die Plattform haelt eine Kopie des
+// Katalogs. Ist sie veraltet, bestellt sie einen Stand, den es nicht mehr gibt.
+// OSB 2.17 verlangt dafuer 422 MaintenanceInfoConflict, damit die Plattform
+// ihren Katalog erneuert, statt eine Instanz auf gut Glueck anzulegen oder zu
+// aendern.
+//
+// Ohne Angabe wird nicht geprueft: die Plattform MUSS das Feld nicht senden,
+// und ein Broker, der es verlangt, schloesse jede aus, die es nicht kennt.
+func maintenanceInfoMatches(c *gin.Context, sd *definition.ServiceDefinition,
+	planID string, requested *broker.MaintenanceInfo) bool {
+
+	if requested == nil {
+		return true
+	}
+	current := definition.MaintenanceVersion(sd, planID)
+	if requested.Version == current {
+		return true
+	}
+	// Auch der Fall "der Plan nennt gar keinen Stand" gehoert hierher: die
+	// Plattform glaubt an eine Version, die dieser Broker nicht fuehrt.
+	beschreibung := fmt.Sprintf(
+		"maintenance_info.version %q does not match the plan's %q", requested.Version, current)
+	if current == "" {
+		beschreibung = fmt.Sprintf(
+			"maintenance_info.version %q was requested, but plan %q declares no maintenance information",
+			requested.Version, planID)
+	}
+	c.JSON(http.StatusUnprocessableEntity, gin.H{
+		"error":       "MaintenanceInfoConflict",
+		"description": beschreibung,
+	})
+	return false
 }
 
 // GetServiceInstance handles GET /v2/service_instances/:instance_id

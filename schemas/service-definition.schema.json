@@ -209,6 +209,24 @@
                 "type": "boolean",
                 "description": "Promise that an instance may LEAVE this plan, overriding the offering's planUpdateable. What counts is the source plan, not the target: OSB 2.17 permits the change \"on a Service Instance using the given Service Plan\", and Cloud Foundry reads it there, falling back to the offering. That is where the direction lives - a change is rarely safe both ways: CNPG grows storage and cannot shrink it, and a plan with retainOnDeprovision loses its deletion guard the moment an instance leaves it. Absent means the offering decides; absent in both means not promised."
               },
+              "maintenanceInfo": {
+                "type": "object",
+                "required": ["version"],
+                "additionalProperties": false,
+                "description": "The state this plan is on. It is how a new state is OFFERED rather than imposed: the version sits in the catalogue and on the instance, Cloud Foundry shows the difference as 'upgrade available', and cf upgrade-service triggers the change - the instance's owner decides when to follow, and sees that anything is pending at all. Raising the version says the plan's rendered output changed.",
+                "properties": {
+                  "version": {
+                    "type": "string",
+                    "description": "MUST be a semantic version 2.0 - the OSB spec requires it and Cloud Foundry compares on it. Checked at load time.",
+                    "examples": ["1.4.0"]
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "What an upgrade does to the instance. Shown next to the hint in cf services.",
+                    "examples": ["PostgreSQL 18.6, rolling restart"]
+                  }
+                }
+              },
               "retainOnDeprovision": {
                 "type": "boolean",
                 "default": false,

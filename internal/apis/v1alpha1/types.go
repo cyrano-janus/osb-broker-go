@@ -108,6 +108,11 @@ type OSBServiceInstanceSpec struct {
 	// wieder abraeumt (Multi-Doc, Phase 4.6).
 	AppliedObjects []string           `json:"appliedObjects,omitempty"`
 	AppliedRefs    []AppliedObjectRef `json:"appliedRefs,omitempty"`
+	// MaintenanceInfoVersion ist der Stand, unter dem die Instanz zuletzt
+	// gerendert wurde. Er muss persistiert werden, weil die Differenz zum
+	// Stand des Plans die einzige Quelle fuer "es liegt ein Upgrade bereit"
+	// ist - und ein Neustart des Brokers sie sonst vergaesse.
+	MaintenanceInfoVersion string `json:"maintenanceInfoVersion,omitempty"`
 }
 
 // OSBServiceInstance ist der persistierte Zustand einer Service-Instanz.

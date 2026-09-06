@@ -58,12 +58,18 @@ func (b *Broker) GetInstance(ctx context.Context, instanceID string) (*GetInstan
 	if err != nil {
 		return nil, fmt.Errorf("%w: instance %q", ErrNotFound, instanceID)
 	}
-	return &GetInstanceResponse{
+	resp := &GetInstanceResponse{
 		ServiceID:    instance.ServiceID,
 		PlanID:       instance.PlanID,
 		DashboardURL: instance.DashboardURL,
 		Parameters:   instance.Parameters,
-	}, nil
+	}
+	// Nur wenn die Instanz einen Stand traegt. Ein leeres Objekt hiesse "es
+	// gibt einen", und die Plattform verglichene ihn.
+	if instance.MaintenanceInfoVersion != "" {
+		resp.MaintenanceInfo = &MaintenanceInfo{Version: instance.MaintenanceInfoVersion}
+	}
+	return resp, nil
 }
 
 // StoredBinding liefert den gespeicherten Binding-Datensatz.

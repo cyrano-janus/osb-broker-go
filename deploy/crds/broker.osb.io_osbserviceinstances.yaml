@@ -80,6 +80,13 @@ spec:
                   type: object
                   description: Frei geformte Benutzerparameter aus dem Provision-Request.
                   x-kubernetes-preserve-unknown-fields: true
+                maintenanceInfoVersion:
+                  type: string
+                  description: >-
+                    Der Stand, unter dem die Instanz zuletzt gerendert wurde -
+                    nicht der, den ihr Plan heute nennt. Die Differenz ist die
+                    einzige Quelle fuer "es liegt ein Upgrade bereit"; ein
+                    Neustart des Brokers vergaesse sie sonst.
                 appliedObjects:
                   type: array
                   description: >-

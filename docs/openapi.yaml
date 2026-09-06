@@ -682,6 +682,18 @@ components:
           type: object
           additionalProperties: true
           description: OSB plan schemas derived from allowedParameters and parameterLimits.
+        maintenance_info:
+          type: object
+          required: [version]
+          description: The state this plan is on. Absent when the plan names none - an
+            empty block would mean "there is a state" and the platform would compare it.
+          properties:
+            version:
+              type: string
+              description: Semantic version 2.0, checked at load time.
+            description:
+              type: string
+              description: What an upgrade does to the instance.
         plan_updateable:
           type: boolean
           description: Whether an instance may LEAVE this plan. Always present, resolved
@@ -691,6 +703,15 @@ components:
     GetInstanceResponse:
       type: object
       properties:
+        maintenance_info:
+          type: object
+          description: The state THIS INSTANCE was last rendered under, not the one its
+            plan names today. The platform holds the two against each other; echoing the
+            catalogue would conceal every pending upgrade. Absent when the instance
+            carries no state.
+          properties:
+            version:
+              type: string
         service_id:
           type: string
         plan_id:

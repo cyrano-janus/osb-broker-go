@@ -51,7 +51,10 @@ Damit das Bild nicht schief wird — diese Punkte sind konform und geprüft:
   `plan_updateable` stammt aus der Definition und ist ohne Angabe `false`; es
   steht am Angebot und je Plan, wobei der Plan vorgeht und über den Plan
   entschieden wird, den eine Instanz *verlässt*. Ein nicht zugesagter Wechsel
-  ist `422`. `instances_retrievable` und
+  ist `422`. `maintenance_info` je Plan nennt den Stand, auf dem er steht -
+  fehlt es, nennt der Plan keinen. Ein Request mit einem anderen Stand als dem
+  des Plans ist `422 MaintenanceInfoConflict`, im Provision wie im Update; `GET`
+  auf eine Instanz meldet den Stand, unter dem sie zuletzt gerendert wurde. `instances_retrievable` und
   `bindings_retrievable` sind fest zugesagt, weil die GET-Endpunkte für jede
   Definition registriert sind. `maximum_polling_duration` je Plan ist die
   Bereitschaftsfrist des Brokers, damit die Plattform nicht länger fragt, als

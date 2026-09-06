@@ -86,6 +86,7 @@ schlimmer als einer, der gar nicht startet.
 | `parameterLimits` | nein | **Kontingente.** Grenzen für die Werte, die er setzen darf. Siehe unten. |
 | `retainOnDeprovision` | nein | Lässt die Ressourcen des Operators beim Löschen stehen. Siehe unten. |
 | `planUpdateable` | nein | Sagt zu, dass eine Instanz **diesen** Plan verlassen darf, und überschreibt die Angabe des Angebots. Ohne Angabe entscheidet das Angebot. Siehe unten. |
+| `maintenanceInfo` | nein | **Der Stand des Plans.** `version` (Semver 2.0, Pflicht) und `description`. Siehe unten. |
 | `free` | nein | Vorgabe **true**. Steht immer im Katalog, auch als `false` — fehlt das Feld dort, gilt laut OSB `true`, und ein kostenpflichtiger Plan bewürbe sich als kostenlos. |
 | `metadata` | nein | **Der Anzeigeblock des Plans.** Siehe unten. |
 
@@ -247,6 +248,54 @@ erst der Plan der Instanz, dann als Rückfall das Angebot. Ein nicht zugesagter
 Wechsel scheitert dort mit `ServicePlanNotUpdateable`, bevor der Broker
 überhaupt gefragt wird; der `422` des Brokers gilt den Plattformen, die nicht
 vorprüfen.
+
+### `maintenanceInfo` — einen neuen Stand anbieten, statt ihn zu verhängen
+
+Ein Betreiber ändert einen Plan: neues Basisimage, andere Vorgabegröße. Was
+passiert mit den Instanzen, die es schon gibt?
+
+**Ohne `maintenanceInfo` gibt es darauf keine gute Antwort.** Entweder bleiben
+sie stehen, oder etwas zieht sie ungefragt nach — und ihr Besitzer erfährt in
+beiden Fällen nichts. Cloud Foundry hat für genau diesen Vorgang einen Weg im
+Protokoll, und er dreht die Richtung um: der Broker **bietet an**, der Besitzer
+**entscheidet**.
+
+```yaml
+plans:
+  - id: …
+    name: small
+    maintenanceInfo:
+      version: "1.4.0"                       # Semver 2.0, Pflicht
+      description: "PostgreSQL 18.6, rollierender Neustart"
+```
+
+So läuft es ab:
+
+1. Der Katalog nennt den Stand des Plans, die Instanz trägt den, unter dem sie
+   zuletzt gerendert wurde.
+2. Weichen beide ab, zeigt `cf services` die Instanz mit `upgrade available`,
+   und `description` sagt dem Besitzer, was ihn erwartet.
+3. `cf upgrade-service` schickt ein `PATCH` mit dem neuen Stand. Der Broker
+   rendert neu und schreibt den Stand an die Instanz.
+
+**Der Stand wird beim Laden geprüft.** OSB verlangt Semantic Versioning 2.0 —
+eine Version, die das nicht ist, vergleicht die Plattform als Zeichenkette, und
+Zeichenketten haben keine Ordnung. Eine unbrauchbare Angabe fällt deshalb beim
+Start auf, nicht beim ersten Katalogabruf.
+
+**Ein Stand, der nicht zum Plan passt, ist `422 MaintenanceInfoConflict`** — im
+Provision wie im Update. Der Fall ist banal und die Folge nicht: die Plattform
+hält eine Kopie des Katalogs, und eine veraltete Kopie bestellt einen Stand, den
+es nicht mehr gibt. Ohne die Ablehnung entstünde eine Instanz, deren Stand
+niemand kennt. Schickt die Plattform gar keinen Stand mit, wird nicht geprüft —
+sie *muss* das Feld nicht kennen.
+
+**Gespeichert wird, was angewendet wurde, nicht was der Request behauptet.**
+Genau die Differenz zwischen Instanz und Plan ist die Aussage; eine Instanz, die
+den Stand ihres Plans zurückspiegelt, meldete nie ein Upgrade.
+
+Ohne Angabe fehlt das Feld im Katalog ganz. Ein leerer Block wäre eine Aussage —
+er hieße „es gibt einen Stand", und die Plattform verglichene ihn.
 
 **Im Katalog sagt das Angebot nur zu, was jeder Plan hält.** Eine Plattform, die
 den Vorrang des Plans nicht umsetzt, liest die Zusage am Angebot — stünde dort

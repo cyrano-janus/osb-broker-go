@@ -70,6 +70,13 @@ type mutation struct {
 	planChangeRejected     int  // Code, mit dem ein Planwechsel abgelehnt wird (0 = vollziehen)
 	metadataNotObject      bool // metadata ist eine Zeichenkette statt eines Blocks
 	pollingNegative        bool // maximum_polling_duration ist negativ
+
+	// Wartungsstand. Ohne maintenanceVersion nennt kein Plan einen - dann ist
+	// die Pruefung uebersprungen, nicht bestanden.
+	maintenanceVersion       string // Stand, den die Plaene im Katalog nennen
+	maintenanceBadSemver     bool   // der genannte Stand ist kein Semver 2.0
+	maintenanceNotOnInstance bool   // GET auf die Instanz meldet keinen Stand
+	maintenanceStaleAccepted bool   // ein veralteter Stand wird ausgefuehrt
 }
 
 const (
@@ -180,6 +187,9 @@ func (b *mockBroker) catalog(w http.ResponseWriter) {
 			"id": id, "name": name, "description": desc,
 			"free": true, "maximum_polling_duration": polling,
 		}
+		if v := b.maintenanceVersionOrEmpty(); v != "" {
+			p["maintenance_info"] = map[string]interface{}{"version": v}
+		}
 		// Der Plan zieht die Zusage des Angebots zurueck - und zwar der, auf
 		// dem die Instanz des Audits steht. Genau diesen Fall uebersah ein
 		// Gate, das nur das Angebot liest.
@@ -259,8 +269,11 @@ func (b *mockBroker) instance(w http.ResponseWriter, r *http.Request, id string)
 			return
 		}
 		var req struct {
-			PlanID     string                 `json:"plan_id"`
-			Parameters map[string]interface{} `json:"parameters"`
+			PlanID          string                 `json:"plan_id"`
+			Parameters      map[string]interface{} `json:"parameters"`
+			MaintenanceInfo *struct {
+				Version string `json:"version"`
+			} `json:"maintenance_info"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		if req.PlanID == "" && b.mut.updateNeedsPlanID {
@@ -279,6 +292,12 @@ func (b *mockBroker) instance(w http.ResponseWriter, r *http.Request, id string)
 				return
 			}
 			b.instances[id] = [2]string{inst[0], req.PlanID}
+		}
+		if v := b.maintenanceVersionOrEmpty(); v != "" && req.MaintenanceInfo != nil &&
+			req.MaintenanceInfo.Version != v && !b.mut.maintenanceStaleAccepted {
+			writeErr(w, 422, "MaintenanceInfoConflict",
+				"maintenance_info.version does not match the plan's")
+			return
 		}
 		if len(req.Parameters) > 0 && !b.mut.updateDropsParams {
 			if b.params[id] == nil {
@@ -301,6 +320,9 @@ func (b *mockBroker) instance(w http.ResponseWriter, r *http.Request, id string)
 			p = map[string]interface{}{}
 		}
 		body := map[string]interface{}{"service_id": inst[0], "plan_id": inst[1], "parameters": p}
+		if v := b.maintenanceVersionOrEmpty(); v != "" && !b.mut.maintenanceNotOnInstance {
+			body["maintenance_info"] = map[string]interface{}{"version": v}
+		}
 		writeJSON(w, orDefault(b.mut.getInstanceStatus, 200), body)
 
 	case "DELETE":
@@ -500,6 +522,12 @@ func TestMock_JedeMutationWirdBemerkt(t *testing.T) {
 			mutation{planUpdateableFalse: true, planChangeRejected: 400}, "catalog-promises"},
 		{"der Quellplan zieht die Zusage zurueck, der Wechsel wird trotzdem vollzogen",
 			mutation{planLevelWithdrawn: true}, "catalog-promises"},
+		{"der Stand im Katalog ist kein Semver",
+			mutation{maintenanceVersion: "1.2.0", maintenanceBadSemver: true}, "maintenance-info"},
+		{"der Plan nennt einen Stand, die Instanz meldet keinen",
+			mutation{maintenanceVersion: "1.2.0", maintenanceNotOnInstance: true}, "maintenance-info"},
+		{"ein veralteter Stand wird ausgefuehrt statt abgelehnt",
+			mutation{maintenanceVersion: "1.2.0", maintenanceStaleAccepted: true}, "maintenance-info"},
 		{"metadata ist eine Zeichenkette", mutation{metadataNotObject: true}, "catalog-display"},
 		{"maximum_polling_duration ist negativ", mutation{pollingNegative: true}, "catalog-display"},
 	} {
@@ -567,4 +595,35 @@ func TestMock_ZurueckgezogeneZusageAmPlanIstKeinFehler(t *testing.T) {
 	assert.Zero(t, r.Failures(),
 		"der Plan zieht zurueck und der Broker haelt sich daran, es schlug an: %s", failedNames(r))
 	assert.Contains(t, r.Passed, "catalog-promises")
+}
+
+// maintenanceVersionOrEmpty liefert den Stand, den die Plaene nennen sollen.
+// Die Semver-Mutation verfaelscht ihn erst an der Ausgabe, damit die
+// Vergleichslogik des Mocks davon unberuehrt bleibt.
+func (b *mockBroker) maintenanceVersionOrEmpty() string {
+	if b.mut.maintenanceVersion == "" {
+		return ""
+	}
+	if b.mut.maintenanceBadSemver {
+		return "Version " + b.mut.maintenanceVersion
+	}
+	return b.mut.maintenanceVersion
+}
+
+// Die Gegenprobe: ein Broker, der den Stand fuehrt, ihn an der Instanz meldet
+// und einen veralteten mit 422 ablehnt, ist richtig.
+func TestMock_GefuehrterWartungsstandIstKeinFehler(t *testing.T) {
+	r := withBroker(t, mutation{maintenanceVersion: "1.2.0"})
+
+	assert.Zero(t, r.Failures(), "korrekt gefuehrt, es schlug an: %s", failedNames(r))
+	assert.Contains(t, r.Passed, "maintenance-info")
+}
+
+// Und die zweite: OSB verlangt maintenance_info nicht. Ein Broker ohne Stand
+// ist konform - die Pruefung muss uebersprungen werden, nicht bestehen.
+func TestMock_OhneWartungsstandWirdUebersprungen(t *testing.T) {
+	r := withBroker(t, mutation{})
+
+	assert.Contains(t, r.Skipped, "maintenance-info",
+		"ohne Zusage darf die Pruefung nicht stillschweigend bestehen")
 }

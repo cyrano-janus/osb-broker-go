@@ -50,7 +50,11 @@ tested:
   present, `false` included — omit it and OSB reads `true`. `plan_updateable`
   comes from the definition and is `false` when absent; it sits on the offering
   and on each plan, the plan taking precedence, and it is decided on the plan an
-  instance *leaves*. An unpromised change is `422`. `instances_retrievable` and `bindings_retrievable` are promised
+  instance *leaves*. An unpromised change is `422`.
+  `maintenance_info` per plan names the state it is on; absent, the plan names
+  none. A request carrying a state other than the plan's is `422
+  MaintenanceInfoConflict`, on provision as on update, and `GET` on an instance
+  reports the state it was last rendered under. `instances_retrievable` and `bindings_retrievable` are promised
   outright, because the GET endpoints are registered for every definition.
   `maximum_polling_duration` per plan is the broker's readiness deadline, so the
   platform does not poll longer than the broker answers.

@@ -51,6 +51,14 @@ type InstanceRecord struct {
 	// geaenderten Schluessel traegt und GET /v2/service_instances den
 	// vollstaendigen Satz zurueckgeben soll.
 	Parameters map[string]interface{} `json:"parameters,omitempty"`
+	// MaintenanceInfoVersion ist der Stand, unter dem die Instanz zuletzt
+	// gerendert wurde - nicht der, den ihr Plan heute nennt.
+	//
+	// Genau die Differenz ist die Aussage: weichen beide ab, liegt ein neuer
+	// Stand vor, und Cloud Foundry meldet ihn dem Besitzer als
+	// `upgrade available`. Gespeichert wird, was angewendet wurde, nicht was
+	// die Plattform im Request behauptet hat.
+	MaintenanceInfoVersion string `json:"maintenanceInfoVersion,omitempty"`
 }
 
 // SetInstanceRegistry attaches an instance registry (broker state store
@@ -138,6 +146,10 @@ type CatalogPlan struct {
 	// die Zusage ist plan-genau, und eine Plattform soll sie nicht aus zwei
 	// Stellen zusammenrechnen muessen.
 	PlanUpdateable bool `json:"plan_updateable"`
+	// MaintenanceInfo fehlt ganz, wenn der Plan keinen Stand nennt. Ein leerer
+	// Block waere eine Aussage - er hiesse "es gibt einen Stand", und eine
+	// Plattform verglichene ihn gegen den der Instanz.
+	MaintenanceInfo *MaintenanceInfo `json:"maintenance_info,omitempty"`
 }
 
 // Catalog converts all definitions into catalog entries.
@@ -182,7 +194,8 @@ func (e *Engine) Catalog() []CatalogEntry {
 					Create: SchemaHolder{Parameters: schema},
 					Update: SchemaHolder{Parameters: schema},
 				}},
-				PlanUpdateable: PlanChangeAllowed(d, p.ID),
+				PlanUpdateable:  PlanChangeAllowed(d, p.ID),
+				MaintenanceInfo: p.MaintenanceInfo,
 			})
 		}
 		out = append(out, entry)
@@ -244,10 +257,11 @@ func (e *Engine) provisionDefinition(ctx context.Context, sd *ServiceDefinition,
 			// Ohne diesen Eintrag muesste jeder spaetere Aufruf den Namespace
 			// aus den angelegten Objekten erschliessen - was nur solange
 			// traegt, wie ueberhaupt welche angelegt wurden (FINDINGS #7/#16).
-			Namespace:      namespace,
-			AppliedObjects: refNames(applied),
-			AppliedRefs:    applied,
-			Parameters:     parameters,
+			Namespace:              namespace,
+			AppliedObjects:         refNames(applied),
+			AppliedRefs:            applied,
+			Parameters:             parameters,
+			MaintenanceInfoVersion: MaintenanceVersion(sd, planID),
 		}); err != nil {
 			// Objekte ohne Datensatz sind derselbe Fall: das Deprovision
 			// antwortet 410 und findet nie etwas zum Loeschen.

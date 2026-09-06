@@ -26,6 +26,12 @@ type ProvisionRequest struct {
 	// context liest, bekommt von dort nie eine Space-GUID (FINDINGS #3).
 	OrganizationGUID string `json:"organization_guid,omitempty"`
 	SpaceGUID        string `json:"space_guid,omitempty"`
+
+	// MaintenanceInfo ist der Stand, den die Plattform aus ihrer Katalogkopie
+	// gelesen hat. Weicht er vom Stand des Plans ab, ist ihre Kopie veraltet -
+	// OSB verlangt dann 422 MaintenanceInfoConflict statt eines Provision auf
+	// gut Glueck.
+	MaintenanceInfo *MaintenanceInfo `json:"maintenance_info,omitempty"`
 }
 
 // ResolvedContext fuehrt beide erlaubten Quellen zusammen.
@@ -105,6 +111,9 @@ type UpdateInstanceRequest struct {
 	Context        Context                `json:"context"`
 	Parameters     map[string]interface{} `json:"parameters,omitempty"`
 	PreviousValues PreviousValues         `json:"previous_values"`
+	// MaintenanceInfo traegt den Stand, auf den die Instanz gehoben werden
+	// soll - das ist der Weg, den `cf upgrade-service` geht.
+	MaintenanceInfo *MaintenanceInfo `json:"maintenance_info,omitempty"`
 }
 
 // PreviousValues represents previous state values
@@ -131,6 +140,15 @@ type GetInstanceResponse struct {
 	PlanID       string                 `json:"plan_id"`
 	DashboardURL string                 `json:"dashboard_url,omitempty"`
 	Parameters   map[string]interface{} `json:"parameters,omitempty"`
+	// MaintenanceInfo nennt den Stand DIESER Instanz, nicht den ihres Plans.
+	// Die Plattform haelt beide gegeneinander; gleich zu antworten, was der
+	// Katalog sagt, verschwiege jedes ausstehende Upgrade.
+	MaintenanceInfo *MaintenanceInfo `json:"maintenance_info,omitempty"`
+}
+
+// MaintenanceInfo ist der Stand, wie OSB ihn ueber die Leitung fuehrt.
+type MaintenanceInfo struct {
+	Version string `json:"version"`
 }
 
 // GetBindingResponse represents a get binding response
@@ -182,6 +200,10 @@ type Instance struct {
 	// AppliedRefs carries the same objects including their apiVersion/kind,
 	// which a multi-doc template may vary per document.
 	AppliedRefs []AppliedObjectRef
+	// MaintenanceInfoVersion ist der Stand, unter dem die Instanz zuletzt
+	// gerendert wurde. Weicht er vom Stand ihres Plans ab, liegt ein Upgrade
+	// bereit - das ist die Aussage, die `cf services` anzeigt.
+	MaintenanceInfoVersion string
 }
 
 // AppliedObjectRef identifies one K8s object created for an instance.

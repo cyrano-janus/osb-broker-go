@@ -79,16 +79,23 @@ Zielplattform näher wäre als Korifi. Einordnung in
    [ADR 0008](adr/0008-depth-over-breadth.md) geht die Arbeit dorthin und nicht
    in weitere Katalogeinträge.
 
-   **Upgrades laufen, aber am Anwender vorbei.** `RECONCILE_INTERVAL` gleicht
-   bestehende Instanzen gegen die geladenen Definitionen ab; er löscht nie und
-   legt nie an. Was fehlt, ist die Zustimmung: Cloud Foundry hat für genau
-   diesen Vorgang einen Weg im Protokoll — `maintenance_info` im Katalog und an
-   der Instanz, die Spalte `upgrade available` in `cf services`,
-   `cf upgrade-service`. Der Broker kennt das Feld nicht. Der Besitzer einer
-   Instanz sieht deshalb weder, dass ein neuer Stand vorliegt, noch entscheidet
-   er, wann sie ihn bekommt — sie ändert sich, während niemand gefragt hat.
-   Dazu verlangt OSB bei einem Katalogversatz ein `422 MaintenanceInfoConflict`,
-   das der Broker nicht kennt.
+   **Upgrades gibt es zweimal, und einer der beiden Wege muss weg.**
+   `maintenanceInfo` je Plan ist gebaut: der Katalog nennt den Stand, die
+   Instanz merkt sich den angewendeten, `cf services` zeigt die Differenz als
+   `upgrade available`, `cf upgrade-service` löst aus, und ein veralteter Stand
+   ist `422 MaintenanceInfoConflict`. Damit **bietet** der Broker an, statt zu
+   verhängen.
+
+   Daneben läuft weiterhin `RECONCILE_INTERVAL` — eine Schleife, die bestehende
+   Instanzen ohne Frage nachzieht. Das ist der Zustand, den der Trennstrich
+   ausschließt: was auch dann passiert, wenn niemand fragt, ist Arbeit des
+   Operators, nicht des Brokers. Die Schleife wird durch den Protokollweg
+   ersetzt; bis dahin sind beide Wege da.
+
+   **Keine ausgelieferte Definition nennt einen Stand.** Ohne `maintenanceInfo`
+   im Plan gibt es nichts zu vergleichen, und `cf services` zeigt nie ein
+   Upgrade an. Ein Stand ist eine Zusage über das Gerenderte — sie gehört an
+   eine Definition, deren Übergänge belegt sind.
 
    **Der Planwechsel ist möglich und wird nicht zugesagt.** Die Zusage steht je
    Plan und gilt dem Plan, den eine Instanz *verlässt* — darin liegt die

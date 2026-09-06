@@ -88,6 +88,7 @@ does not come up at all.
 | `parameterLimits` | no | **Quotas.** Bounds for the values they may set. See below. |
 | `retainOnDeprovision` | no | Leaves the operator's resources standing on delete. See below. |
 | `planUpdateable` | no | Promises that an instance may leave **this** plan, overriding the offering. Absent means the offering decides. See below. |
+| `maintenanceInfo` | no | **The plan's state.** `version` (semver 2.0, required) and `description`. See below. |
 | `free` | no | Defaults to **true**. Always present in the catalogue, `false` included — omit it there and OSB reads `true`, so a paid plan would advertise itself as free. |
 | `metadata` | no | **The plan's display block.** See below. |
 
@@ -242,6 +243,54 @@ Instance using the given Service Plan" — and how Cloud Foundry reads it: the
 instance's plan first, the offering as the fallback. An unpromised change fails
 there with `ServicePlanNotUpdateable` before the broker is asked; the broker's
 `422` is for platforms that do not pre-check.
+
+### `maintenanceInfo` — offering a new state instead of imposing it
+
+An operator changes a plan: new base image, different default size. What happens
+to the instances that already exist?
+
+**Without `maintenanceInfo` there is no good answer.** Either they stay behind,
+or something drags them along unasked — and either way their owner learns
+nothing. Cloud Foundry has a protocol path for exactly this, and it reverses the
+direction: the broker **offers**, the owner **decides**.
+
+```yaml
+plans:
+  - id: …
+    name: small
+    maintenanceInfo:
+      version: "1.4.0"                       # semver 2.0, required
+      description: "PostgreSQL 18.6, rolling restart"
+```
+
+How it runs:
+
+1. The catalogue names the plan's state; the instance carries the one it was
+   last rendered under.
+2. When they differ, `cf services` marks the instance `upgrade available`, and
+   `description` tells the owner what to expect.
+3. `cf upgrade-service` sends a `PATCH` with the new state. The broker
+   re-renders and writes the state onto the instance.
+
+**The state is checked at load time.** OSB requires semantic versioning 2.0 — a
+version that is not one gets compared as a string, and strings have no ordering.
+An unusable value therefore surfaces at start-up, not on the first catalogue
+fetch.
+
+**A state that does not match the plan is `422 MaintenanceInfoConflict`** — on
+provision as on update. The case is mundane and the consequence is not: the
+platform holds a copy of the catalogue, and a stale copy orders a state that no
+longer exists. Without the refusal an instance would come into being whose state
+nobody knows. If the platform sends no state at all, nothing is checked — it
+does not *have* to know the field.
+
+**What is stored is what was applied, not what the request claimed.** The
+difference between instance and plan is the whole statement; an instance that
+mirrors its plan's state back would never report an upgrade.
+
+Absent, the field is left out of the catalogue entirely. An empty block would be
+a statement — it would mean "there is a state", and the platform would compare
+it.
 
 **In the catalogue the offering promises only what every plan holds.** A
 platform that does not implement the plan-level override reads the offering —

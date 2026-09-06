@@ -445,12 +445,13 @@ func instanceToSpec(i *Instance) (osbv1.OSBServiceInstanceSpec, error) {
 	}
 	spec := osbv1.OSBServiceInstanceSpec{
 		ID: i.ID, ServiceID: i.ServiceID, PlanID: i.PlanID,
-		Context:        toAPIContext(i.Context),
-		Namespace:      i.Namespace,
-		DashboardURL:   i.DashboardURL,
-		Ready:          i.Ready,
-		Parameters:     params,
-		AppliedObjects: deepCopyStrings(i.AppliedObjects),
+		Context:                toAPIContext(i.Context),
+		Namespace:              i.Namespace,
+		DashboardURL:           i.DashboardURL,
+		Ready:                  i.Ready,
+		Parameters:             params,
+		AppliedObjects:         deepCopyStrings(i.AppliedObjects),
+		MaintenanceInfoVersion: i.MaintenanceInfoVersion,
 	}
 	if i.AppliedRefs != nil {
 		spec.AppliedRefs = make([]osbv1.AppliedObjectRef, len(i.AppliedRefs))
@@ -469,12 +470,13 @@ func specToInstance(spec *osbv1.OSBServiceInstanceSpec) (*Instance, error) {
 	}
 	out := &Instance{
 		ID: spec.ID, ServiceID: spec.ServiceID, PlanID: spec.PlanID,
-		Context:        fromAPIContext(spec.Context),
-		Namespace:      spec.Namespace,
-		Parameters:     params,
-		DashboardURL:   spec.DashboardURL,
-		Ready:          spec.Ready,
-		AppliedObjects: deepCopyStrings(spec.AppliedObjects),
+		Context:                fromAPIContext(spec.Context),
+		Namespace:              spec.Namespace,
+		Parameters:             params,
+		DashboardURL:           spec.DashboardURL,
+		Ready:                  spec.Ready,
+		AppliedObjects:         deepCopyStrings(spec.AppliedObjects),
+		MaintenanceInfoVersion: spec.MaintenanceInfoVersion,
 	}
 	if spec.AppliedRefs != nil {
 		out.AppliedRefs = make([]AppliedObjectRef, len(spec.AppliedRefs))

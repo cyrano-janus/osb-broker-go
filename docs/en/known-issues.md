@@ -79,15 +79,23 @@ closer to the target platform than Korifi. Classification in
    [ADR 0008](adr/0008-depth-over-breadth.md) the effort goes there rather than
    into further catalogue entries.
 
-   **Upgrades run, but past the user.** `RECONCILE_INTERVAL` reconciles existing
-   instances against the loaded definitions; it never deletes and never creates.
-   What is missing is consent: Cloud Foundry has a protocol path for exactly
-   this — `maintenance_info` in the catalogue and on the instance, the
-   `upgrade available` column in `cf services`, `cf upgrade-service`. The broker
-   does not know the field. An instance's owner therefore neither sees that a
-   new state exists nor decides when to take it — the instance changes while
-   nobody asked. OSB also expects a `422 MaintenanceInfoConflict` on a catalogue
-   mismatch, which the broker does not know either.
+   **There are two upgrade paths, and one of them has to go.**
+   `maintenanceInfo` per plan is built: the catalogue names the state, the
+   instance remembers the one applied, `cf services` shows the difference as
+   `upgrade available`, `cf upgrade-service` triggers it, and a stale state is
+   `422 MaintenanceInfoConflict`. The broker therefore **offers** rather than
+   imposes.
+
+   Alongside it `RECONCILE_INTERVAL` still runs — a loop that drags existing
+   instances along without being asked. That is the state the dividing line
+   rules out: what happens when nobody asks is the operator's work, not the
+   broker's. The loop is to be replaced by the protocol path; until then both
+   exist.
+
+   **No shipped definition names a state.** Without `maintenanceInfo` on a plan
+   there is nothing to compare, and `cf services` never shows an upgrade. A state
+   is a promise about the rendered output — it belongs on a definition whose
+   transitions are proven.
 
    **The plan change is possible and is not promised.** The promise sits on each
    plan and applies to the plan an instance *leaves* — that is where the needed

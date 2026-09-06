@@ -86,6 +86,10 @@ func (e *Engine) updateDefinition(ctx context.Context, sd *ServiceDefinition, in
 	if e.reg != nil && haveRec {
 		rec.PlanID = planID
 		rec.Parameters = merged
+		// Der Stand wandert mit: nach einem Update steht die Instanz auf dem,
+		// den ihr (neuer) Plan nennt. Sonst meldete die Plattform weiter ein
+		// Upgrade, das gerade stattgefunden hat.
+		rec.MaintenanceInfoVersion = MaintenanceVersion(sd, planID)
 		if applied != nil {
 			rec.AppliedObjects = refNames(applied)
 			rec.AppliedRefs = applied
