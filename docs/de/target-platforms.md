@@ -198,7 +198,6 @@ direkter `GET /v2/catalog` sagt, was der laufende Broker wirklich ausstellt.
 |---|---|---|
 | **Ziel-Namespace aus der Space-GUID** | der Namespace wird von Hand angelegt | **Ausschlusskriterium** — es gibt keine Namespaces je Space, jedes Provision scheitert |
 | Vertrauensanker | ungeprüft, `skip_cert_verify: true` | die Plattform prüft das Zertifikat des Brokers wirklich |
-| `seaweedfs-s3`: Readiness-Pfad nur gegen das CRD-Schema geprüft | der Operator ist nicht installiert | ein danebenliegender Pfad kostet ein Plattform-Zeitlimit je Instanz |
 
 **Der Ziel-Namespace ist ein Ausschlusskriterium**, und er ist die einzige
 offene Frage dieser Art. Der Broker leitet den Namespace der

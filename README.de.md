@@ -147,13 +147,14 @@ zur Laufzeit unter `/openapi.yaml` und
 | Datei | Operator | Zustand |
 |---|---|---|
 | `cnpg-postgresql.yaml` | CloudNativePG | Ende zu Ende verifiziert |
+| `cnpg-pgvector.yaml` | CloudNativePG | Ende zu Ende verifiziert, bis in die Datenbank |
 | `rabbitmq-cluster.yaml` | RabbitMQ Cluster Operator | Ende zu Ende verifiziert |
-| `seaweedfs-s3.yaml` | SeaweedFS | Readiness nur gegen das CRD-Schema geprüft |
 
-**Vier weitere liegen unter `definitions/unsupported/` und werden nicht
+**Fünf weitere liegen unter `definitions/unsupported/` und werden nicht
 geladen** — Redis und Redpanda, weil ihre Lizenz die Bereitstellung als managed
 Service untersagt, MinIO, weil es AGPLv3 und seit Ende 2025 unmaintained ist,
-Valkey, weil sein Operator kein Credentials-Secret anlegt. Die Begründung je
+Valkey und SeaweedFS, weil ihr Operator kein Credentials-Secret anlegt und ein
+Bind damit einen Handgriff des Betreibers bräuchte. Die Begründung je
 Fall steht in
 [definitions/unsupported/README.md](definitions/unsupported/README.md); was
 einen Operator brauchbar macht, in

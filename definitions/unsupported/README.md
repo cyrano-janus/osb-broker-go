@@ -5,14 +5,21 @@ Unterverzeichnisse. Die Dateien bleiben, weil sie Arbeit und einen Befund
 tragen — ausgeliefert werden sie nicht, weil sie nachweislich nicht
 funktionieren würden.
 
-**Der Katalog führt damit noch drei Angebote.** Das ist wenig, aber jedes davon
-ist rechtssicher bestellbar. Ein Eintrag, den ein Betreiber nicht anbieten darf,
-ist schlechter als keiner.
+**Der Katalog führt damit drei Angebote:** `cnpg-postgresql`, `cnpg-pgvector`
+und `rabbitmq-cluster`. Das ist wenig, aber jedes davon ist rechtssicher
+bestellbar und Ende zu Ende belegt. Ein Eintrag, den ein Betreiber nicht
+anbieten darf oder der beim ersten Bind stehenbleibt, ist schlechter als keiner.
 
-Zwei Lücken bleiben bewusst offen: ein **In-Memory-Cache** — die CNCF führt kein
-Cache-Projekt, und die beiden naheliegenden Kandidaten scheitern unten —, und
-**Streaming**, seit Redpanda weg ist. Für Streaming gäbe es mit Strimzi
+**Drei Lücken bleiben bewusst offen:** ein **In-Memory-Cache** — die CNCF führt
+kein Cache-Projekt, und die beiden naheliegenden Kandidaten scheitern unten —,
+**Streaming**, und **Objektspeicher**. Für Streaming gäbe es mit Strimzi
 (Apache 2.0, CNCF Incubating) einen sauberen Ersatz; er steht auf der Roadmap.
+
+**Das Muster, das hier dreimal auftritt:** der Operator erzeugt kein
+Credentials-Secret. Valkey, SeaweedFS und MinIO scheitern alle daran, und es ist
+das dritte der drei Kriterien für einen neuen Dienst. Es ist auch das am
+leichtesten zu übersehende: eine Definition mit einer Konvention wie „der
+Betreiber legt vorher ein Secret an" sieht vollständig aus und ist es nicht.
 
 ## `redis-standalone.yaml`
 
@@ -94,6 +101,32 @@ CRD-Schema geprüft. Schreibt sein Operator kein `Ready`, hat `readiness.from:`
 einen benannten Nutzer, und
 [ADR 0008](../../docs/de/adr/0008-depth-over-breadth.md) trägt sie. Bis dahin
 ist sie eine Lösung ohne Aufgabe.
+
+## `seaweedfs-s3.yaml`
+
+**Der Operator legt kein Credentials-Secret an.** Das S3-Gateway liest seine
+Identitäten aus einem `configSecret` (`seaweedfs_s3_config.json`), und der
+`seaweedfs-operator` erzeugt es nicht. Die Definition trug deshalb die
+Konvention „ein Platform-Admin legt vor dem ersten Bind ein Secret unter
+`<name>-seaweed` an" — das ist kein Broker, das ist ein Ticket. Damit scheitert
+sie am **dritten Kriterium**, genau wie [Valkey](#valkey-clusteryaml).
+
+**Das stand die ganze Zeit in der Datei.** Es fiel nicht auf, weil die Debatte
+um sie sich um etwas anderes drehte: ihr Readiness-Pfad
+`status.conditions.#(type=="Ready").status` ist nur gegen das CRD-Schema
+geprüft, nie gegen einen laufenden Operator. Das ist der schwächere Einwand —
+ein Schema sagt, was möglich ist, nicht was der Operator tut, aber es ließe sich
+durch einen Lauf klären. Die fehlende Secret-Erzeugung nicht.
+
+**Was der Rückweg bräuchte:** einen Operator, der die S3-Zugangsdaten je Instanz
+selbst erzeugt und im Status nennt — der Duck-Type der CNCF Service Binding
+Specification, den der RabbitMQ-Operator vormacht. Die CRDs `S3Credentials` und
+`S3Identities` gibt es; ob sich daraus je Instanz ein Secret ableiten lässt, das
+der Broker nur noch durchreicht, ist die Frage, an der ein Wiedereinstieg hängt.
+
+**Der Katalog hat damit keinen Objektspeicher mehr.** Das ist eine Feststellung,
+keine offene Aufgabe: Rook (CNCF Graduated) funktioniert, bringt aber einen
+Ceph-Cluster mit, und der ist für diesen Bedarf schwer.
 
 ## `valkey-cluster.yaml`
 

@@ -194,7 +194,6 @@ what the running broker really offers.
 |---|---|---|
 | **Target namespace from the space GUID** | the namespace is created by hand | **exclusion criterion** — there are no namespaces per space, every provision fails |
 | Trust anchor | unchecked, `skip_cert_verify: true` | the platform really validates the broker's certificate |
-| `seaweedfs-s3`: readiness path checked against the CRD schema only | the operator is not installed | a path that misses costs one platform timeout per instance |
 
 **The target namespace is an exclusion criterion**, and it is the only open
 question of that kind. The broker derives the namespace of the operator

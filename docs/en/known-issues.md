@@ -44,11 +44,11 @@ Apart from that, no open point blocks a target platform.
 
 ## Definitions and deployment
 
-**One readiness path is checked against its operator's CRD, not against a
-running operator.** `seaweedfs-s3` carries `status.conditions` according to the
-schema — whether the operator really writes `Ready` there is something a schema
-does not say. Computed against a real CR are `cnpg-postgresql` and
-`rabbitmq-cluster`, whose operators run in the development platform.
+**Every shipped readiness path is computed against a running operator.**
+`cnpg-postgresql`, `cnpg-pgvector` and `rabbitmq-cluster` run in the development
+platform. The only path checked against a CRD schema alone belonged to
+`seaweedfs-s3` — and that definition sits under `definitions/unsupported/`, for
+a different and heavier reason: its operator creates no credentials secret.
 
 When a path misses, `last_operation` reports the reason together with the
 condition names the operator actually publishes, and the run ends in `failed`
@@ -125,5 +125,8 @@ trust anchor. Classification in [target-platforms.md](target-platforms.md).
    instance its deletion guard. No shipped definition sets `planUpdateable`,
    because no transition is proven against a running operator; until then the
    change stays `422`.
-3. **`seaweedfs-s3` against a running operator** — the CRD schema says
-   `status.conditions` exists, not that the operator writes `Ready` there.
+3. **An object store in the catalogue** — there is none. `seaweedfs-s3` is
+   sorted out because its operator creates no credentials secret; Rook (CNCF
+   Graduated) could, but brings a Ceph cluster with it. An open gap, not an open
+   task: it closes when a concrete demand calls for it
+   ([ADR 0008](adr/0008-depth-over-breadth.md)).

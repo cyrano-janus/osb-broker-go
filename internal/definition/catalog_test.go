@@ -16,12 +16,13 @@ func TestAllShippedDefinitionsParse(t *testing.T) {
 	for _, d := range defs {
 		names[d.Metadata.Name] = true
 	}
-	// Vier Definitionen liegen bewusst unter definitions/unsupported/ und
+	// Fuenf Definitionen liegen bewusst unter definitions/unsupported/ und
 	// werden nicht geladen: Redis und Redpanda, weil ihre Lizenz die
 	// Bereitstellung als managed Service untersagt, MinIO, weil das Projekt
-	// aufgegeben ist, und Valkey, weil sein Operator kein Credentials-Secret
-	// anlegt. Die Begruendung je Fall steht in deren README.
-	for _, want := range []string{"cnpg-postgresql", "rabbitmq-cluster", "seaweedfs-s3"} {
+	// aufgegeben ist, und Valkey wie SeaweedFS, weil ihr Operator kein
+	// Credentials-Secret anlegt - ein Bind braucht dort einen Handgriff des
+	// Betreibers. Die Begruendung je Fall steht in deren README.
+	for _, want := range []string{"cnpg-postgresql", "cnpg-pgvector", "rabbitmq-cluster"} {
 		if !names[want] {
 			t.Errorf("missing shipped definition %q (got %v)", want, names)
 		}

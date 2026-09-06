@@ -44,11 +44,12 @@ Sonst blockiert kein offener Punkt eine Zielplattform.
 
 ## Definitionen und Deployment
 
-**Ein Readiness-Pfad ist gegen das CRD seines Operators geprüft, nicht gegen
-einen laufenden Operator.** `seaweedfs-s3` führt laut Schema
-`status.conditions` — ob der Operator dort wirklich `Ready` schreibt, sagt ein
-Schema nicht. Gegen einen echten CR gerechnet sind `cnpg-postgresql` und
-`rabbitmq-cluster`; deren Operatoren laufen in der Entwicklungsplattform.
+**Jeder ausgelieferte Readiness-Pfad ist gegen einen laufenden Operator
+gerechnet.** `cnpg-postgresql`, `cnpg-pgvector` und `rabbitmq-cluster` laufen in
+der Entwicklungsplattform. Der einzige Pfad, der nur gegen ein CRD-Schema
+geprüft war, gehörte zu `seaweedfs-s3` — und die Definition liegt unter
+`definitions/unsupported/`, aus einem anderen und schwereren Grund: ihr Operator
+erzeugt kein Credentials-Secret.
 
 Trifft ein Pfad daneben, meldet `last_operation` den Grund samt der
 Condition-Namen, die der Operator tatsächlich führt, und der Vorgang endet nach
@@ -125,6 +126,8 @@ Vertrauensanker. Einordnung in [target-platforms.md](target-platforms.md).
    nicht schrumpfen lässt, und die Instanz verlöre ihren Löschschutz. Keine
    ausgelieferte Definition setzt `planUpdateable`, weil kein Übergang gegen
    einen laufenden Operator belegt ist; bis dahin bleibt der Wechsel `422`.
-3. **`seaweedfs-s3` gegen einen laufenden Operator** — das CRD-Schema sagt,
-   dass es `status.conditions` gibt, nicht dass der Operator dort `Ready`
-   schreibt.
+3. **Ein Objektspeicher im Katalog** — es gibt keinen. `seaweedfs-s3` ist
+   aussortiert, weil sein Operator kein Credentials-Secret erzeugt; Rook (CNCF
+   Graduated) könnte es, bringt aber einen Ceph-Cluster mit. Eine offene Lücke,
+   keine offene Aufgabe: sie schließt sich, wenn eine konkrete Last sie
+   verlangt ([ADR 0008](adr/0008-depth-over-breadth.md)).

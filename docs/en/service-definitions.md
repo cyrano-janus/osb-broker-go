@@ -33,12 +33,13 @@ proven end to end:
 |---|---|
 | `cnpg-postgresql` | verified end to end, the reference for the simple shape |
 | `rabbitmq-cluster` | verified end to end, the reference for the complete shape |
-| `seaweedfs-s3` | readiness checked against the CRD schema only |
+| `cnpg-pgvector` | verified end to end, the reference for multi-document manifests |
 
-Four more sit under `definitions/unsupported/` and are not loaded. Two fail on
+Five more sit under `definitions/unsupported/` and are not loaded. Two fail on
 their licence (Redis and Redpanda forbid offering the software as a managed
-service), one on an abandoned project (MinIO), and one because its operator
-creates no credential secret (Valkey).
+service), one on an abandoned project (MinIO), and **two because their operator
+creates no credential secret** (Valkey, SeaweedFS). The third criterion trips
+more candidates than licensing does.
 
 That is not a weakness of the definitions but of the operators and their
 licences — and the reason the question about the three-part pattern comes

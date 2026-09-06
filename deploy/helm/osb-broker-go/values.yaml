@@ -136,9 +136,6 @@ rbac:
     - group: rabbitmq.com
       resources: [rabbitmqclusters]
       verbs: [create, get, list, update, delete]
-    - group: seaweed.seaweedfs.com
-      resources: [seaweeds]
-      verbs: [create, get, list, update, delete]
   # Erlaubt dem Broker, Namespaces ANZULEGEN. Nur nötig, wenn
   # config.instanceNamespaceCreate an ist. Lesen darf er sie immer — sonst
   # könnte er nicht sagen, welcher Namespace fehlt.

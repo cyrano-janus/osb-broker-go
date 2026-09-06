@@ -30,13 +30,14 @@ Definition nicht. Ausgeliefert werden drei, davon zwei durchgängig erprobt:
 | Definition | Zustand |
 |---|---|
 | `cnpg-postgresql` | Ende zu Ende verifiziert, die Referenz für die einfache Form |
+| `cnpg-pgvector` | Ende zu Ende verifiziert, die Referenz für mehrteilige Manifeste |
 | `rabbitmq-cluster` | Ende zu Ende verifiziert, die Referenz für die vollständige Form |
-| `seaweedfs-s3` | Readiness nur gegen das CRD-Schema geprüft |
 
-Vier weitere liegen unter `definitions/unsupported/` und werden nicht geladen.
+Fünf weitere liegen unter `definitions/unsupported/` und werden nicht geladen.
 Zwei davon scheitern an der Lizenz (Redis, Redpanda untersagen die
 Bereitstellung als managed Service), eines am aufgegebenen Projekt (MinIO), und
-eines daran, dass sein Operator kein Credential-Secret erzeugt (Valkey).
+**zwei daran, dass ihr Operator kein Credential-Secret erzeugt** (Valkey,
+SeaweedFS). Das dritte Kriterium fällt damit häufiger als die Lizenz.
 
 Das ist keine Schwäche der Definitionen, sondern der Operatoren und ihrer
 Lizenzen — und der Grund, warum die Frage nach dem Dreier-Muster **vor** dem

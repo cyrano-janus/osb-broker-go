@@ -147,12 +147,13 @@ served at runtime under `/openapi.yaml` and
 |---|---|---|
 | `cnpg-postgresql.yaml` | CloudNativePG | verified end to end |
 | `rabbitmq-cluster.yaml` | RabbitMQ cluster operator | verified end to end |
-| `seaweedfs-s3.yaml` | SeaweedFS | readiness checked against the CRD schema only |
+| `cnpg-pgvector.yaml` | CloudNativePG | verified end to end, down into the database |
 
-**Four more sit under `definitions/unsupported/` and are not loaded** — Redis
+**Five more sit under `definitions/unsupported/` and are not loaded** — Redis
 and Redpanda because their licence forbids offering the software as a managed
-service, MinIO because it is AGPLv3 and unmaintained since late 2025, Valkey
-because its operator creates no credentials secret. The reasoning per case is
+service, MinIO because it is AGPLv3 and unmaintained since late 2025, Valkey and
+SeaweedFS because their operator creates no credentials secret and a bind would
+therefore need a manual step by the operator. The reasoning per case is
 in [definitions/unsupported/README.md](definitions/unsupported/README.md); what
 makes an operator usable at all is in
 [service-definitions.md](docs/en/service-definitions.md).
