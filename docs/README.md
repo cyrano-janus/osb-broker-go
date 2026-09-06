@@ -36,6 +36,7 @@ Gliederung und keine toten Verweise haben.
 | 0008 | Depth over breadth · Tiefe statt Breite | accepted | [en](en/adr/0008-depth-over-breadth.md) | [de](de/adr/0008-depth-over-breadth.md) |
 | 0009 | Deployment model · Betriebsmodell | accepted | [en](en/adr/0009-deployment-model.md) | [de](de/adr/0009-deployment-model.md) |
 | 0010 | Instance namespace from configuration · Ziel-Namespace aus der Konfiguration | accepted | [en](en/adr/0010-instance-namespace.md) | [de](de/adr/0010-instance-namespace.md) |
+| 0011 | Broker owns the protocol, operator the lifecycle · Broker besitzt das Protokoll, Operator den Lebenszyklus | accepted | [en](en/adr/0011-broker-operator-boundary.md) | [de](de/adr/0011-broker-operator-boundary.md) |
 
 ## Machine-readable sources · Maschinenlesbare Quellen
 

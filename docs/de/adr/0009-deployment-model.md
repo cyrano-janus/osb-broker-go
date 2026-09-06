@@ -124,9 +124,11 @@ gehalten.
 Dies entscheidet **nicht**, welcher Vertrauensanker gilt — das kann nur der
 Betreiber des Zielsystems, und die drei Wege oben stehen gleichberechtigt.
 
-Dies entscheidet **nicht**, dass der Reconcile-Loop gebaut wird, sondern nur,
-dass er ein Controller sein *darf*. Was er tun soll, steht in
-[known-issues.md](../known-issues.md).
+Dies entscheidet **nicht**, was der Broker tun soll, sondern nur, dass er ein
+Controller sein *darf*. Was er tun soll, entscheidet
+[ADR 0011](0011-broker-operator-boundary.md): der Broker besitzt das Protokoll,
+der Operator den Lebenszyklus — er *darf* ein Controller sein und *soll* keiner
+sein.
 
 Unberührt bleibt [ADR 0004](0004-tls-and-mtls-no-oauth2.md): TLS und mTLS
 bleiben die Authentisierung gegenüber der Plattform, OAuth2 bleibt draußen.

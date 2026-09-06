@@ -116,8 +116,10 @@ the chart and is held against the shipped CRDs by a test.
 This does **not** decide which trust anchor applies — only the target system
 operator can, and the three routes above stand as equals.
 
-This does **not** decide that the reconcile loop gets built, only that it *may*
-be a controller. What it should do is in [known-issues.md](../known-issues.md).
+This does **not** decide what the broker should do, only that it *may* be a
+controller. What it should do is decided by
+[ADR 0011](0011-broker-operator-boundary.md): the broker owns the protocol, the
+operator the lifecycle — it *may* be a controller and *should* not be one.
 
 Untouched: [ADR 0004](0004-tls-and-mtls-no-oauth2.md) — TLS and mTLS remain the
 authentication toward the platform, OAuth2 stays out.

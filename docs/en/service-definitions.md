@@ -606,7 +606,7 @@ with an error somebody sees, and on a decision somebody made.
 **The broker has no timer.** Nothing changes an existing instance without a
 request. A loop that periodically drags the inventory along would be a
 controller's work, not a broker's — what happens when nobody asks belongs on the
-operator's side. And it would be invisible to an instance's owner: it would
+operator's side ([ADR 0011](adr/0011-broker-operator-boundary.md)). And it would be invisible to an instance's owner: it would
 change while they neither saw nor wanted it.
 
 ### A plan change is not an upgrade
