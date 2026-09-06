@@ -204,10 +204,11 @@ direkter `GET /v2/catalog` sagt, was der laufende Broker wirklich ausstellt.
 offene Frage dieser Art. Der Broker leitet den Namespace der
 Operator-Ressourcen aus der Space-GUID ab; auf einer Plattform, die keine
 Namespaces je Space anlegt, existiert er nie. Das ist keine Nachlässigkeit,
-sondern eine ungetroffene Entscheidung — fester Namespace, Namespace je
-Org oder Space vom Broker selbst angelegt, oder eine vom Betreiber gepflegte
-Zuordnung; alle drei haben Folgen für die Mandantentrennung. Die Langfassung
-steht in [known-issues.md](known-issues.md).
+sondern eine Entscheidung, die als [ADR 0010](adr/0010-instance-namespace.md)
+zur Annahme bereitliegt: der Betreiber konfiguriert die Abbildung, die Vorgabe
+ist ein fester Namespace, und der Broker legt keinen an, solange es ihm niemand
+erlaubt. Gebaut ist davon nichts. Die Langfassung steht in
+[known-issues.md](known-issues.md).
 
 Alle übrigen Punkte sind funktionale Lücken und Sorgfaltsarbeit an den
 Definitionen. Die Protokollschicht selbst trägt kein Ausschlusskriterium: sie

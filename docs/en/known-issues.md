@@ -25,19 +25,18 @@ Kubernetes objects. Every provision ends there with
 Service broker error: apply Cluster "osb-...": namespaces "<space-guid>" not found
 ```
 
-That is not carelessness but an undecided question. Three directions, all with
-consequences for tenant separation:
+**The way forward is up for acceptance as
+[ADR 0010](adr/0010-instance-namespace.md):** the operator configures the mapping
+through a template over the provision context, the default is a fixed namespace,
+and the broker creates none unless explicitly allowed to. Two obvious routes are
+rejected there with reasons — the CF annotations (the tenant sets them
+themselves) and a mapping table per space (a ticket per space).
 
-| Way | What it costs |
-|---|---|
-| one fixed namespace for all instances | simple, removes the separation between tenants |
-| one namespace per org or space, **created by the broker itself** | the broker needs the right to create namespaces — and has to decide who cleans them up |
-| a mapping the operator maintains | no automation, but explicit and auditable |
-
-The code path is `namespaceOf` in `internal/handlers`; where the GUID comes from
-is in `internal/broker/context.go`. While the decision is open, the development
-platform creates the namespace by hand — a crutch, and it is labelled as one
-there.
+**None of it is built.** The code path is `targetNamespace` in
+`internal/handlers/definition_instances.go`; where the GUID comes from is in
+`internal/broker/context.go`. Existing instances are unaffected, their namespace
+is stored. Until the field exists, the development platform creates the
+namespace by hand — a crutch, and it is labelled as one there.
 
 Apart from that, no open point blocks a target platform.
 

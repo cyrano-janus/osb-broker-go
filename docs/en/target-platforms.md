@@ -199,10 +199,11 @@ what the running broker really offers.
 **The target namespace is an exclusion criterion**, and it is the only open
 question of that kind. The broker derives the namespace of the operator
 resources from the space GUID; on a platform that creates no namespace per
-space, it never exists. That is not carelessness but an undecided question — a
-fixed namespace, a namespace per org or space created by the broker itself, or a
-mapping the operator maintains; all three have consequences for tenant
-separation. The long form is in [known-issues.md](known-issues.md).
+space, it never exists. That is not carelessness but a decision up for
+acceptance as [ADR 0010](adr/0010-instance-namespace.md): the operator
+configures the mapping, the default is a fixed namespace, and the broker creates
+none unless allowed to. None of it is built. The long form is in
+[known-issues.md](known-issues.md).
 
 All remaining points are functional gaps and diligence on the definitions. The
 protocol layer itself carries no exclusion criterion: it consists of one engine

@@ -25,19 +25,18 @@ Controller, keine Kubernetes-Objekte. Jedes Provision endet dort mit
 Service broker error: apply Cluster "osb-...": namespaces "<space-guid>" not found
 ```
 
-Das ist keine Nachlässigkeit, sondern eine ungetroffene Entscheidung. Drei
-Richtungen, alle mit Folgen für die Mandantentrennung:
+**Der Weg steht als [ADR 0010](adr/0010-instance-namespace.md) zur Annahme
+bereit:** der Betreiber konfiguriert die Abbildung über ein Template auf den
+Provision-Kontext, die Vorgabe ist ein fester Namespace, und der Broker legt
+keinen an, solange es ihm niemand ausdrücklich erlaubt. Verworfen sind dort zwei
+naheliegende Wege mit Begründung — die CF-Annotationen (sie setzt der Mandant
+selbst) und eine Zuordnungstabelle je Space (ein Ticket je Space).
 
-| Weg | Was er kostet |
-|---|---|
-| ein fester Namespace für alle Instanzen | einfach, hebt die Trennung zwischen Mandanten auf |
-| ein Namespace je Org oder Space, **vom Broker selbst angelegt** | der Broker braucht das Recht, Namespaces zu erzeugen — und muss entscheiden, wer sie wieder abräumt |
-| eine Zuordnung, die der Betreiber pflegt | kein Automatismus, dafür explizit und prüfbar |
-
-Der Codeweg ist `namespaceOf` in `internal/handlers`; die Herkunft der GUID
-steht in `internal/broker/context.go`. Solange die Entscheidung aussteht, legt
-die Entwicklungsplattform den Namespace von Hand an — eine Krücke, und sie ist
-dort auch so beschriftet.
+**Gebaut ist davon nichts.** Der Codeweg ist `targetNamespace` in
+`internal/handlers/definition_instances.go`; die Herkunft der GUID steht in
+`internal/broker/context.go`. Bestehende Instanzen sind nicht betroffen, ihr
+Namespace ist gespeichert. Bis das Feld da ist, legt die Entwicklungsplattform
+den Namespace von Hand an — eine Krücke, und sie ist dort auch so beschriftet.
 
 Sonst blockiert kein offener Punkt eine Zielplattform.
 
