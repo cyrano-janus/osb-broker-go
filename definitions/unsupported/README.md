@@ -86,6 +86,15 @@ lässt Grund 1 unberührt; wer sie baut, sollte das mit einem anderen Operator
 begründen. Eine Definition kommt hier nur heraus, wenn **beide** Gründe
 entfallen — und der erste entfällt nicht durch Code.
 
+**Sie wird deshalb nicht auf Vorrat gebaut.** Von den Diensten, die in Frage
+kommen, hat kein einziger dieses Problem: Valkey scheitert am Bind, Strimzi am
+Provisionieren in einen bestehenden Cluster, cass-operator führt Conditions.
+Der einzige offene Fall ist `seaweedfs-s3` — dessen Readiness ist nur gegen das
+CRD-Schema geprüft. Schreibt sein Operator kein `Ready`, hat `readiness.from:`
+einen benannten Nutzer, und
+[ADR 0008](../../docs/de/adr/0008-depth-over-breadth.md) trägt sie. Bis dahin
+ist sie eine Lösung ohne Aufgabe.
+
 ## `valkey-cluster.yaml`
 
 Lizenzrechtlich wäre Valkey der saubere Weg: BSD-3-Clause, Linux Foundation,

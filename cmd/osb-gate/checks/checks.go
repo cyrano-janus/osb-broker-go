@@ -273,6 +273,28 @@ type catalogPlan struct {
 	Free                   *bool       `json:"free"`
 	Metadata               interface{} `json:"metadata"`
 	MaximumPollingDuration *int        `json:"maximum_polling_duration"`
+	// PlanUpdateable als Zeiger, weil OSB drei Zustaende kennt: der Plan sagt
+	// zu, der Plan zieht zurueck, oder er sagt nichts und das Angebot
+	// entscheidet. Die Zusage gilt fuer den Plan, den eine Instanz VERLAESST.
+	PlanUpdateable *bool `json:"plan_updateable"`
+}
+
+// planChangePromised loest die Zusage fuer den Plan auf, auf dem eine Instanz
+// steht: erst der Plan, dann das Angebot. Genauso liest Cloud Foundry sie.
+func planChangePromised(svc *catalogService, planID string) bool {
+	if svc == nil {
+		return false
+	}
+	for _, p := range svc.Plans {
+		if p.ID != planID {
+			continue
+		}
+		if p.PlanUpdateable != nil {
+			return *p.PlanUpdateable
+		}
+		return svc.PlanUpdateable
+	}
+	return false
 }
 
 // serviceByID findet den Katalogeintrag zu einer service_id.

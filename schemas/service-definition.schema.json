@@ -112,7 +112,7 @@
         "planUpdateable": {
           "type": "boolean",
           "default": false,
-          "description": "Declare that a consumer may switch plans (cf update-service -p). The broker can do it - a PATCH with a new plan_id re-renders the manifest - but only the definition knows whether the operator goes along: CNPG grows storage and cannot shrink it. Absent means not promised, and CF rejects the plan change before the broker is asked."
+          "description": "Declare that a consumer may switch plans (cf update-service -p). The broker can do it - a PATCH with a new plan_id re-renders the manifest - but only the definition knows whether the operator goes along: CNPG grows storage and cannot shrink it. Absent means not promised, and CF rejects the plan change before the broker is asked. A plan may override this (see plans[].planUpdateable); the catalogue then advertises the offering-level promise only when every plan holds it, so a platform that ignores the plan-level override cannot infer more than applies."
         },
         "plans": {
           "type": "array",
@@ -204,6 +204,10 @@
                     }
                   }
                 ]
+              },
+              "planUpdateable": {
+                "type": "boolean",
+                "description": "Promise that an instance may LEAVE this plan, overriding the offering's planUpdateable. What counts is the source plan, not the target: OSB 2.17 permits the change \"on a Service Instance using the given Service Plan\", and Cloud Foundry reads it there, falling back to the offering. That is where the direction lives - a change is rarely safe both ways: CNPG grows storage and cannot shrink it, and a plan with retainOnDeprovision loses its deletion guard the moment an instance leaves it. Absent means the offering decides; absent in both means not promised."
               },
               "retainOnDeprovision": {
                 "type": "boolean",

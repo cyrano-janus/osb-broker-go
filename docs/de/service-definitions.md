@@ -71,7 +71,7 @@ schlimmer als einer, der gar nicht startet.
 | `bindable` | nein | Vorgabe **true**. |
 | `tags` | nein | Katalog-Tags. |
 | `metadata` | nein | **Der Anzeigeblock des Marktplatzes.** Siehe unten. |
-| `planUpdateable` | nein | Vorgabe **false**. Sagt zu, dass ein Benutzer den Plan wechseln darf. Siehe unten. |
+| `planUpdateable` | nein | Vorgabe **false**. Sagt zu, dass ein Benutzer den Plan wechseln darf; ein Plan kann das überschreiben. Siehe unten. |
 | `plans` | ja | Mindestens einer, IDs eindeutig. |
 
 ### Pläne
@@ -85,6 +85,7 @@ schlimmer als einer, der gar nicht startet.
 | `allowedParameters` | nein | Welche dieser Stellschrauben der Benutzer selbst setzen darf. Siehe unten. |
 | `parameterLimits` | nein | **Kontingente.** Grenzen für die Werte, die er setzen darf. Siehe unten. |
 | `retainOnDeprovision` | nein | Lässt die Ressourcen des Operators beim Löschen stehen. Siehe unten. |
+| `planUpdateable` | nein | Sagt zu, dass eine Instanz **diesen** Plan verlassen darf, und überschreibt die Angabe des Angebots. Ohne Angabe entscheidet das Angebot. Siehe unten. |
 | `free` | nein | Vorgabe **true**. Steht immer im Katalog, auch als `false` — fehlt das Feld dort, gilt laut OSB `true`, und ein kostenpflichtiger Plan bewürbe sich als kostenlos. |
 | `metadata` | nein | **Der Anzeigeblock des Plans.** Siehe unten. |
 
@@ -222,6 +223,36 @@ Deshalb ist ein Wechsel ohne Zusage `422 PlanChangeNotSupported`. Derselbe Plan
 ist kein Wechsel, und ein `PATCH` ohne `plan_id` bleibt unberührt —
 `cf update-service -c` darf nicht daran scheitern, dass der Plan unveränderlich
 ist.
+
+**Die Zusage hat eine Richtung, und sie steht am Plan.** Beide Risiken oben
+hängen am *großen* Plan: aus ihm heraus schrumpfte der Speicher, und aus ihm
+heraus verlöre die Instanz ihren Löschschutz. In die andere Richtung ist
+derselbe Wechsel harmlos. Ein einzelnes Flag am Angebot kann das nicht
+ausdrücken — ein Flag am Plan schon:
+
+```yaml
+plans:
+  - id: …
+    name: small
+    planUpdateable: true      # aus small heraus: ja
+  - id: …
+    name: large
+    retainOnDeprovision: true # aus large heraus: nein (ohne Angabe, Vorgabe false)
+```
+
+Maßgeblich ist der Plan, auf dem die Instanz **heute** liegt, nicht das Ziel.
+So steht es in OSB 2.17 — die Plattform darf den Wechsel „on a Service Instance
+using the given Service Plan" anfordern —, und so liest Cloud Foundry es auch:
+erst der Plan der Instanz, dann als Rückfall das Angebot. Ein nicht zugesagter
+Wechsel scheitert dort mit `ServicePlanNotUpdateable`, bevor der Broker
+überhaupt gefragt wird; der `422` des Brokers gilt den Plattformen, die nicht
+vorprüfen.
+
+**Im Katalog sagt das Angebot nur zu, was jeder Plan hält.** Eine Plattform, die
+den Vorrang des Plans nicht umsetzt, liest die Zusage am Angebot — stünde dort
+`true`, während ein Plan sie zurückzieht, erlaubte sie genau den Wechsel, den
+der Plan verbietet. Die Zusage des Angebots ist deshalb das UND über die Pläne,
+und jeder Plan trägt seinen aufgelösten Wert selbst.
 
 **Zwei Felder stehen fest im Katalog und nicht in der Definition.**
 `instances_retrievable` und `bindings_retrievable` sind Aussagen über den
@@ -568,8 +599,10 @@ es gerade" lautet: nach dem Aufräumen müssen sie fallen.
 
 Ein Wechsel auf einen anderen Plan ist keine Sache des Abgleichs. Er ist nur in
 eine Richtung sicher — CloudNativePG lässt Speicher wachsen und nicht
-schrumpfen —, und `planUpdateable` kennt keine Richtung. Solange keine
-Definition ihn zusagt, lehnt der Broker ihn mit `422` ab.
+schrumpfen —, und diese Richtung gehört an den Plan, nicht in eine Schleife:
+`planUpdateable` je Plan sagt zu, welcher Plan verlassen werden darf. Solange
+keine ausgelieferte Definition das zusagt, lehnt der Broker den Wechsel mit
+`422` ab.
 
 ## Wenn eine Definition ausgerollt wird
 

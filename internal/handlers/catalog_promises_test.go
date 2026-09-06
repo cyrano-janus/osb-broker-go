@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -221,4 +222,74 @@ func TestKatalogzusage_ParameterUpdateBleibtOhnePlanwechselErlaubt(t *testing.T)
 		map[string]interface{}{"service_id": "def-svc-0001", "plan_id": "def-plan-free"})
 	assert.Equal(t, http.StatusOK, w.Code,
 		"derselbe Plan ist kein Wechsel und darf nicht abgelehnt werden: %s", w.Body.String())
+}
+
+// --- die Richtung der Zusage -------------------------------------------
+//
+// OSB 2.17 fuehrt plan_updateable auch am Plan, und dort zaehlt der Plan, auf
+// dem die Instanz HEUTE liegt: "the Platform MAY request a Service Plan change
+// on a Service Instance using the given Service Plan". Cloud Foundry liest es
+// genau so - erst der Plan der Instanz, dann das Angebot - und lehnt vorher
+// mit ServicePlanNotUpdateable ab.
+//
+// Darin steckt die Richtung, die vorher fehlte: aus dem kleinen Plan heraus
+// ist der Wechsel sicher, aus dem grossen heraus nicht. Er schruempfte
+// Speicher, den der Operator nicht schrumpfen laesst, und naehme der Instanz
+// ihren Loeschschutz.
+
+// newDirectedPlanChangeRouter sagt den Wechsel am Angebot zu und zieht ihn am
+// grossen Plan zurueck.
+func newDirectedPlanChangeRouter(t *testing.T) *gin.Engine {
+	t.Helper()
+	defYAML := strings.Replace(testDefYAML,
+		"      - id: def-plan-paid\n        name: paid\n",
+		"      - id: def-plan-paid\n        name: paid\n        planUpdateable: false\n", 1)
+	require.Contains(t, defYAML, "planUpdateable: false", "die Testdefinition wurde nicht umgebaut")
+	router, _ := routerForYAML(t, defYAML)
+	return router
+}
+
+func TestKatalogzusage_WechselAusDemZugesagtenPlanWirdVollzogen(t *testing.T) {
+	router := newDirectedPlanChangeRouter(t)
+
+	const instanceID = "richtung-inst-1"
+	require.Equal(t, http.StatusAccepted, provisionJSON(router, "/v2/service_instances/"+instanceID,
+		map[string]interface{}{"service_id": "def-svc-0001", "plan_id": "def-plan-free"}).Code)
+
+	w := sendJSON(router, "PATCH", "/v2/service_instances/"+instanceID,
+		map[string]interface{}{"service_id": "def-svc-0001", "plan_id": "def-plan-paid"})
+
+	assert.Equal(t, http.StatusOK, w.Code,
+		"free sagt den Wechsel zu - er darf nicht an der Angabe des Zielplans scheitern: %s", w.Body.String())
+}
+
+func TestKatalogzusage_WechselAusDemZurueckgezogenenPlanWirdAbgelehnt(t *testing.T) {
+	router := newDirectedPlanChangeRouter(t)
+
+	const instanceID = "richtung-inst-2"
+	require.Equal(t, http.StatusAccepted, provisionJSON(router, "/v2/service_instances/"+instanceID,
+		map[string]interface{}{"service_id": "def-svc-0001", "plan_id": "def-plan-paid"}).Code)
+
+	w := sendJSON(router, "PATCH", "/v2/service_instances/"+instanceID,
+		map[string]interface{}{"service_id": "def-svc-0001", "plan_id": "def-plan-free"})
+
+	assert.Equal(t, http.StatusUnprocessableEntity, w.Code,
+		"der Quellplan entscheidet, und paid sagt nichts zu: %s", w.Body.String())
+}
+
+// Die Sicherungslinie im Katalog: eine Plattform ohne Plan-Vorrang liest die
+// Zusage am Angebot. Sie darf daraus nicht mehr ableiten, als gilt.
+func TestKatalogzusage_AngebotZiehtZurueckWennEinPlanZurueckzieht(t *testing.T) {
+	svc := catalogService(t, newDirectedPlanChangeRouter(t))
+
+	assert.Equal(t, false, svc["plan_updateable"],
+		"ein Plan zieht die Zusage zurueck - das Angebot darf sie dann nicht pauschal geben")
+
+	plans := map[string]interface{}{}
+	for _, raw := range svc["plans"].([]interface{}) {
+		p := raw.(map[string]interface{})
+		plans[p["name"].(string)] = p["plan_updateable"]
+	}
+	assert.Equal(t, true, plans["free"], "am Plan steht die Zusage weiterhin")
+	assert.Equal(t, false, plans["paid"])
 }

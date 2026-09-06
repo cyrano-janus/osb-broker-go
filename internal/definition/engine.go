@@ -94,8 +94,13 @@ type CatalogEntry struct {
 	// Metadata ist der Anzeigeblock des Marktplatzes, unveraendert aus der
 	// Definition uebernommen.
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
-	// PlanUpdateable stammt aus der Definition: nur sie weiss, ob der
-	// Operator einen Planwechsel mitmacht.
+	// PlanUpdateable ist die Zusage des Angebots - und sie sagt nur zu, was
+	// JEDER Plan haelt.
+	//
+	// OSB laesst den Plan das Angebot ueberschreiben, aber eine Plattform, die
+	// diesen Vorrang nicht umsetzt, liest hier. Stuende hier `true`, waehrend
+	// ein Plan die Zusage zurueckzieht, erlaubte sie genau den Wechsel, den
+	// der Plan verbietet. Die Ableitung ist deshalb das UND ueber die Plaene.
 	PlanUpdateable bool `json:"plan_updateable"`
 	// InstancesRetrievable und BindingsRetrievable sind Aussagen ueber den
 	// Broker, nicht ueber den Operator - die GET-Endpunkte sind fuer jede
@@ -128,6 +133,11 @@ type CatalogPlan struct {
 	// aus allowedParameters und parameterLimits, also aus dem, was der Broker
 	// ohnehin durchsetzt.
 	Schemas *PlanSchemas `json:"schemas,omitempty"`
+	// PlanUpdateable sagt, ob eine Instanz diesen Plan verlassen darf. Der
+	// aufgeloeste Wert steht immer da, auch wenn er dem Angebot entspricht:
+	// die Zusage ist plan-genau, und eine Plattform soll sie nicht aus zwei
+	// Stellen zusammenrechnen muessen.
+	PlanUpdateable bool `json:"plan_updateable"`
 }
 
 // Catalog converts all definitions into catalog entries.
@@ -135,17 +145,25 @@ func (e *Engine) Catalog() []CatalogEntry {
 	out := make([]CatalogEntry, 0, len(e.definitions))
 	for _, d := range e.definitions {
 		entry := CatalogEntry{
-			ID:          d.Spec.Offering.ID,
-			Name:        d.Spec.Offering.Name,
-			Description: d.Spec.Offering.Description,
-			Bindable:    d.Spec.Offering.Bindable == nil || *d.Spec.Offering.Bindable,
-			Tags:        d.Spec.Offering.Tags,
-			Metadata:    d.Spec.Offering.Metadata,
-			// Ohne Angabe gilt die Zusage als nicht gegeben: was der Operator
-			// nicht nachweislich kann, darf der Katalog nicht versprechen.
-			PlanUpdateable:       d.Spec.Offering.PlanUpdateable != nil && *d.Spec.Offering.PlanUpdateable,
+			ID:                   d.Spec.Offering.ID,
+			Name:                 d.Spec.Offering.Name,
+			Description:          d.Spec.Offering.Description,
+			Bindable:             d.Spec.Offering.Bindable == nil || *d.Spec.Offering.Bindable,
+			Tags:                 d.Spec.Offering.Tags,
+			Metadata:             d.Spec.Offering.Metadata,
 			InstancesRetrievable: true,
 			BindingsRetrievable:  true,
+		}
+		// Die Zusage des Angebots ist das UND ueber die Plaene: sie gilt nur,
+		// wenn jeder Plan sie haelt. Ohne Angabe gilt sie als nicht gegeben -
+		// was der Operator nicht nachweislich kann, darf der Katalog nicht
+		// versprechen.
+		entry.PlanUpdateable = len(d.Spec.Offering.Plans) > 0
+		for _, p := range d.Spec.Offering.Plans {
+			if !PlanChangeAllowed(d, p.ID) {
+				entry.PlanUpdateable = false
+				break
+			}
 		}
 		polling := int(ReadinessTimeout(d).Seconds())
 		for _, p := range d.Spec.Offering.Plans {
@@ -164,6 +182,7 @@ func (e *Engine) Catalog() []CatalogEntry {
 					Create: SchemaHolder{Parameters: schema},
 					Update: SchemaHolder{Parameters: schema},
 				}},
+				PlanUpdateable: PlanChangeAllowed(d, p.ID),
 			})
 		}
 		out = append(out, entry)

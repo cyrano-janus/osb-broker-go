@@ -99,6 +99,47 @@ type Plan struct {
 	Free *bool `json:"free,omitempty"`
 	// Metadata ist der Anzeigeblock des Plans - displayName, bullets, costs.
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
+	// PlanUpdateable sagt zu, dass eine Instanz DIESEN Plan verlassen darf,
+	// und ueberschreibt damit die Angabe des Angebots.
+	//
+	// Massgeblich ist der Quellplan, nicht das Ziel: OSB 2.17 erlaubt der
+	// Plattform den Wechsel "on a Service Instance using the given Service
+	// Plan", und Cloud Foundry liest die Zusage genau so - am Plan, auf dem
+	// die Instanz heute liegt, mit Rueckfall auf das Angebot.
+	//
+	// Darin steckt die Richtung, die das Angebot allein nicht ausdruecken
+	// kann. Ein Wechsel ist selten in beide Richtungen sicher: CNPG laesst
+	// Speicher wachsen und nicht schrumpfen, und ein Plan mit
+	// RetainOnDeprovision verliert seinen Loeschschutz, sobald eine Instanz
+	// ihn verlaesst. Beides haengt am grossen Plan - also sagt der kleine zu
+	// und der grosse nicht.
+	PlanUpdateable *bool `json:"planUpdateable,omitempty"`
+}
+
+// PlanChangeAllowed meldet, ob eine Instanz den Plan planID verlassen darf.
+//
+// Gefragt ist der Quellplan, weil OSB und Cloud Foundry ihn fragen. Der Plan
+// entscheidet, das Angebot ist der Rueckfall, und ohne beides gilt die Zusage
+// als nicht gegeben: was der Operator nicht nachweislich mitmacht, darf der
+// Broker nicht tun.
+//
+// Ein Plan, den die Definition nicht mehr kennt, sagt nichts zu. Eine Instanz
+// kann auf ihm stehen, wenn er nach ihrer Bestellung entfernt wurde - dann ist
+// unbekannt, was ihr Wechsel bedeutete.
+func PlanChangeAllowed(sd *ServiceDefinition, planID string) bool {
+	if sd == nil {
+		return false
+	}
+	for _, p := range sd.Spec.Offering.Plans {
+		if p.ID != planID {
+			continue
+		}
+		if p.PlanUpdateable != nil {
+			return *p.PlanUpdateable
+		}
+		return sd.Spec.Offering.PlanUpdateable != nil && *sd.Spec.Offering.PlanUpdateable
+	}
+	return false
 }
 
 // ParameterLimit begrenzt einen einzelnen Benutzerparameter.

@@ -31,6 +31,13 @@ func (c *client) checkCatalogPromises(instanceID, serviceID, planID string, svcs
 		return
 	}
 
+	// Massgeblich ist der Plan, auf dem die Instanz steht - nicht das Angebot
+	// und nicht das Ziel. OSB laesst die Plattform den Wechsel "on a Service
+	// Instance using the given Service Plan" anfordern, und Cloud Foundry
+	// prueft ihn genau dort, mit Rueckfall auf das Angebot. Ein Gate, das
+	// stattdessen das Angebot liest, meldet jede gerichtete Zusage falsch.
+	promised := planChangePromised(svc, planID)
+
 	status, body := c.do("PATCH", "/v2/service_instances/"+instanceID, map[string]interface{}{
 		"service_id": serviceID,
 		"plan_id":    other,
@@ -40,11 +47,11 @@ func (c *client) checkCatalogPromises(instanceID, serviceID, planID string, svcs
 	// Faehigkeit; eine falsche kostet den Anwender eine Instanz, die still
 	// auf einem Plan steht, den er nicht bestellt hat.
 	switch {
-	case svc.PlanUpdateable && status != 200 && status != 202:
-		c.fail(check, "plan_updateable ist zugesagt, der Wechsel auf %q ergibt aber %d: %s",
-			other, status, truncate(body))
-	case svc.PlanUpdateable:
-		c.pass(check, "plan_updateable zugesagt und der Wechsel auf %q wird vollzogen (%d)", other, status)
+	case promised && status != 200 && status != 202:
+		c.fail(check, "plan %q sagt den Wechsel zu, der auf %q ergibt aber %d: %s",
+			planID, other, status, truncate(body))
+	case promised:
+		c.pass(check, "plan %q sagt den Wechsel zu und der auf %q wird vollzogen (%d)", planID, other, status)
 		// Zurueck auf den urspruenglichen Plan: die folgenden Pruefungen und
 		// das Aufraeumen erwarten die Instanz so, wie sie angelegt wurde.
 		c.do("PATCH", "/v2/service_instances/"+instanceID, map[string]interface{}{
@@ -55,17 +62,17 @@ func (c *client) checkCatalogPromises(instanceID, serviceID, planID string, svcs
 	// nicht nur Groessen, sondern kann eine Instanz auf einen Plan mit
 	// anderer Loeschsemantik schieben, ohne dass es jemand angefordert hat.
 	case status == 200 || status == 202:
-		c.fail(check, "plan_updateable ist nicht zugesagt, der Wechsel auf %q wird aber vollzogen (%d)",
-			other, status)
+		c.fail(check, "plan %q sagt den Wechsel nicht zu, der auf %q wird aber vollzogen (%d)",
+			planID, other, status)
 
 	// Abgelehnt - aber der Code muss stimmen. OSB 2.17: 422 "MUST be returned
 	// if the requested change is not supported". Ein 400 sagt dem Anwender
 	// "deine Anfrage ist kaputt" statt "das kann dieser Service nicht".
 	case status != 422:
-		c.fail(check, "plan_updateable ist nicht zugesagt und der Wechsel wird mit %d abgelehnt - OSB verlangt 422: %s",
-			status, truncate(body))
+		c.fail(check, "plan %q sagt den Wechsel nicht zu und er wird mit %d abgelehnt - OSB verlangt 422: %s",
+			planID, status, truncate(body))
 	default:
-		c.pass(check, "plan_updateable nicht zugesagt und der Wechsel wird mit 422 abgelehnt")
+		c.pass(check, "plan %q sagt den Wechsel nicht zu und er wird mit 422 abgelehnt", planID)
 	}
 }
 

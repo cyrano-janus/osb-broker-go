@@ -79,17 +79,24 @@ Zielplattform näher wäre als Korifi. Einordnung in
    [ADR 0008](adr/0008-depth-over-breadth.md) geht die Arbeit dorthin und nicht
    in weitere Katalogeinträge.
 
-   **Upgrades sind erledigt:** `RECONCILE_INTERVAL` gleicht bestehende
-   Instanzen gegen die geladenen Definitionen ab. Er löscht nie und legt nie
-   an — was er nicht auflösen kann, meldet er.
+   **Upgrades laufen, aber am Anwender vorbei.** `RECONCILE_INTERVAL` gleicht
+   bestehende Instanzen gegen die geladenen Definitionen ab; er löscht nie und
+   legt nie an. Was fehlt, ist die Zustimmung: Cloud Foundry hat für genau
+   diesen Vorgang einen Weg im Protokoll — `maintenance_info` im Katalog und an
+   der Instanz, die Spalte `upgrade available` in `cf services`,
+   `cf upgrade-service`. Der Broker kennt das Feld nicht. Der Besitzer einer
+   Instanz sieht deshalb weder, dass ein neuer Stand vorliegt, noch entscheidet
+   er, wann sie ihn bekommt — sie ändert sich, während niemand gefragt hat.
+   Dazu verlangt OSB bei einem Katalogversatz ein `422 MaintenanceInfoConflict`,
+   das der Broker nicht kennt.
 
-   **Offen bleibt der Planwechsel.** Keine Definition setzt `planUpdateable`,
-   und ohne die Zusage lehnt der Broker ihn mit `422` ab. Der Grund ist nicht
-   fehlende Fähigkeit, sondern Richtung: CloudNativePG lässt Speicher wachsen
-   und nicht schrumpfen, und ein Katalogflag kennt keine Richtung. Ein
-   Der Abgleich könnte den Übergang prüfen, bevor er ihn anwendet — er tut es
-   heute nicht, weil „nur nach oben" keine Aussage ist, die eine Definition
-   trifft.
+   **Der Planwechsel ist möglich und wird nicht zugesagt.** Die Zusage steht je
+   Plan und gilt dem Plan, den eine Instanz *verlässt* — darin liegt die
+   Richtung, die es braucht: aus dem kleinen Plan heraus ist der Wechsel
+   sicher, aus dem großen heraus schrumpfte der Speicher, den CloudNativePG
+   nicht schrumpfen lässt, und die Instanz verlöre ihren Löschschutz. Keine
+   ausgelieferte Definition setzt `planUpdateable`, weil kein Übergang gegen
+   einen laufenden Operator belegt ist; bis dahin bleibt der Wechsel `422`.
 3. **`seaweedfs-s3` gegen einen laufenden Operator** — das CRD-Schema sagt,
    dass es `status.conditions` gibt, nicht dass der Operator dort `Ready`
    schreibt.

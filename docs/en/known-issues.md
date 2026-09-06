@@ -79,15 +79,22 @@ closer to the target platform than Korifi. Classification in
    [ADR 0008](adr/0008-depth-over-breadth.md) the effort goes there rather than
    into further catalogue entries.
 
-   **Upgrades are done:** `RECONCILE_INTERVAL` reconciles existing instances
-   against the loaded definitions. It never deletes and never creates — what it
-   cannot resolve it reports.
+   **Upgrades run, but past the user.** `RECONCILE_INTERVAL` reconciles existing
+   instances against the loaded definitions; it never deletes and never creates.
+   What is missing is consent: Cloud Foundry has a protocol path for exactly
+   this — `maintenance_info` in the catalogue and on the instance, the
+   `upgrade available` column in `cf services`, `cf upgrade-service`. The broker
+   does not know the field. An instance's owner therefore neither sees that a
+   new state exists nor decides when to take it — the instance changes while
+   nobody asked. OSB also expects a `422 MaintenanceInfoConflict` on a catalogue
+   mismatch, which the broker does not know either.
 
-   **What stays open is the plan change.** No definition sets `planUpdateable`, and
-   without the promise the broker refuses it with `422`. The reason is not
-   missing capability but direction: CloudNativePG grows storage and cannot
-   shrink it, and a catalogue flag knows no direction. A reconcile loop could
-   The reconciler could check the transition before applying it — today it does
-   not, because "upwards only" is not something a definition states.
+   **The plan change is possible and is not promised.** The promise sits on each
+   plan and applies to the plan an instance *leaves* — that is where the needed
+   direction comes from: leaving the small plan is safe, leaving the large one
+   would shrink storage that CloudNativePG cannot shrink, and would cost the
+   instance its deletion guard. No shipped definition sets `planUpdateable`,
+   because no transition is proven against a running operator; until then the
+   change stays `422`.
 3. **`seaweedfs-s3` against a running operator** — the CRD schema says
    `status.conditions` exists, not that the operator writes `Ready` there.

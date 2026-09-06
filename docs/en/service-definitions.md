@@ -73,7 +73,7 @@ does not come up at all.
 | `bindable` | no | Defaults to **true**. |
 | `tags` | no | Catalogue tags. |
 | `metadata` | no | **The marketplace display block.** See below. |
-| `planUpdateable` | no | Defaults to **false**. Promises that a user may switch plans. See below. |
+| `planUpdateable` | no | Defaults to **false**. Promises that a user may switch plans; a plan can override it. See below. |
 | `plans` | yes | At least one, IDs unique. |
 
 ### Plans
@@ -87,6 +87,7 @@ does not come up at all.
 | `allowedParameters` | no | Which of those knobs the user may set themselves. See below. |
 | `parameterLimits` | no | **Quotas.** Bounds for the values they may set. See below. |
 | `retainOnDeprovision` | no | Leaves the operator's resources standing on delete. See below. |
+| `planUpdateable` | no | Promises that an instance may leave **this** plan, overriding the offering. Absent means the offering decides. See below. |
 | `free` | no | Defaults to **true**. Always present in the catalogue, `false` included — omit it there and OSB reads `true`, so a paid plan would advertise itself as free. |
 | `metadata` | no | **The plan's display block.** See below. |
 
@@ -218,6 +219,35 @@ with `retainOnDeprovision`, so a later deprovision leaves the data standing.
 A change without the promise is therefore `422 PlanChangeNotSupported`. The
 same plan is not a change, and a `PATCH` without `plan_id` is untouched —
 `cf update-service -c` must not fail because the plan is immutable.
+
+**The promise has a direction, and it belongs on the plan.** Both risks above
+hang off the *large* plan: leaving it would shrink storage, and leaving it would
+cost the instance its deletion guard. The same change is harmless the other way
+round. A single flag on the offering cannot express that; a flag on the plan
+can:
+
+```yaml
+plans:
+  - id: …
+    name: small
+    planUpdateable: true      # leaving small: yes
+  - id: …
+    name: large
+    retainOnDeprovision: true # leaving large: no (absent, defaults to false)
+```
+
+What counts is the plan the instance is on **today**, not the target. That is
+how OSB 2.17 puts it — the platform may request the change "on a Service
+Instance using the given Service Plan" — and how Cloud Foundry reads it: the
+instance's plan first, the offering as the fallback. An unpromised change fails
+there with `ServicePlanNotUpdateable` before the broker is asked; the broker's
+`422` is for platforms that do not pre-check.
+
+**In the catalogue the offering promises only what every plan holds.** A
+platform that does not implement the plan-level override reads the offering —
+were it `true` while a plan withdraws the promise, that platform would permit
+exactly the change the plan forbids. The offering's promise is therefore the AND
+across the plans, and every plan carries its own resolved value.
 
 **Two fields are fixed in the catalogue rather than in the definition.**
 `instances_retrievable` and `bindings_retrievable` are statements about the
@@ -557,9 +587,10 @@ there right now": after cleanup they have to fall.
 ### The plan change stays out
 
 Switching to another plan is not the reconciler's business. It is only safe in
-one direction — CloudNativePG grows storage and cannot shrink it — and
-`planUpdateable` knows no direction. As long as no definition promises it, the
-broker refuses it with `422`.
+one direction — CloudNativePG grows storage and cannot shrink it — and that
+direction belongs on the plan, not in a loop: a per-plan `planUpdateable` says
+which plan may be left. As long as no shipped definition promises it, the broker
+refuses the change with `422`.
 
 ## When a definition is rolled out
 

@@ -641,8 +641,10 @@ components:
             documentationUrl, supportUrl. Taken from the definition unchanged.
         plan_updateable:
           type: boolean
-          description: From the definition's planUpdateable, false when absent. A plan
-            change without this promise is 422 PlanChangeNotSupported.
+          description: From the definition's planUpdateable, false when absent. Advertised
+            only when every plan holds it, so a platform that ignores the plan-level
+            override cannot infer more than applies. A plan change without the promise
+            is 422 PlanChangeNotSupported.
         instances_retrievable:
           type: boolean
           description: Always true - GET on an instance is registered for every definition
@@ -680,6 +682,12 @@ components:
           type: object
           additionalProperties: true
           description: OSB plan schemas derived from allowedParameters and parameterLimits.
+        plan_updateable:
+          type: boolean
+          description: Whether an instance may LEAVE this plan. Always present, resolved
+            from the plan and, absent there, from the offering. What counts is the plan
+            the instance is on, not the target - that is where the direction lives, since
+            a change is rarely safe both ways.
     GetInstanceResponse:
       type: object
       properties:

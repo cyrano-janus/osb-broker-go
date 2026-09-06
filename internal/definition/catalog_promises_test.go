@@ -32,6 +32,17 @@ func catalogJSON(t *testing.T, sd *ServiceDefinition) map[string]interface{} {
 	return out
 }
 
+func plansJSON(t *testing.T, sd *ServiceDefinition) []map[string]interface{} {
+	t.Helper()
+	raw, ok := catalogJSON(t, sd)["plans"].([]interface{})
+	require.True(t, ok)
+	out := make([]map[string]interface{}, 0, len(raw))
+	for _, p := range raw {
+		out = append(out, p.(map[string]interface{}))
+	}
+	return out
+}
+
 func firstPlanJSON(t *testing.T, sd *ServiceDefinition) map[string]interface{} {
 	t.Helper()
 	plans, ok := catalogJSON(t, sd)["plans"].([]interface{})
@@ -86,6 +97,78 @@ func TestKatalog_ZugesagterPlanwechselStehtImKatalog(t *testing.T) {
 
 	assert.Equal(t, true, catalogJSON(t, sd)["plan_updateable"],
 		"ohne die Zusage lehnt CF den Planwechsel ab, bevor der Broker gefragt wird")
+}
+
+// OSB 2.17 fuehrt plan_updateable auch am Plan, und dort ueberschreibt es das
+// Angebot: "If specificed, this takes precedence over the Service Offering's
+// plan_updateable field." Massgeblich ist dabei der Plan, auf dem die Instanz
+// HEUTE liegt - "the Platform MAY request a Service Plan change on a Service
+// Instance using the given Service Plan".
+//
+// Damit hat die Zusage eine Richtung, die das Angebot allein nicht ausdruecken
+// kann: heraus aus small ja, heraus aus large nie.
+
+func TestKatalog_PlanErbtDieZusageDesAngebots(t *testing.T) {
+	sd := testDefinition(t)
+	sd.Spec.Offering.PlanUpdateable = boolPtr(true)
+
+	for _, plan := range plansJSON(t, sd) {
+		assert.Equal(t, true, plan["plan_updateable"],
+			"ohne eigene Angabe gilt am Plan, was das Angebot sagt")
+	}
+}
+
+func TestKatalog_PlanUeberschreibtDieZusageDesAngebots(t *testing.T) {
+	sd := testDefinition(t)
+	sd.Spec.Offering.PlanUpdateable = boolPtr(true)
+	sd.Spec.Offering.Plans[1].PlanUpdateable = boolPtr(false)
+
+	plans := plansJSON(t, sd)
+	assert.Equal(t, true, plans[0]["plan_updateable"], "aus small heraus bleibt der Wechsel zugesagt")
+	assert.Equal(t, false, plans[1]["plan_updateable"],
+		"aus large heraus nicht: dort schrumpft der Speicher nicht, und der Loeschschutz ginge verloren")
+}
+
+func TestKatalog_PlanKannDenWechselAlleinZusagen(t *testing.T) {
+	sd := testDefinition(t)
+	sd.Spec.Offering.PlanUpdateable = nil
+	sd.Spec.Offering.Plans[0].PlanUpdateable = boolPtr(true)
+
+	assert.Equal(t, true, plansJSON(t, sd)[0]["plan_updateable"],
+		"ein Plan darf zusagen, ohne dass das Angebot es tut")
+}
+
+// Die Sicherungslinie: eine Plattform, die den Plan-Vorrang NICHT umsetzt,
+// liest die Zusage am Angebot. Stuende dort `true`, waehrend ein Plan sie
+// zurueckzieht, erlaubte diese Plattform genau den Wechsel, den der Plan
+// verbietet. Das Angebot sagt deshalb nur zu, was JEDER Plan haelt.
+func TestKatalog_AngebotSagtNurZuWasJederPlanHaelt(t *testing.T) {
+	sd := testDefinition(t)
+	sd.Spec.Offering.PlanUpdateable = boolPtr(true)
+	sd.Spec.Offering.Plans[1].PlanUpdateable = boolPtr(false)
+
+	assert.Equal(t, false, catalogJSON(t, sd)["plan_updateable"],
+		"eine Plattform ohne Plan-Vorrang darf aus dieser Zusage nicht mehr ableiten, als gilt")
+}
+
+// --- die Aufloesung, die Katalog und Update-Pfad teilen ------------------
+
+func TestPlanwechselZusage_LiestDenQuellplan(t *testing.T) {
+	sd := testDefinition(t)
+	sd.Spec.Offering.PlanUpdateable = boolPtr(true)
+	sd.Spec.Offering.Plans[1].PlanUpdateable = boolPtr(false)
+
+	small, large := sd.Spec.Offering.Plans[0].ID, sd.Spec.Offering.Plans[1].ID
+	assert.True(t, PlanChangeAllowed(sd, small))
+	assert.False(t, PlanChangeAllowed(sd, large))
+}
+
+func TestPlanwechselZusage_UnbekannterQuellplanSagtNichtsZu(t *testing.T) {
+	sd := testDefinition(t)
+	sd.Spec.Offering.PlanUpdateable = boolPtr(true)
+
+	assert.False(t, PlanChangeAllowed(sd, "plan-den-es-nicht-mehr-gibt"),
+		"ein Plan, der aus der Definition verschwunden ist, sagt nichts mehr zu")
 }
 
 // --- instances_retrievable / bindings_retrievable -----------------------

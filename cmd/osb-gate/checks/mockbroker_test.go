@@ -65,7 +65,8 @@ type mutation struct {
 	// Zusagen des Katalogs gegen das Verhalten
 	retrievableNotDeclared bool // die Abrufbarkeit wird nicht angemeldet
 	planUpdateableNotHeld  bool // plan_updateable zugesagt, Planwechsel abgelehnt
-	planUpdateableFalse    bool // plan_updateable verneint
+	planUpdateableFalse    bool // plan_updateable am Angebot verneint
+	planLevelWithdrawn     bool // Angebot sagt zu, der Quellplan zieht zurueck
 	planChangeRejected     int  // Code, mit dem ein Planwechsel abgelehnt wird (0 = vollziehen)
 	metadataNotObject      bool // metadata ist eine Zeichenkette statt eines Blocks
 	pollingNegative        bool // maximum_polling_duration ist negativ
@@ -175,10 +176,17 @@ func (b *mockBroker) catalog(w http.ResponseWriter) {
 		polling = -1
 	}
 	plan := func(id, name, desc string) map[string]interface{} {
-		return map[string]interface{}{
+		p := map[string]interface{}{
 			"id": id, "name": name, "description": desc,
 			"free": true, "maximum_polling_duration": polling,
 		}
+		// Der Plan zieht die Zusage des Angebots zurueck - und zwar der, auf
+		// dem die Instanz des Audits steht. Genau diesen Fall uebersah ein
+		// Gate, das nur das Angebot liest.
+		if b.mut.planLevelWithdrawn && id == mockPlan {
+			p["plan_updateable"] = false
+		}
+		return p
 	}
 	real := map[string]interface{}{
 		"id": mockRealService, "name": "real", "description": desc,
@@ -490,6 +498,8 @@ func TestMock_JedeMutationWirdBemerkt(t *testing.T) {
 		{"Planwechsel verneint, aber vollzogen", mutation{planUpdateableFalse: true}, "catalog-promises"},
 		{"Planwechsel verneint und mit 400 statt 422 abgelehnt",
 			mutation{planUpdateableFalse: true, planChangeRejected: 400}, "catalog-promises"},
+		{"der Quellplan zieht die Zusage zurueck, der Wechsel wird trotzdem vollzogen",
+			mutation{planLevelWithdrawn: true}, "catalog-promises"},
 		{"metadata ist eine Zeichenkette", mutation{metadataNotObject: true}, "catalog-display"},
 		{"maximum_polling_duration ist negativ", mutation{pollingNegative: true}, "catalog-display"},
 	} {
@@ -545,3 +555,16 @@ func TestMock_GeschlossenerServerLaesstNichtsDurchgehen(t *testing.T) {
 }
 
 var _ = fmt.Sprintf
+
+// Die Gegenprobe zur gerichteten Zusage: ein Angebot darf den Wechsel
+// grundsaetzlich zusagen und ihn an einem einzelnen Plan zurueckziehen. Wer
+// das tut und aus diesem Plan heraus mit 422 ablehnt, verhaelt sich richtig -
+// das Gate darf ihn nicht dafuer durchfallen lassen, dass das Angebot etwas
+// anderes sagt als der Plan.
+func TestMock_ZurueckgezogeneZusageAmPlanIstKeinFehler(t *testing.T) {
+	r := withBroker(t, mutation{planLevelWithdrawn: true, planChangeRejected: 422})
+
+	assert.Zero(t, r.Failures(),
+		"der Plan zieht zurueck und der Broker haelt sich daran, es schlug an: %s", failedNames(r))
+	assert.Contains(t, r.Passed, "catalog-promises")
+}
