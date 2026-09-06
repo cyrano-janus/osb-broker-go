@@ -89,8 +89,10 @@ func (h *Handlers) ProvisionServiceInstance(c *gin.Context) {
 		return
 	}
 
-	// Beide erlaubten Quellen auswerten: Korifi schickt space_guid
-	// ausschliesslich als Top-Level-Feld (FINDINGS #3).
+	// Beide erlaubten Quellen auswerten. OSB fuehrt die Top-Level-Felder als
+	// veraltet, aber es gibt Plattformen, die space_guid ausschliesslich dort
+	// senden - wer nur `context` liest, bekommt von ihnen nie eine
+	// Space-GUID (FINDINGS #3).
 	namespace := targetNamespace(req.ResolvedContext())
 	if err := h.engine.Engine.ProvisionInstance(c.Request.Context(), req.ServiceID, instanceID, namespace, req.PlanID, req.Parameters); err != nil {
 		respondOSBError(c, err)
@@ -311,8 +313,8 @@ func (h *Handlers) GetLastOperation(c *gin.Context) {
 	}
 
 	// OSB 2.17: kennt der Broker die Instanz nicht, ist die Antwort 410 Gone.
-	// Genau daran erkennt die Plattform, dass ein Deprovision durch ist -
-	// Korifi liest 410 als Abschluss.
+	// Genau daran erkennt die Plattform, dass ein Deprovision durch ist: sie
+	// wiederholt den Aufruf, bis er 410 ergibt.
 	if !h.instanceKnown(c.Request.Context(), instanceID) {
 		c.JSON(http.StatusGone, gin.H{"error": "Gone", "description": "instance not found"})
 		return

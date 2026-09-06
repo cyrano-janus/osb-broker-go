@@ -9,13 +9,20 @@ The broker is built for the following systems.
 | **Target platform** | production Cloud Foundry | what the broker is built for |
 | **Target platform** | Tanzu TAS | likewise |
 | **Target platform** | external marketplaces with an OSB integration | likewise |
-| **Development platform** | Korifi on kind | test rig, not a target system |
+| **Development platform** | real Cloud Foundry on kind | test rig, not a target system |
 
-**The distinction is not cosmetic.** Several deviations from OSB 2.17 are
-harmless on Korifi and blockers on production Cloud Foundry or TAS. The
-yardstick for "done" is therefore the target system, not the development
-platform — and every piece of evidence this repository carries was taken on the
-development platform.
+**The distinction is not cosmetic, but it runs differently than one expects.**
+The development platform runs `cloud_controller_ng` — the same software a target
+system runs. What it says about the **protocol** therefore holds there too:
+catalogue, promises, error codes, the update path.
+
+What it **cannot** say is anything about operations. The broker happens to sit
+in the same Kubernetes cluster as the platform there; on a target system it runs
+separately ([ADR 0009](adr/0009-deployment-model.md)). Target namespace, trust
+anchor and network path stay open.
+
+Whoever carries evidence from the development platform to a target system has to
+say which of the two halves it falls into.
 
 ## What is the same everywhere
 
@@ -39,16 +46,17 @@ conformance is not an end in itself here — it is the entire product.
 ## What differs
 
 The differences are not in the API but around it, and they are the reason a
-success on Korifi is not yet a success on TAS.
+success on the development platform is not yet a success on TAS.
 
-| Topic | Korifi (development) | production CF / TAS |
+| Topic | Development (CF on kind) | production CF / TAS |
 |---|---|---|
-| Registration | `CFServiceBroker` CR or `cf create-service-broker` | `cf create-service-broker` |
+| Registration | `cf create-service-broker` | the same |
 | Reachability | in-cluster service DNS name | the broker must be reachable from the platform network — route, firewall, possibly its own app instance |
-| Certificate trust | own CA, mounted into Korifi via `SSL_CERT_DIR` | the platform trust store; open whether an internal CA is accepted or a publicly trusted certificate is required |
-| Plan visibility | every `CFServicePlan` has to be patched to `public` individually | `cf enable-service-access` |
-| Managed services | requires the feature flag `experimental.managedServices.enabled=true` | standard behaviour, no switch |
+| Certificate trust | **not checked** — the Cloud Controller runs there with `skip_cert_verify: true` | the platform trust store; open whether an internal CA is accepted or a publicly trusted certificate is required |
+| Plan visibility | `cf enable-service-access` | the same |
+| Target namespace | created by hand, because the broker derives it from the space GUID | **there is none** — spaces are records in the Cloud Controller, not Kubernetes objects |
 | Tenancy | one kind cluster, one user | real orgs and spaces, real separation of rights |
+| Deployment shape | broker in the same cluster as the platform | platform on BOSH VMs, broker in a separate cluster |
 | Load | one developer, one service at a time | many concurrent operations |
 
 **The shape is settled:** the broker runs as a Kubernetes Deployment in the
@@ -127,12 +135,16 @@ promise the broker does not keep otherwise surfaces at the user.
 
 ## State of verification
 
-**Korifi v0.18.0 on kind is verified.** What is demonstrated there:
+**Real Cloud Foundry on kind is verified** — `cloud_controller_ng`, UAA, Diego,
+gorouter. What is demonstrated there:
 
 | Evidence | Result |
 |---|---|
 | OSB 2.17 lifecycle over HTTP | integration test covers catalog → provision → last_operation → bind → unbind → deprovision |
-| Registration, marketplace, `cf create-service` | against Korifi on kind |
+| Registration, marketplace, `cf create-service` | against real Cloud Foundry |
+| Parameter update through the platform | `cf update-service -c` reaches the broker as a `PATCH`, and the operator's resource really changes |
+| Unpromised plan change | the Cloud Controller refuses it itself (`ServicePlanNotUpdateable`) without asking the broker — so the per-plan promise is read |
+| Full upgrade path | a plan with `maintenanceInfo` shows as `upgrade available`, `cf upgrade-service` triggers it, afterwards the instance carries the new state |
 | Multi-document manifest end to end | `cnpg-pgvector` creates a Cluster **and** a `Database`; `status.extensions[vector].applied=true`, in the database `pg_extension` shows `vector 0.8.1` on PostgreSQL 18.6, and a `<->` comparison returns the neighbour |
 | Generic engine end to end | `cf create-service cnpg-postgresql large` creates a real CloudNativePG cluster (3 instances, 10Gi); `psql` in the pod answers, credentials from the operator secret |
 | Multi-document manifest end to end | `cnpg-pgvector` creates a Cluster **and** a `Database`; `status.extensions[vector].applied=true`, in the database `pg_extension` shows `vector 0.8.1` on PostgreSQL 18.6, and a `<->` comparison returns the neighbour |
@@ -172,21 +184,30 @@ unnoticed on the development platform and which do not pass on a target system.
 The long form of each point is in [known-issues.md](known-issues.md), the code
 locations in [reference/osb-api.md](reference/osb-api.md).
 
-**What Korifi cannot check.** `cf update-service -c '{...}'` does not reach the
-broker through Korifi: the CLI reports success, a `PATCH` never arrives. The
-update path is therefore only checkable directly against the broker —
-`cmd/osb-gate` with `--update-parameter`, in the development platform as
-`make conformance`. Likewise `cf marketplace` shows Korifi's catalogue copy, not
-the broker's catalogue.
+**What the development platform cannot check.** It answers the protocol
+questions and not a single operational one — the broker sits in the same cluster
+as the platform there. `cf marketplace` also shows the Cloud Controller's
+catalogue copy, not the broker's catalogue; only a direct `GET /v2/catalog` says
+what the running broker really offers.
 
-| Deviation | on Korifi | on production CF / TAS |
+| Deviation | in development | on production CF / TAS |
 |---|---|---|
+| **Target namespace from the space GUID** | the namespace is created by hand | **exclusion criterion** — there are no namespaces per space, every provision fails |
+| Trust anchor | unchecked, `skip_cert_verify: true` | the platform really validates the broker's certificate |
 | `seaweedfs-s3`: readiness path checked against the CRD schema only | the operator is not installed | a path that misses costs one platform timeout per instance |
 
-None of these deviations is an exclusion criterion. The points that were sat in
-the HTTP layer and were replaced along with it —
-[ADR 0003](adr/0003-replace-http-layer.md). What remains are functional gaps
-and diligence on the definitions.
+**The target namespace is an exclusion criterion**, and it is the only open
+question of that kind. The broker derives the namespace of the operator
+resources from the space GUID; on a platform that creates no namespace per
+space, it never exists. That is not carelessness but an undecided question — a
+fixed namespace, a namespace per org or space created by the broker itself, or a
+mapping the operator maintains; all three have consequences for tenant
+separation. The long form is in [known-issues.md](known-issues.md).
+
+All remaining points are functional gaps and diligence on the definitions. The
+protocol layer itself carries no exclusion criterion: it consists of one engine
+and N definitions, with no second path beside it
+([ADR 0003](adr/0003-replace-http-layer.md)).
 
 ## What a managed service needs and does not have here
 
@@ -225,23 +246,3 @@ thing:
   transition proven against a running operator.
 - **Load and multi-tenancy** are not a feature but a measurement — that needs a
   target system.
-
-## What happens to Korifi
-
-Korifi is being archived upstream. The Cloud Foundry Foundation decided in
-**RFC 0060** (`toc/rfc/rfc-0060-archive-cf-on-k8s-wg.md`, status `Accepted`) to
-archive the `CF on K8S` working group and the Korifi repositories; CI is already
-switched off.
-
-**For this project that is a tooling problem, not a product problem.** The
-target platforms are untouched, and the only coupling to Korifi is the OSB API,
-which lives on. In practice:
-
-- The existing development platform keeps running but receives no further
-  upstream fixes. The artefacts needed for the current state are mirrored
-  locally.
-- In the medium term it has to be decided what to develop against. The RFC names
-  `cloudfoundry/kind-deployment` as the successor — real Cloud Foundry on kind,
-  which would be closer to the target platform than Korifi ever was.
-- Changing the development platform changes nothing about the broker. That is
-  the point of [ADR 0006](adr/0006-platform-independence.md).

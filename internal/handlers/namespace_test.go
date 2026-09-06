@@ -47,7 +47,7 @@ func crIn(t *testing.T, oc *definition.OperatorClient, namespace, instanceID str
 }
 
 func TestNamespace_ProvisionLandetImSpaceNamespace(t *testing.T) {
-	// Der Kern von #3: Korifi schickt space_guid ausschliesslich Top-Level.
+	// Der Kern von #3: space_guid kommt ausschliesslich Top-Level.
 	router, oc := newDefinitionRouter(t)
 	const instanceID = "ns-inst-1"
 

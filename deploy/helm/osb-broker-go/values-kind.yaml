@@ -1,4 +1,4 @@
-# Werte für das lokale Korifi/kind-Setup (entspricht deploy/k8s/*)
+# Werte für das lokale kind-Setup (entspricht deploy/k8s/*)
 image:
   repository: osb-broker-go
   # Kein tag: die Version steht in Chart.yaml unter appVersion, und zwar dort
@@ -11,7 +11,7 @@ auth:
   password: broker-secret
 
   # mTLS für zertifikatsbasierte Clients (osb-checker, eigene Consumer).
-  # Korifi selbst authentifiziert sich weiterhin per Basic Auth über TLS.
+  # Die Plattform selbst authentifiziert sich per Basic Auth über TLS.
   mtls:
     enabled: false
     required: false
@@ -20,10 +20,12 @@ auth:
       - osb-gate
 
 # HTTPS im kind-Cluster. Voraussetzung: cert-manager läuft und ein
-# CA-ClusterIssuer existiert; dessen Root-CA muss in den Trust-Stores der
-# Korifi-Pods liegen, sonst lehnt Korifi den Broker beim Registrieren ab
-# (experimental.managedServices.trustInsecureBrokers steht per Default auf
-# false). Siehe docs/de/how-to/korifi-trust.md.
+# CA-ClusterIssuer existiert.
+#
+# Ob die Plattform das Zertifikat annimmt, entscheidet SIE, nicht der Broker:
+# er liest zwei Dateien und lädt sie nach. Eine Plattform, die prüft, braucht
+# die ausstellende CA in ihrem Trust-Store - welcher der Wege dafür gilt, steht
+# in docs/de/target-platforms.md.
 tls:
   enabled: true
   certManager:

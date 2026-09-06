@@ -11,7 +11,7 @@ Die meisten Fehler, die wie ein Cloud-Foundry-Problem aussehen, sind keins.
 Frage den Broker direkt:
 
 ```bash
-cd ../korifi-platform && make broker-catalog
+cd ../cfk8s-platform && make broker-catalog
 ```
 
 Das Skript zieht die CA aus dem TLS-Secret, die Zugangsdaten aus dem
@@ -151,7 +151,7 @@ stehengebliebene Zahl wäre nicht als Störung erkennbar.
 Die Entwicklungsplattform hat zwei eigene Werkzeuge:
 
 ```bash
-cd ../korifi-platform
+cd ../cfk8s-platform
 make status      # Ist-Zustand auf einen Blick
 make doctor      # Diagnose, wenn status etwas Rotes zeigt
 ```

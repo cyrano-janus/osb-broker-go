@@ -47,13 +47,17 @@ plainly in [target-platforms.md](docs/en/target-platforms.md).
 | **Target platform** | production Cloud Foundry |
 | **Target platform** | Tanzu TAS |
 | **Target platform** | external marketplaces with an OSB integration |
-| **Development platform** | Korifi on kind — a test rig, not a target system |
+| **Development platform** | real Cloud Foundry on kind — a test rig, not a target system |
 
-The broker is verified against Korifi v0.18.0 on kind, that is, against the
-development platform; against production Cloud Foundry, TAS or an external
-marketplace there is no run. Several known deviations from OSB 2.17 are harmless
-on the development platform and are blockers on a target system. The evidence in
-detail, and what follows from it:
+The broker is verified against real Cloud Foundry on kind — the same software
+(`cloud_controller_ng`) a target system runs. What is proven there about the
+**protocol** holds on TAS too.
+
+It says nothing about **operations**: the broker sits in the same cluster as the
+platform there, on a target system it runs separately. Target namespace, trust
+anchor and network path are open, and the target namespace is an exclusion
+criterion — Cloud Foundry creates no Kubernetes namespace per space, yet the
+broker derives one from it. The evidence in detail, and what follows from it:
 [docs/en/target-platforms.md](docs/en/target-platforms.md).
 
 ## The approach
@@ -91,14 +95,15 @@ curl -s -u dev:dev -H 'X-Broker-API-Version: 2.17' \
 ```
 
 With a cluster, against real operators — the development platform in the
-neighbouring repository `korifi-platform` builds everything declaratively:
+neighbouring repository `cfk8s-platform` builds everything declaratively:
 
 ```bash
-cd ../korifi-platform
-make up          # cluster, dependencies, Korifi, buildpacks
+cd ../cfk8s-platform
+make cf-up       # Cloud Foundry on kind
+make deps pki    # cert-manager, platform CA
 make services    # backing service operators
 make broker      # build the image, load it into kind, roll it out via Helm
-make register    # register with Korifi
+make register    # register with Cloud Foundry
 
 cf marketplace
 cf create-service cnpg-postgresql small my-db

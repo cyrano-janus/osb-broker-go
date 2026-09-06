@@ -5,7 +5,7 @@
 Diese Liste ist bewusst vollständig und bewusst unbeschönigt. Wer den Broker
 weiterentwickelt, soll die Minen kennen, bevor er hineinläuft.
 
-**Langfassung je Befund:** `korifi-platform/FINDINGS.md`. Dort steht das
+**Langfassung je Befund:** `cfk8s-platform/FINDINGS.md`. Dort steht das
 Messprotokoll mit Beobachtung, verifizierter Ursache und Vorschlag, sortiert
 nach Schwere und nach Quelle des Durchlaufs. Hier steht die Kurzform mit der
 Codestelle — und, was dort fehlt, die Einordnung: **blockiert es eine
@@ -14,7 +14,32 @@ in [target-platforms.md](target-platforms.md).
 
 ## Funktionale Lücken
 
-Keiner der offenen Punkte blockiert derzeit eine Zielplattform.
+**Ein offener Punkt blockiert jede Zielplattform: der Ziel-Namespace.**
+
+Der Broker leitet den Namespace der Operator-Ressourcen aus der Space-GUID ab.
+Auf einer Plattform, die je Space einen Kubernetes-Namespace anlegt, geht das
+auf. **Cloud Foundry legt keinen an** — Spaces sind Datensätze im Cloud
+Controller, keine Kubernetes-Objekte. Jedes Provision endet dort mit
+
+```
+Service broker error: apply Cluster "osb-...": namespaces "<space-guid>" not found
+```
+
+Das ist keine Nachlässigkeit, sondern eine ungetroffene Entscheidung. Drei
+Richtungen, alle mit Folgen für die Mandantentrennung:
+
+| Weg | Was er kostet |
+|---|---|
+| ein fester Namespace für alle Instanzen | einfach, hebt die Trennung zwischen Mandanten auf |
+| ein Namespace je Org oder Space, **vom Broker selbst angelegt** | der Broker braucht das Recht, Namespaces zu erzeugen — und muss entscheiden, wer sie wieder abräumt |
+| eine Zuordnung, die der Betreiber pflegt | kein Automatismus, dafür explizit und prüfbar |
+
+Der Codeweg ist `namespaceOf` in `internal/handlers`; die Herkunft der GUID
+steht in `internal/broker/context.go`. Solange die Entscheidung aussteht, legt
+die Entwicklungsplattform den Namespace von Hand an — eine Krücke, und sie ist
+dort auch so beschriftet.
+
+Sonst blockiert kein offener Punkt eine Zielplattform.
 
 ## Strukturelle Probleme
 
@@ -47,18 +72,16 @@ Nichts davon schadet, alles davon kostet Lesezeit:
 
 ## Die Entwicklungsplattform
 
-Korifi wird upstream archiviert — Cloud Foundry RFC 0060
-(`toc/rfc/rfc-0060-archive-cf-on-k8s-wg.md`, Status `Accepted`) archiviert die
-Working Group `CF on K8S` und die Korifi-Repositories; die CI ist bereits
-abgeschaltet.
+Die Entwicklungsplattform ist **echtes Cloud Foundry auf kind** —
+`cloud_controller_ng`, UAA, Diego, gorouter. Was sie über das Protokoll sagt,
+gilt auch auf einem Zielsystem, weil es dieselbe Software ist.
 
-**Das ist ein Werkzeugproblem, kein Produktproblem.** Die Zielplattformen sind
-nicht berührt, und die einzige Kopplung ist die OSB-API. Die für den aktuellen
-Stand nötigen Artefakte — Helm-Chart, die drei Images per Digest, der
-Quellbaum — sind lokal gespiegelt. Offen ist, worauf mittelfristig entwickelt
-wird; der RFC nennt `cloudfoundry/kind-deployment` als Nachfolger, was der
-Zielplattform näher wäre als Korifi. Einordnung in
-[target-platforms.md](target-platforms.md).
+**Zwei Dinge kann sie trotzdem nicht sagen.** Der Broker liegt dort im selben
+Kubernetes-Cluster wie die Plattform; auf einem Zielsystem läuft er getrennt
+([ADR 0009](adr/0009-deployment-model.md)). Und der Cloud Controller prüft dort
+das Zertifikat des Brokers nicht — er läuft mit `skip_cert_verify: true`. Eine
+gelungene Registrierung über `https` ist deshalb **keine** Aussage über den
+Vertrauensanker. Einordnung in [target-platforms.md](target-platforms.md).
 
 ## Empfohlene Reihenfolge
 

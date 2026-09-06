@@ -33,7 +33,7 @@ Auf der Entwicklungsplattform ist ein Operator ein Verzeichnis unter `services/`
 mit einer `service.env`:
 
 ```bash
-# ../korifi-platform/services/rabbitmq/service.env
+# ../cfk8s-platform/services/rabbitmq/service.env
 NAME=RabbitMQ Cluster Operator
 VERSION=${RABBITMQ_OPERATOR_VERSION}
 URL=https://github.com/rabbitmq/cluster-operator/releases/download/${RABBITMQ_OPERATOR_VERSION}/cluster-operator.yml
@@ -45,7 +45,7 @@ Die Version steht in `versions.env`, nicht hier: das Verzeichnis beschreibt
 *wie* installiert wird, `versions.env` *welche* Version.
 
 ```bash
-cd ../korifi-platform && make services
+cd ../cfk8s-platform && make services
 ```
 
 ## Schritt 2: Am lebenden Objekt nachsehen
@@ -208,12 +208,12 @@ Auf der Entwicklungsplattform wird ausgewählt, welche Definitionen überhaupt
 ausgerollt werden — nur solche, deren Operator installiert ist:
 
 ```bash
-# ../korifi-platform/versions.env
+# ../cfk8s-platform/versions.env
 BROKER_DEFINITIONS="cnpg-postgresql rabbitmq-cluster"
 ```
 
 ```bash
-cd ../korifi-platform && make broker
+cd ../cfk8s-platform && make broker
 ```
 
 **`make broker-deploy` startet den Pod nach dem Ausrollen neu.** Das ist Pflicht,
@@ -260,7 +260,7 @@ anlegt, aber nicht mit einem Namen versieht, kommt in dieser Liste nicht vor.
 
 - `definitions/<name>.yaml` — die Quelle der Wahrheit.
 - `versions.env` der Plattform, `BROKER_DEFINITIONS` — was ausgerollt wird.
-- `values.korifi.yaml` der Plattform, `rbac.operatorCRDs` — die Rechte.
+- `values.cfk8s.yaml` der Plattform, `rbac.operatorCRDs` — die Rechte.
 - `services/<operator>/service.env` — wie der Operator installiert wird.
 
 **Nicht** in `values-kind.yaml` des Broker-Repos: die Datei dupliziert die

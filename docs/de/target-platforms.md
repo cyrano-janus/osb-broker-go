@@ -9,13 +9,20 @@ Der Broker wird für die folgenden Systeme gebaut.
 | **Zielplattform** | produktives Cloud Foundry | wofür der Broker gebaut wird |
 | **Zielplattform** | Tanzu TAS | dito |
 | **Zielplattform** | externe Marketplaces mit OSB-Anbindung | dito |
-| **Entwicklungsplattform** | Korifi auf kind | Testgerät, kein Zielsystem |
+| **Entwicklungsplattform** | echtes Cloud Foundry auf kind | Testgerät, kein Zielsystem |
 
-**Die Unterscheidung ist nicht kosmetisch.** Mehrere Abweichungen von OSB 2.17
-bleiben auf Korifi folgenlos und sind auf produktivem Cloud Foundry oder TAS
-Blocker. Der Maßstab für „fertig" ist deshalb das Zielsystem, nicht die
-Entwicklungsplattform — und alles, was dieses Repo an Nachweisen führt, ist auf
-der Entwicklungsplattform aufgenommen.
+**Die Unterscheidung ist nicht kosmetisch, aber sie verläuft anders, als man
+denkt.** Die Entwicklungsplattform fährt `cloud_controller_ng` — dieselbe
+Software wie ein Zielsystem. Was sie über das **Protokoll** sagt, gilt deshalb
+auch dort: Katalog, Zusagen, Fehlercodes, der Update-Pfad.
+
+Was sie **nicht** sagen kann, ist alles über den Betrieb. Der Broker liegt dort
+zufällig im selben Kubernetes-Cluster wie die Plattform; auf einem Zielsystem
+läuft er getrennt ([ADR 0009](adr/0009-deployment-model.md)). Ziel-Namespace,
+Vertrauensanker und Netzweg bleiben damit offen.
+
+Wer einen Nachweis von der Entwicklungsplattform auf ein Zielsystem überträgt,
+muss sagen, in welche der beiden Hälften er fällt.
 
 ## Was auf allen Plattformen gleich ist
 
@@ -38,16 +45,17 @@ deshalb ist Konformität kein Selbstzweck, sondern das ganze Produkt.
 ## Was sich unterscheidet
 
 Die Unterschiede liegen nicht in der API, sondern drumherum — und sie sind der
-Grund, warum ein Erfolg auf Korifi noch keiner auf TAS ist.
+Grund, warum ein Erfolg auf der Entwicklungsplattform noch keiner auf TAS ist.
 
-| Thema | Korifi (Entwicklung) | produktives CF / TAS |
+| Thema | Entwicklung (CF auf kind) | produktives CF / TAS |
 |---|---|---|
-| Registrierung | `CFServiceBroker`-CR oder `cf create-service-broker` | `cf create-service-broker` |
+| Registrierung | `cf create-service-broker` | dasselbe |
 | Erreichbarkeit | clusterinterner Service-DNS-Name | der Broker muss aus dem Plattformnetz erreichbar sein — Route, Firewall, ggf. eigene App-Instanz |
-| Zertifikatsvertrauen | eigene CA, in Korifi über `SSL_CERT_DIR` eingehängt | die Plattform-Truststore-Kette; zu klären, ob eine interne CA akzeptiert wird oder ein öffentlich vertrauenswürdiges Zertifikat nötig ist |
-| Plan-Sichtbarkeit | jeder `CFServicePlan` muss einzeln auf `public` gepatcht werden | `cf enable-service-access` |
-| Managed Services | Feature-Flag `experimental.managedServices.enabled=true` nötig | Standardfunktion, kein Schalter |
+| Zertifikatsvertrauen | **wird nicht geprüft** — der Cloud Controller läuft dort mit `skip_cert_verify: true` | die Plattform-Truststore-Kette; zu klären, ob eine interne CA akzeptiert wird oder ein öffentlich vertrauenswürdiges Zertifikat nötig ist |
+| Plan-Sichtbarkeit | `cf enable-service-access` | dasselbe |
+| Ziel-Namespace | von Hand angelegt, weil der Broker ihn aus der Space-GUID ableitet | **es gibt keinen** — Spaces sind Datensätze im Cloud Controller, keine Kubernetes-Objekte |
 | Mandanten | ein kind-Cluster, ein Nutzer | echte Orgs und Spaces, echte Rechtetrennung |
+| Bauform | Broker im selben Cluster wie die Plattform | Plattform auf BOSH-VMs, Broker in einem getrennten Cluster |
 | Last | ein Entwickler, ein Service auf einmal | viele gleichzeitige Operationen |
 
 **Die Bauform steht fest:** der Broker läuft als Kubernetes-Deployment im
@@ -131,12 +139,16 @@ Anwender auf.
 
 ## Verifikationsstand
 
-**Verifiziert ist Korifi v0.18.0 auf kind.** Was dort nachgewiesen ist:
+**Verifiziert ist echtes Cloud Foundry auf kind** — `cloud_controller_ng`,
+UAA, Diego, gorouter. Was dort nachgewiesen ist:
 
 | Nachweis | Ergebnis |
 |---|---|
 | OSB-2.17-Lebenszyklus über HTTP | Integrationstest deckt catalog → provision → last_operation → bind → unbind → deprovision ab |
-| Registrierung, Marketplace, `cf create-service` | gegen Korifi auf kind |
+| Registrierung, Marketplace, `cf create-service` | gegen echtes Cloud Foundry |
+| Parameter-Update über die Plattform | `cf update-service -c` erreicht den Broker als `PATCH`, und die Ressource des Operators ändert sich wirklich |
+| Nicht zugesagter Planwechsel | der Cloud Controller lehnt selbst ab (`ServicePlanNotUpdateable`), ohne den Broker zu fragen — die plan-genaue Zusage wird also gelesen |
+| Upgrade-Pfad vollständig | ein Plan mit `maintenanceInfo` erscheint als `upgrade available`, `cf upgrade-service` löst aus, danach steht die Instanz auf dem neuen Stand |
 | Generic Engine Ende zu Ende | `cf create-service cnpg-postgresql large` erzeugt einen echten CloudNativePG-Cluster (3 Instanzen, 10Gi); `psql` im Pod antwortet, Credentials aus dem Operator-Secret |
 | Mehrteiliges Manifest Ende zu Ende | `cnpg-pgvector` legt Cluster **und** `Database` an; `status.extensions[vector].applied=true`, in der Datenbank `pg_extension` = `vector 0.8.1` auf PostgreSQL 18.6, ein `<->`-Vergleich liefert den Nachbarn |
 | Neustart-Persistenz | Instanzen und Bindings überleben Kill und Rescheduling |
@@ -176,21 +188,31 @@ nicht. Die Langfassung je Punkt steht in
 [known-issues.md](known-issues.md), die Codestellen in
 [reference/osb-api.md](reference/osb-api.md).
 
-**Was Korifi nicht prüfen kann.** `cf update-service -c '{...}'` erreicht den
-Broker über Korifi nicht: die CLI meldet Erfolg, ein `PATCH` kommt nie an. Der
-Update-Pfad ist deshalb nur direkt gegen den Broker prüfbar —
-`cmd/osb-gate` mit `--update-parameter`, in der Entwicklungsplattform als
-`make conformance`. Ebenso zeigt `cf marketplace` Korifis Katalogkopie, nicht
-den Katalog des Brokers.
+**Was die Entwicklungsplattform nicht prüfen kann.** Sie beantwortet die
+Protokollfragen und keine einzige Betriebsfrage — der Broker liegt dort im
+selben Cluster wie die Plattform. `cf marketplace` zeigt außerdem die
+Katalogkopie des Cloud Controllers, nicht den Katalog des Brokers; nur ein
+direkter `GET /v2/catalog` sagt, was der laufende Broker wirklich ausstellt.
 
-| Abweichung | auf Korifi | auf produktivem CF / TAS |
+| Abweichung | in der Entwicklung | auf produktivem CF / TAS |
 |---|---|---|
+| **Ziel-Namespace aus der Space-GUID** | der Namespace wird von Hand angelegt | **Ausschlusskriterium** — es gibt keine Namespaces je Space, jedes Provision scheitert |
+| Vertrauensanker | ungeprüft, `skip_cert_verify: true` | die Plattform prüft das Zertifikat des Brokers wirklich |
 | `seaweedfs-s3`: Readiness-Pfad nur gegen das CRD-Schema geprüft | der Operator ist nicht installiert | ein danebenliegender Pfad kostet ein Plattform-Zeitlimit je Instanz |
 
-Keine dieser Abweichungen ist ein Ausschlusskriterium. Die Punkte, die es waren,
-lagen alle in der HTTP-Schicht und sind mit ihr ersetzt worden —
-[ADR 0003](adr/0003-replace-http-layer.md). Was bleibt, sind funktionale
-Lücken und Sorgfaltsarbeit an den Definitionen.
+**Der Ziel-Namespace ist ein Ausschlusskriterium**, und er ist die einzige
+offene Frage dieser Art. Der Broker leitet den Namespace der
+Operator-Ressourcen aus der Space-GUID ab; auf einer Plattform, die keine
+Namespaces je Space anlegt, existiert er nie. Das ist keine Nachlässigkeit,
+sondern eine ungetroffene Entscheidung — fester Namespace, Namespace je
+Org oder Space vom Broker selbst angelegt, oder eine vom Betreiber gepflegte
+Zuordnung; alle drei haben Folgen für die Mandantentrennung. Die Langfassung
+steht in [known-issues.md](known-issues.md).
+
+Alle übrigen Punkte sind funktionale Lücken und Sorgfaltsarbeit an den
+Definitionen. Die Protokollschicht selbst trägt kein Ausschlusskriterium: sie
+besteht aus einer Engine und N Definitionen, ohne zweiten Pfad daneben
+([ADR 0003](adr/0003-replace-http-layer.md)).
 
 ## Was ein managed Dienst braucht und hier fehlt
 
@@ -228,23 +250,3 @@ der Operator, der den Dienst betreibt.
   ein Übergang, der gegen einen laufenden Operator belegt ist.
 - **Last und Mandantentrennung** sind keine Funktion, sondern eine
   Messung — die braucht ein Zielsystem.
-
-## Was mit Korifi passiert
-
-Korifi wird upstream archiviert. Die Cloud Foundry Foundation hat mit
-**RFC 0060** (`toc/rfc/rfc-0060-archive-cf-on-k8s-wg.md`, Status `Accepted`)
-beschlossen, die Working Group `CF on K8S` und die Korifi-Repositories zu
-archivieren; die CI ist bereits abgeschaltet.
-
-**Für dieses Projekt ist das ein Werkzeugproblem, kein Produktproblem.** Die
-Zielplattformen sind davon nicht berührt, und die einzige Kopplung an Korifi ist
-die OSB-API, die weiterlebt. Praktisch folgt daraus:
-
-- Die vorhandene Entwicklungsplattform läuft weiter, bekommt aber keine
-  Upstream-Korrekturen mehr. Die für den aktuellen Stand nötigen Artefakte sind
-  lokal gespiegelt.
-- Mittelfristig ist zu entscheiden, worauf entwickelt wird. Der RFC nennt
-  `cloudfoundry/kind-deployment` als Nachfolger — echtes Cloud Foundry auf kind,
-  was der Zielplattform näher wäre als Korifi es war.
-- Ein Wechsel der Entwicklungsplattform ändert am Broker nichts. Das ist der
-  Punkt von [ADR 0006](adr/0006-platform-independence.md).

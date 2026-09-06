@@ -22,7 +22,7 @@ type ProvisionRequest struct {
 
 	// OrganizationGUID und SpaceGUID sind die Top-Level-Felder aus OSB <= 2.12.
 	// Die Spezifikation fuehrt sie als veraltet, Cloud Foundry sendet sie aber
-	// weiter - Korifi sogar ausschliesslich, ohne context-Objekt. Wer nur
+	// weiter, und manche Plattform ausschliesslich, ohne context-Objekt. Wer nur
 	// context liest, bekommt von dort nie eine Space-GUID (FINDINGS #3).
 	OrganizationGUID string `json:"organization_guid,omitempty"`
 	SpaceGUID        string `json:"space_guid,omitempty"`

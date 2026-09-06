@@ -1034,12 +1034,12 @@ func runUpdateAudit(c *client, instanceID, serviceID, planID string) {
 // checkUpdateParameters prueft den Weg von `cf update-service -c '{...}'`:
 // ein PATCH, der nur Parameter traegt und kein plan_id.
 //
-// **Warum das eine eigene Pruefung ist.** Cloud Foundry auf Korifi - die
-// Entwicklungsplattform dieses Brokers - reicht ein `cf update-service -c`
-// ueberhaupt nicht an den Broker weiter: die CLI meldet Erfolg, ohne dass je
-// ein PATCH ankommt. Ueber die Plattform ist dieser Pfad also nicht pruefbar,
-// und ein Bruch faellt dort nicht auf. Auf einem Zielsystem faellt er auf.
-// Deshalb wird er hier direkt gegen den Broker geprueft.
+// **Warum das eine eigene Pruefung ist.** Ob ein PATCH mit Parametern und ohne
+// plan_id ankommt, entscheidet die Plattform, bevor der Broker gefragt wird -
+// es gibt Plattformen, die ihn gar nicht weiterreichen und der CLI trotzdem
+// Erfolg melden. Ueber die CLI geprueft waere dieser Pfad also ungeprueft, und
+// ein Bruch fiele erst dort auf, wo es teuer ist. Deshalb hier direkt gegen
+// den Broker.
 //
 // Zwei Zusagen, beide aus OSB 2.17:
 //

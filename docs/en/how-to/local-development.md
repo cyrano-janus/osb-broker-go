@@ -88,16 +88,17 @@ CR. That is expected behaviour, not a bug.
 ## Against real operators
 
 For that there is the development platform in the neighbouring repository
-`korifi-platform`. It builds a kind cluster with Korifi, the operators and the
-broker declaratively. It is described there; here only what matters for the
+`cfk8s-platform`. It builds a kind cluster with real Cloud Foundry, the
+operators and the broker declaratively. It is described there; here only what matters for the
 broker:
 
 ```bash
-cd ../korifi-platform
-make up                 # cluster, dependencies, Korifi, buildpacks
+cd ../cfk8s-platform
+make cf-up              # Cloud Foundry on kind
+make deps pki           # cert-manager, platform CA
 make services           # the backing service operators
 make broker             # build the image, load it into kind, roll it out via Helm
-make register           # register with Korifi
+make register           # register with Cloud Foundry
 ```
 
 The dev loop afterwards:
@@ -117,9 +118,11 @@ Two things that surprise people:
 - The broker reads the definitions **at start-up**. A definition change only
   takes effect after the pod restarts; `make broker-deploy` forces it.
 
-**Remember that Korifi is only the development platform.** What passes there is
-not yet evidence for a target system — see
-[target-platforms.md](../target-platforms.md).
+**The development platform proves the protocol, not operations.** It runs the
+same software a target system runs, but the broker sits in the same cluster as
+the platform there. What passes on catalogue, promises and the update path holds
+on TAS too; target namespace, trust anchor and network path are not proven by it
+— see [target-platforms.md](../target-platforms.md).
 
 ## The conformance suite
 
@@ -180,12 +183,14 @@ nothing and is skipped. Name a permitted key like this:
   --update-parameter storageSize=2Gi
 ```
 
-**This check exists because the development platform cannot stand in for it.**
-Korifi does not forward a `cf update-service -c` to the broker at all: the CLI
-reports "Update of service instance complete" and no `PATCH` ever arrives.
-Checked through the CLI, that path is unchecked — on a target system a breakage
-then reaches a customer first. The development platform has `make conformance`
-for it, which runs exactly this audit against the deployed broker.
+**This check exists because it tests the broker and not the interplay.**
+Through the CLI you measure both at once and, on red, do not know which of the
+two is at fault. On top of that `cf marketplace` shows the platform's catalogue
+copy, as old as the last `cf update-service-broker`, and the platform intercepts
+some things before the broker is asked — an unpromised plan change, for
+instance, the Cloud Controller refuses itself. What the broker would do then is
+only told by a direct call. The development platform has `make conformance` for
+it.
 
 ## Two checkers, two roles
 

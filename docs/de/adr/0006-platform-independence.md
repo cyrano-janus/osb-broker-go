@@ -4,6 +4,12 @@
 
 **Status:** angenommen · **Betrifft:** das gesamte Repository
 
+> **Nachtrag.** Die Entwicklungsplattform ist inzwischen echtes Cloud Foundry
+> auf kind, nicht mehr Korifi. Der Text unten nennt Korifi, weil die
+> Entscheidung dagegen getroffen wurde — er bleibt so stehen. Die Entscheidung
+> selbst hat der Wechsel bestätigt: **er kostete am Broker keine Zeile.** Was
+> heute gilt, steht in [target-platforms.md](../target-platforms.md).
+
 ## Kontext
 
 Der Broker wird für **produktives Cloud Foundry**, **Tanzu TAS** und die
@@ -65,8 +71,8 @@ Betriebsanleitung. Nicht in den Go-Code.
   es trotzdem richtig behandeln.
 - Es bleibt Arbeit, die nur ein echter Durchlauf gegen eine Zielplattform
   erledigen kann: Erreichbarkeit, Zertifikatsvertrauen, Verhalten unter Last.
-  Verifiziert ist bisher **ausschließlich** Korifi auf kind, und das gehört so
-  gesagt — siehe [target-platforms.md](../target-platforms.md).
+  Was verifiziert ist und was nicht, gehört benannt — siehe
+  [target-platforms.md](../target-platforms.md).
 
 ## Abgrenzung
 

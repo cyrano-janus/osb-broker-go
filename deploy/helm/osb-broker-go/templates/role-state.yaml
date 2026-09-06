@@ -5,7 +5,7 @@
 # was in der Praxis nicht funktionierte: Kubernetes wertet resourceNames bei
 # `create` nicht aus, weil der Name zum Zeitpunkt der Autorisierung noch nicht
 # feststeht. Der Broker brauchte deshalb eine zusaetzliche, breitere Role
-# ausserhalb des Charts (korifi-platform, FINDINGS #1).
+# ausserhalb des Charts (cfk8s-platform, FINDINGS #1).
 #
 # Mit einem Objekt je Datensatz entfaellt das Problem: die Rechte gelten fuer
 # eine eigene Ressourcenart, nicht fuer ein einzelnes Objekt einer geteilten.

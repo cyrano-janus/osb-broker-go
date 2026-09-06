@@ -4,6 +4,12 @@
 
 **Status:** accepted · **Affects:** the entire repository
 
+> **Addendum.** The development platform is now real Cloud Foundry on kind, no
+> longer Korifi. The text below names Korifi because the decision was taken
+> against it — it stands as written. The switch confirmed the decision itself:
+> **it cost not one line in the broker.** What holds today is in
+> [target-platforms.md](../target-platforms.md).
+
 ## Context
 
 The broker is built for **production Cloud Foundry**, **Tanzu TAS** and
@@ -64,8 +70,8 @@ instructions. Not in the Go code.
 - Convenient shortcuts are unavailable. Where Korifi ignores a field, the broker
   still has to handle it correctly.
 - Work remains that only a real run against a target platform can do:
-  reachability, certificate trust, behaviour under load. Only Korifi on kind has
-  been verified so far, and that has to be said plainly — see
+  reachability, certificate trust, behaviour under load. What is verified and
+  what is not has to be named plainly — see
   [target-platforms.md](../target-platforms.md).
 
 ## Scope of this decision

@@ -11,7 +11,7 @@ Most failures that look like a Cloud Foundry problem are not one. Ask the broker
 directly:
 
 ```bash
-cd ../korifi-platform && make broker-catalog
+cd ../cfk8s-platform && make broker-catalog
 ```
 
 The script pulls the CA from the TLS secret and the credentials from the auth
@@ -149,7 +149,7 @@ left standing would not be recognisable as a fault.
 The development platform has two tools of its own:
 
 ```bash
-cd ../korifi-platform
+cd ../cfk8s-platform
 make status      # current state at a glance
 make doctor      # diagnosis when status shows something red
 ```

@@ -9,14 +9,14 @@ import (
 )
 
 // FINDINGS #3: Der Broker las Space und Org ausschliesslich aus dem
-// verschachtelten context-Objekt, Korifi sendet sie ausschliesslich als
+// verschachtelten context-Objekt, manche Plattform ausschliesslich als
 // Top-Level-Felder. Beides ist OSB-konform - die Spezifikation kennt beide
 // Varianten, Top-Level gilt als veraltet, wird von Cloud Foundry aber weiter
 // gesendet. Die zwei Implementierungen hatten sich fuer verschiedene Haelften
 // entschieden, und deshalb kam die Space-GUID nie an.
 
 func TestProvisionRequest_TopLevelFelderWerdenGelesen(t *testing.T) {
-	// Genau das schickt Korifi: kein context-Objekt, nur Top-Level.
+	// Der belegte Fall (FINDINGS #3): kein context-Objekt, nur Top-Level.
 	var req ProvisionRequest
 	require.NoError(t, json.Unmarshal([]byte(`{
 		"service_id": "svc-1",

@@ -1,6 +1,6 @@
-# Phase 2.6: Der Broker darf in ALLEN Namespaces cnpg-Cluster verwalten
-# (Korifi legt pro Space einen Namespace an). Bewusst nur auf die
-# operator-spezifischen Ressourcen beschränkt.
+# Der Broker darf in ALLEN Namespaces cnpg-Cluster verwalten: in welchem
+# Namespace die Ressourcen einer Instanz landen, entscheidet sich erst zur
+# Laufzeit. Bewusst nur auf die operator-spezifischen Ressourcen beschränkt.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:

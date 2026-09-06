@@ -261,7 +261,7 @@ func TestDocsSync_JedesDokumentVerweistAufDieGegensprache(t *testing.T) {
 // das Protokoll ihrer Entstehung. Ein neuer Leser muss sonst erst lernen, zu
 // unterscheiden, was gilt und was einmal galt - und genau das ist die Arbeit,
 // die ihm die Doku abnehmen soll. Die Historie steht vollstaendig in `git log`
-// und in korifi-platform/FINDINGS.md.
+// und in cfk8s-platform/FINDINGS.md.
 //
 // Diese Liste verbietet die Wendungen, mit denen sich Chronologie
 // einschleicht. Sie ist bewusst eng: nur Formulierungen, die ohne Ausnahme

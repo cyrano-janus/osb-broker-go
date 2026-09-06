@@ -48,14 +48,18 @@ bestehender Instanzen — steht ungeschönt in
 | **Zielplattform** | produktives Cloud Foundry |
 | **Zielplattform** | Tanzu TAS |
 | **Zielplattform** | externe Marketplaces mit OSB-Anbindung |
-| **Entwicklungsplattform** | Korifi auf kind — Testgerät, kein Zielsystem |
+| **Entwicklungsplattform** | echtes Cloud Foundry auf kind — Testgerät, kein Zielsystem |
 
-Geprüft ist der Broker gegen Korifi v0.18.0 auf kind, also gegen die
-Entwicklungsplattform; gegen produktives Cloud Foundry, TAS oder einen externen
-Marketplace gibt es keinen Durchlauf. Mehrere bekannte Abweichungen von OSB 2.17
-bleiben auf der Entwicklungsplattform folgenlos und sind auf einem Zielsystem
-Blocker. Die Nachweise im Einzelnen und was daraus folgt:
-[docs/de/target-platforms.md](docs/de/target-platforms.md).
+Geprüft ist der Broker gegen echtes Cloud Foundry auf kind — dieselbe Software
+(`cloud_controller_ng`), die ein Zielsystem fährt. Was dort über das
+**Protokoll** belegt ist, gilt auch auf TAS.
+
+Über den **Betrieb** sagt das nichts: der Broker liegt dort im selben Cluster
+wie die Plattform, auf einem Zielsystem läuft er getrennt. Ziel-Namespace,
+Vertrauensanker und Netzweg sind offen, und der Ziel-Namespace ist ein
+Ausschlusskriterium — Cloud Foundry legt keinen Kubernetes-Namespace je Space
+an, der Broker leitet ihn aber daraus ab. Die Nachweise im Einzelnen und was
+daraus folgt: [docs/de/target-platforms.md](docs/de/target-platforms.md).
 
 ## Der Ansatz
 
@@ -92,14 +96,15 @@ curl -s -u dev:dev -H 'X-Broker-API-Version: 2.17' \
 ```
 
 Mit Cluster, gegen echte Operatoren — die Entwicklungsplattform im Nachbarrepo
-`korifi-platform` baut alles Nötige deklarativ auf:
+`cfk8s-platform` baut alles Nötige deklarativ auf:
 
 ```bash
-cd ../korifi-platform
-make up          # Cluster, Abhaengigkeiten, Korifi, Buildpacks
+cd ../cfk8s-platform
+make cf-up       # Cloud Foundry auf kind
+make deps pki    # cert-manager, Plattform-CA
 make services    # Backing-Service-Operatoren
 make broker      # Image bauen, in kind laden, per Helm ausrollen
-make register    # bei Korifi registrieren
+make register    # bei Cloud Foundry registrieren
 
 cf marketplace
 cf create-service cnpg-postgresql small meine-db

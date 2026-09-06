@@ -97,7 +97,7 @@ func TestAsync_LastOperationFindetDenServiceAuchOhneQuery(t *testing.T) {
 }
 
 func TestAsync_LastOperationEinerUnbekanntenIst410(t *testing.T) {
-	// Daran erkennt die Plattform, dass ein Deprovision durch ist: Korifi
+	// Daran erkennt die Plattform, dass ein Deprovision durch ist: sie
 	// liest 410 als Abschluss.
 	router, _ := newDefinitionRouter(t)
 

@@ -4,7 +4,7 @@
 # TLS/mTLS werden bewusst NICHT hier gepflegt, sondern ausschließlich über
 # das Helm-Chart (deploy/helm/osb-broker-go, tls.* und auth.mtls.*): ein
 # zweiter, handgepflegter TLS-Manifestsatz würde nur vom Chart wegdriften.
-# Für den Betrieb - und für die Korifi-Registrierung über https:// - ist das
+# Für den Betrieb - und für eine Registrierung über https:// - ist das
 # Chart der Weg.
 apiVersion: v1
 kind: Namespace

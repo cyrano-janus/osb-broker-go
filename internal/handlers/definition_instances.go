@@ -50,7 +50,17 @@ func ValidatePlanParamsForService(h *Handlers, serviceID, planID string, paramet
 const defaultNamespace = "default"
 
 // targetNamespace bildet den Cloud-Foundry-Space auf einen Namespace ab.
-// Korifi legt seine Space-Namespaces genau unter der Space-GUID an.
+//
+// **Die Abbildung ist eine Annahme, und sie traegt nicht ueberall.** Sie geht
+// auf, wenn die Plattform je Space einen Kubernetes-Namespace mit der
+// Space-GUID als Namen anlegt. Cloud Foundry tut das NICHT - dort sind Spaces
+// Datensaetze im Cloud Controller, keine Kubernetes-Objekte, und jedes
+// Provision endet mit `namespaces "<space-guid>" not found`.
+//
+// Welche Abbildung stattdessen gilt, ist eine offene Entscheidung mit Folgen
+// fuer die Mandantentrennung: ein fester Namespace, einer je Org oder Space vom
+// Broker selbst angelegt, oder eine vom Betreiber gepflegte Zuordnung. Die
+// Langfassung steht in docs/de/known-issues.md.
 func targetNamespace(ctx broker.Context) string {
 	if ctx.SpaceGUID != "" {
 		return ctx.SpaceGUID
