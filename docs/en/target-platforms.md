@@ -192,7 +192,6 @@ what the running broker really offers.
 
 | Deviation | in development | on production CF / TAS |
 |---|---|---|
-| **Target namespace from the space GUID** | the namespace is created by hand | **exclusion criterion** — there are no namespaces per space, every provision fails |
 | Trust anchor | unchecked, `skip_cert_verify: true` | the platform really validates the broker's certificate |
 
 **The target namespace is an exclusion criterion**, and it is the only open
@@ -222,7 +221,7 @@ weighs more for an operator than a fourth service in the marketplace.
 | **Deletion protection** | ✅ `retainOnDeprovision` per plan; the instance is given up, the data stays and carries `osb.io/retained-instance` |
 | **Inventory** | ✅ `osb_active_instances{service_id,plan_id}` — which offering is used how often |
 | **Findability in a marketplace** | ✅ `metadata` per offering and plan, `free`, `maximum_polling_duration`, `instances_retrievable`, `bindings_retrievable` — and `catalog-promises` holds every promise against the behaviour |
-| **Plan change** | open, and deliberately so: the broker can do it, promises it for no definition and refuses it with `422`. It is only safe in one direction — CloudNativePG grows storage and cannot shrink it — and a catalogue flag knows no direction |
+| **Plan change** | built, promised for no definition. The promise sits on each plan and applies to the plan an instance *leaves* — that is where the direction is. What is missing is a transition proven against a running operator |
 | **Backup and restore** | open. CloudNativePG can do it (`Backup`, `ScheduledBackup`, Barman) — the broker offers it neither as a plan attribute nor as a service key |
 | **Point-in-time recovery on provision** | open; an instance is always created empty |
 | **Upgrades of existing instances** | ✅ a per-plan `maintenanceInfo`: the catalogue names the state, the instance carries the applied one, `cf upgrade-service` triggers it. The owner decides; the broker changes nothing unasked |

@@ -196,18 +196,13 @@ direkter `GET /v2/catalog` sagt, was der laufende Broker wirklich ausstellt.
 
 | Abweichung | in der Entwicklung | auf produktivem CF / TAS |
 |---|---|---|
-| **Ziel-Namespace aus der Space-GUID** | der Namespace wird von Hand angelegt | **Ausschlusskriterium** — es gibt keine Namespaces je Space, jedes Provision scheitert |
 | Vertrauensanker | ungeprüft, `skip_cert_verify: true` | die Plattform prüft das Zertifikat des Brokers wirklich |
 
-**Der Ziel-Namespace ist ein Ausschlusskriterium**, und er ist die einzige
-offene Frage dieser Art. Der Broker leitet den Namespace der
-Operator-Ressourcen aus der Space-GUID ab; auf einer Plattform, die keine
-Namespaces je Space anlegt, existiert er nie. Das ist keine Nachlässigkeit,
-sondern eine Entscheidung, die als [ADR 0010](adr/0010-instance-namespace.md)
-zur Annahme bereitliegt: der Betreiber konfiguriert die Abbildung, die Vorgabe
-ist ein fester Namespace, und der Broker legt keinen an, solange es ihm niemand
-erlaubt. Gebaut ist davon nichts. Die Langfassung steht in
-[known-issues.md](known-issues.md).
+**Der Ziel-Namespace kommt aus der Konfiguration**
+([ADR 0010](adr/0010-instance-namespace.md)): der Betreiber gibt ein Template
+über den Provision-Kontext vor, die Vorgabe ist ein fester Namespace, und der
+Broker legt keinen an, solange es ihm niemand erlaubt. Damit trägt der Broker
+keine Annahme mehr darüber, was die Plattform an Kubernetes-Objekten anlegt.
 
 Alle übrigen Punkte sind funktionale Lücken und Sorgfaltsarbeit an den
 Definitionen. Die Protokollschicht selbst trägt kein Ausschlusskriterium: sie
@@ -227,7 +222,7 @@ Punkt wiegt für einen Betreiber schwerer als ein vierter Dienst im Marketplace.
 | **Löschschutz** | ✅ `retainOnDeprovision` je Plan; die Instanz wird aufgegeben, die Daten bleiben und tragen `osb.io/retained-instance` |
 | **Bestandsübersicht** | ✅ `osb_active_instances{service_id,plan_id}` — welches Angebot wie oft genutzt wird |
 | **Auffindbarkeit im Marktplatz** | ✅ `metadata` je Angebot und Plan, `free`, `maximum_polling_duration`, `instances_retrievable`, `bindings_retrievable` — und `catalog-promises` hält jede Zusage gegen das Verhalten |
-| **Planwechsel** | offen, und zwar bewusst: der Broker kann ihn, sagt ihn aber für keine Definition zu und lehnt ihn mit `422` ab. Er ist nur in eine Richtung sicher — CloudNativePG lässt Speicher wachsen, nicht schrumpfen —, und ein Katalogflag kennt keine Richtung |
+| **Planwechsel** | gebaut, für keine Definition zugesagt. Die Zusage steht je Plan und gilt dem Plan, den eine Instanz *verlässt* — darin liegt die Richtung. Was fehlt, ist ein Übergang, der gegen einen laufenden Operator belegt ist |
 | **Sicherung und Wiederherstellung** | offen. CloudNativePG kann es (`Backup`, `ScheduledBackup`, Barman) — der Broker bietet es weder als Planmerkmal noch als Service-Key an |
 | **Point-in-Time-Recovery beim Provision** | offen; eine Instanz entsteht immer leer |
 | **Upgrades bestehender Instanzen** | ✅ `maintenanceInfo` je Plan: der Katalog nennt den Stand, die Instanz trägt den angewendeten, `cf upgrade-service` löst aus. Der Besitzer entscheidet, der Broker ändert nichts ungefragt |
