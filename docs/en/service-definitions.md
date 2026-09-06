@@ -591,51 +591,28 @@ developer can do nothing with it.
 catalogue as a plan schema; put the ceiling in the `bullets` too and a human
 sees it before running into it.
 
-## Reconciling existing instances
+## An instance's state against its plan
 
 The broker reads the definitions **at start-up**. A changed definition therefore
-only reaches new instances by itself: raise plan `small` from 1Gi to 2Gi and the
-next instance gets it while the running ones stay put. After a few changes
-"which state is this customer on" can only be answered by looking in the
-cluster.
+touches only new instances on its own: raising plan `small` from 1Gi to 2Gi
+raises it for the next instance and leaves the running ones alone.
 
-`RECONCILE_INTERVAL` turns the reconciler on. It holds every stored record
-against the definition that applies now: it renders from the **stored plan** and
-the **stored user parameters**, and writes only on a real difference — a no-op
-write bumps `resourceVersion` and wakes the operator for nothing.
+**The path for the running ones is [`maintenanceInfo`](#maintenanceinfo--offering-a-new-state-instead-of-imposing-it)**, not a timer inside
+the broker. Whoever changes the plan raises its state; the platform marks
+instances on an older state `upgrade available`, and their owner triggers the
+upgrade. The broker then re-renders inside a request — with `last_operation`,
+with an error somebody sees, and on a decision somebody made.
 
-### What it deliberately does not do
+**The broker has no timer.** Nothing changes an existing instance without a
+request. A loop that periodically drags the inventory along would be a
+controller's work, not a broker's — what happens when nobody asks belongs on the
+operator's side. And it would be invisible to an instance's owner: it would
+change while they neither saw nor wanted it.
 
-This is the more important part. A reconciler that tidies up is more dangerous
-than none at all.
+### A plan change is not an upgrade
 
-| Situation | What it does |
-|---|---|
-| The definition is gone from the directory | **reports it and touches nothing.** Deleting would cost a customer's database over a typo in a filename |
-| The plan no longer exists in the definition | the same |
-| The instance's resources are gone, the record is there | **creates nothing.** A freshly created database is empty and looks healthy; a visible gap beats a silent data loss that looks like success |
-| The record carries no namespace | skipped — rendering into the fallback namespace would mean writing into the wrong space |
-| The operator rejects the change | counted and logged, with the instance ID |
-
-A failure does **not** abort the run. If it did, one orphaned instance would
-hold up every upgrade of all the others, and nobody would see why.
-
-### How you tell it is running
-
-| Metric | What for |
-|---|---|
-| `osb_reconcile_last_run_timestamp_seconds` | if it stops moving, the reconciler stopped. **This is where the alert belongs.** |
-| `osb_reconcile_unresolvable_instances` | records with no definition, plan or namespace |
-| `osb_reconcile_missing_objects` | records whose resources are gone |
-| `osb_reconcile_instances_total{outcome}` | `up-to-date`, `applied`, `unresolvable`, `objects-missing`, `failed` |
-| `osb_reconcile_runs_total{result}` | `ok` or `error`; `error` means the run could not take place at all |
-
-The two gauges are gauges and not counters because the question is "how many are
-there right now": after cleanup they have to fall.
-
-### The plan change stays out
-
-Switching to another plan is not the reconciler's business. It is only safe in
+Switching to another plan is something else than a new state of the same plan.
+It is only safe in
 one direction — CloudNativePG grows storage and cannot shrink it — and that
 direction belongs on the plan, not in a loop: a per-plan `planUpdateable` says
 which plan may be left. As long as no shipped definition promises it, the broker

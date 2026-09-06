@@ -208,7 +208,7 @@ Punkt wiegt für einen Betreiber schwerer als ein vierter Dienst im Marketplace.
 | **Planwechsel** | offen, und zwar bewusst: der Broker kann ihn, sagt ihn aber für keine Definition zu und lehnt ihn mit `422` ab. Er ist nur in eine Richtung sicher — CloudNativePG lässt Speicher wachsen, nicht schrumpfen —, und ein Katalogflag kennt keine Richtung |
 | **Sicherung und Wiederherstellung** | offen. CloudNativePG kann es (`Backup`, `ScheduledBackup`, Barman) — der Broker bietet es weder als Planmerkmal noch als Service-Key an |
 | **Point-in-Time-Recovery beim Provision** | offen; eine Instanz entsteht immer leer |
-| **Upgrades bestehender Instanzen** | ✅ `RECONCILE_INTERVAL` gleicht bestehende Instanzen gegen die geladenen Definitionen ab; er löscht nie und legt nie an |
+| **Upgrades bestehender Instanzen** | ✅ `maintenanceInfo` je Plan: der Katalog nennt den Stand, die Instanz trägt den angewendeten, `cf upgrade-service` löst aus. Der Besitzer entscheidet, der Broker ändert nichts ungefragt |
 | **Verhalten unter Last, echte Mandantentrennung** | ungeprüft — siehe Verifikationsstand |
 
 **Was der Broker bewusst nicht misst: die Gesundheit der Dienste.** Ein Broker,
@@ -223,8 +223,9 @@ der Operator, der den Dienst betreibt.
   wohin Sicherungen gehen und wer sie verwaltet; die Broker-Seite ist ohne
   diese Antwort nicht sinnvoll zu entwerfen.
 - **Der Planwechsel** hängt **nicht** daran. Er ist nur in eine Richtung
-  sicher, und ein Katalogflag kennt keine Richtung; der Abgleich könnte den
-  Übergang prüfen, bevor er ihn anwendet.
+  sicher, und die Zusage dafür steht je Plan: `planUpdateable` gilt dem Plan,
+  den eine Instanz *verlässt*. Was fehlt, ist nicht der Mechanismus, sondern
+  ein Übergang, der gegen einen laufenden Operator belegt ist.
 - **Last und Mandantentrennung** sind keine Funktion, sondern eine
   Messung — die braucht ein Zielsystem.
 

@@ -600,53 +600,29 @@ Wartung übernimmt. Der Name des Erweiterungsimages gehört nicht hinein — er
 Plan-Schema im Katalog; steht die Obergrenze zusätzlich in den `bullets`, sieht
 sie ein Mensch, bevor er sie überschreitet.
 
-## Der Abgleich bestehender Instanzen
+## Der Stand einer Instanz gegenüber ihrem Plan
 
 Der Broker liest die Definitionen **beim Start**. Eine geänderte Definition
 fasst deshalb von sich aus nur neue Instanzen an: wer den Plan `small` von 1Gi
 auf 2Gi hebt, hebt ihn für die nächste Instanz und lässt die laufenden stehen.
-Nach ein paar Änderungen ist „welchen Stand hat dieser Kunde" nur noch durch
-Nachsehen im Cluster zu beantworten.
 
-`RECONCILE_INTERVAL` schaltet den Abgleich ein. Er legt jeden gespeicherten
-Datensatz gegen die Definition, die jetzt gilt: gerendert wird aus dem
-**gespeicherten Plan** und den **gespeicherten Benutzerparametern**, und
-geschrieben wird nur bei echter Abweichung — ein No-op-Write erhöht die
-`resourceVersion` und weckt den Operator ohne Grund.
+**Der Weg für die laufenden ist [`maintenanceInfo`](#maintenanceinfo--einen-neuen-stand-anbieten-statt-ihn-zu-verhängen)**, nicht ein Zeitgeber
+im Broker. Wer den Plan ändert, hebt seinen Stand; die Plattform zeigt den
+Instanzen mit älterem Stand `upgrade available`, und ihr Besitzer löst das
+Upgrade aus. Der Broker rendert dann in einem Request neu — mit
+`last_operation`, mit einem Fehler, den jemand sieht, und mit einer
+Entscheidung, die jemand getroffen hat.
 
-### Was er ausdrücklich nicht tut
+**Der Broker kennt keinen Zeitgeber.** Nichts ändert eine bestehende Instanz
+ohne einen Request. Eine Schleife, die den Bestand periodisch nachzieht, wäre
+Arbeit eines Controllers, nicht eines Brokers — was auch dann passiert, wenn
+niemand fragt, gehört auf die Seite des Operators. Und sie wäre dem Besitzer
+einer Instanz unsichtbar: sie änderte sich, ohne dass er es sähe oder wollte.
 
-Das ist der wichtigere Teil. Ein Abgleich, der aufräumt, ist gefährlicher als
-gar keiner.
+### Der Planwechsel ist kein Upgrade
 
-| Lage | Was er tut |
-|---|---|
-| Die Definition ist aus dem Verzeichnis verschwunden | **meldet und rührt nichts an.** Löschen kostete bei einem Tippfehler im Dateinamen die Datenbank eines Kunden |
-| Der Plan gibt es in der Definition nicht mehr | dasselbe |
-| Die Ressourcen der Instanz sind weg, der Datensatz ist da | **legt nichts an.** Eine neu erzeugte Datenbank ist leer und sieht gesund aus; ein sichtbares Loch ist besser als ein stiller Datenverlust, der wie Erfolg aussieht |
-| Der Datensatz trägt keinen Namespace | übersprungen — im Rückfall-Namespace zu rendern hieße, im falschen Space zu schreiben |
-| Der Operator lehnt die Änderung ab | gezählt und protokolliert, mit Instanz-ID |
-
-Ein Fehlschlag bricht den Durchlauf **nicht** ab. Täte er es, hielte eine
-einzige verwaiste Instanz jedes Upgrade aller anderen auf, und niemand sähe
-warum.
-
-### Woran man sieht, dass er läuft
-
-| Metrik | Wofür |
-|---|---|
-| `osb_reconcile_last_run_timestamp_seconds` | bleibt sie stehen, läuft er nicht mehr. **Hier gehört der Alarm hin.** |
-| `osb_reconcile_unresolvable_instances` | Datensätze ohne Definition, Plan oder Namespace |
-| `osb_reconcile_missing_objects` | Datensätze, deren Ressourcen weg sind |
-| `osb_reconcile_instances_total{outcome}` | `up-to-date`, `applied`, `unresolvable`, `objects-missing`, `failed` |
-| `osb_reconcile_runs_total{result}` | `ok` oder `error`; `error` heißt, der Durchlauf konnte gar nicht stattfinden |
-
-Die beiden Gauges sind Gauges und keine Zähler, weil die Frage „wie viele sind
-es gerade" lautet: nach dem Aufräumen müssen sie fallen.
-
-### Der Planwechsel bleibt außen vor
-
-Ein Wechsel auf einen anderen Plan ist keine Sache des Abgleichs. Er ist nur in
+Ein Wechsel auf einen anderen Plan ist etwas anderes als ein neuer Stand
+desselben Plans. Er ist nur in
 eine Richtung sicher — CloudNativePG lässt Speicher wachsen und nicht
 schrumpfen —, und diese Richtung gehört an den Plan, nicht in eine Schleife:
 `planUpdateable` je Plan sagt zu, welcher Plan verlassen werden darf. Solange

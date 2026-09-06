@@ -79,18 +79,17 @@ closer to the target platform than Korifi. Classification in
    [ADR 0008](adr/0008-depth-over-breadth.md) the effort goes there rather than
    into further catalogue entries.
 
-   **There are two upgrade paths, and one of them has to go.**
-   `maintenanceInfo` per plan is built: the catalogue names the state, the
-   instance remembers the one applied, `cf services` shows the difference as
-   `upgrade available`, `cf upgrade-service` triggers it, and a stale state is
-   `422 MaintenanceInfoConflict`. The broker therefore **offers** rather than
-   imposes.
+   **Upgrades go through the protocol.** `maintenanceInfo` per plan: the
+   catalogue names the state, the instance remembers the one applied,
+   `cf services` shows the difference as `upgrade available`,
+   `cf upgrade-service` triggers it, and a stale state is
+   `422 MaintenanceInfoConflict`. The broker **offers** rather than imposes, and
+   changes no instance without a request.
 
-   Alongside it `RECONCILE_INTERVAL` still runs — a loop that drags existing
-   instances along without being asked. That is the state the dividing line
-   rules out: what happens when nobody asks is the operator's work, not the
-   broker's. The loop is to be replaced by the protocol path; until then both
-   exist.
+   **What falls away with it is an observation.** A periodic run also reported
+   records without a definition and resources that had vanished. Those numbers
+   are gone; a one-shot check on demand would be the way to get them back
+   without getting the timer back.
 
    **No shipped definition names a state.** Without `maintenanceInfo` on a plan
    there is nothing to compare, and `cf services` never shows an upgrade. A state

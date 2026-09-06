@@ -79,18 +79,17 @@ Zielplattform näher wäre als Korifi. Einordnung in
    [ADR 0008](adr/0008-depth-over-breadth.md) geht die Arbeit dorthin und nicht
    in weitere Katalogeinträge.
 
-   **Upgrades gibt es zweimal, und einer der beiden Wege muss weg.**
-   `maintenanceInfo` je Plan ist gebaut: der Katalog nennt den Stand, die
-   Instanz merkt sich den angewendeten, `cf services` zeigt die Differenz als
-   `upgrade available`, `cf upgrade-service` löst aus, und ein veralteter Stand
-   ist `422 MaintenanceInfoConflict`. Damit **bietet** der Broker an, statt zu
-   verhängen.
+   **Upgrades gehen über das Protokoll.** `maintenanceInfo` je Plan: der
+   Katalog nennt den Stand, die Instanz merkt sich den angewendeten,
+   `cf services` zeigt die Differenz als `upgrade available`,
+   `cf upgrade-service` löst aus, und ein veralteter Stand ist
+   `422 MaintenanceInfoConflict`. Der Broker **bietet an**, statt zu verhängen,
+   und ändert keine Instanz ohne Request.
 
-   Daneben läuft weiterhin `RECONCILE_INTERVAL` — eine Schleife, die bestehende
-   Instanzen ohne Frage nachzieht. Das ist der Zustand, den der Trennstrich
-   ausschließt: was auch dann passiert, wenn niemand fragt, ist Arbeit des
-   Operators, nicht des Brokers. Die Schleife wird durch den Protokollweg
-   ersetzt; bis dahin sind beide Wege da.
+   **Was dabei entfällt, ist eine Beobachtung.** Ein periodischer Durchlauf
+   meldete auch Datensätze ohne Definition und Ressourcen, die verschwunden
+   sind. Diese Zahlen gibt es nicht mehr; ein einmaliger Prüflauf auf Abruf
+   wäre der Weg, sie zurückzuholen, ohne den Zeitgeber zurückzuholen.
 
    **Keine ausgelieferte Definition nennt einen Stand.** Ohne `maintenanceInfo`
    im Plan gibt es nichts zu vergleichen, und `cf services` zeigt nie ein

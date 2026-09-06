@@ -28,7 +28,7 @@ does not lose its data to a keystroke (`retainOnDeprovision`), and the
 inventory is broken down by offering and plan.
 
 **A changed definition reaches existing instances too.** The broker reads
-definitions at start-up; `RECONCILE_INTERVAL` reconciles the running ones
+definitions at start-up; a per-plan `maintenanceInfo` offers running ones
 against them periodically. It never deletes and never creates — what it cannot
 resolve it reports rather than tidies away.
 

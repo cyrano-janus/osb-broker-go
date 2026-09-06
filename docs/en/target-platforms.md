@@ -204,7 +204,7 @@ weighs more for an operator than a fourth service in the marketplace.
 | **Plan change** | open, and deliberately so: the broker can do it, promises it for no definition and refuses it with `422`. It is only safe in one direction — CloudNativePG grows storage and cannot shrink it — and a catalogue flag knows no direction |
 | **Backup and restore** | open. CloudNativePG can do it (`Backup`, `ScheduledBackup`, Barman) — the broker offers it neither as a plan attribute nor as a service key |
 | **Point-in-time recovery on provision** | open; an instance is always created empty |
-| **Upgrades of existing instances** | ✅ `RECONCILE_INTERVAL` reconciles existing instances against the loaded definitions; it never deletes and never creates |
+| **Upgrades of existing instances** | ✅ a per-plan `maintenanceInfo`: the catalogue names the state, the instance carries the applied one, `cf upgrade-service` triggers it. The owner decides; the broker changes nothing unasked |
 | **Behaviour under load, real multi-tenancy** | unverified — see the state of verification |
 
 **What the broker deliberately does not measure: the health of the services.**
@@ -220,8 +220,9 @@ thing:
   decided where backups go and who administers them; the broker side cannot be
   sensibly designed without that answer.
 - **The plan change** does **not** depend on it. It is only safe in one
-  direction and a catalogue flag knows no direction; the reconciler could check
-  the transition before applying it.
+  direction, and the promise for it sits on each plan: `planUpdateable` applies
+  to the plan an instance *leaves*. What is missing is not the mechanism but a
+  transition proven against a running operator.
 - **Load and multi-tenancy** are not a feature but a measurement — that needs a
   target system.
 
