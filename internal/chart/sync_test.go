@@ -268,6 +268,60 @@ func chartRBACGroups(t *testing.T) map[string]bool {
 	return out
 }
 
+// fromStatusGruppen liest, welche Arten eine Definition beim BIND liest.
+//
+// **Das ist eine zweite Quelle fuer Rechte, und sie wurde uebersehen.**
+// spec.bind.fromStatus holt Werte aus dem Status anderer Objekte - etwa die
+// externe Adresse eines Service. Ohne Leserecht darauf scheitert nicht das
+// Provision, sondern der BIND, und zwar erst dann, wenn ein Kunde ihn aufruft.
+func fromStatusGruppen(t *testing.T) map[string]string {
+	t.Helper()
+	out := map[string]string{}
+	eintraege, err := os.ReadDir(filepath.Join(repoRoot, "definitions"))
+	require.NoError(t, err)
+	for _, e := range eintraege {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
+			continue
+		}
+		var d struct {
+			Spec struct {
+				Bind struct {
+					FromStatus []struct {
+						APIVersion string `yaml:"apiVersion"`
+					} `yaml:"fromStatus"`
+				} `yaml:"bind"`
+			} `yaml:"spec"`
+		}
+		require.NoError(t, yaml.Unmarshal([]byte(read(t,
+			filepath.Join("definitions", e.Name()))), &d))
+		for _, q := range d.Spec.Bind.FromStatus {
+			gruppe := ""
+			if i := strings.Index(q.APIVersion, "/"); i >= 0 {
+				gruppe = q.APIVersion[:i]
+			}
+			// Die Kerngruppe heisst "" - sie deckt Service, Secret und
+			// dergleichen ab und steht nicht als eigener Eintrag in
+			// operatorCRDs.
+			if gruppe == "" {
+				continue
+			}
+			out[gruppe] = e.Name()
+		}
+	}
+	return out
+}
+
+// Was eine Definition beim Bind liest, braucht ebenfalls ein Recht.
+func TestChart_RBACDecktAuchDieBindQuellenAb(t *testing.T) {
+	granted := chartRBACGroups(t)
+
+	for group, def := range fromStatusGruppen(t) {
+		assert.True(t, granted[group],
+			"rbac.operatorCRDs deckt %q nicht ab (von %s in spec.bind.fromStatus gelesen) - "+
+				"der Bind waere 403, und zwar erst beim Kunden", group, def)
+	}
+}
+
 // Eine Definition, deren CRD-Gruppe nicht in rbac.operatorCRDs steht, laesst
 // sich ausliefern und scheitert beim Provision mit 403 - also erst beim
 // Kunden.
@@ -284,6 +338,11 @@ func TestChart_RBACDecktJedeAusgelieferteDefinitionAb(t *testing.T) {
 // mitgelieferte Definition anfasst, ist ein Recht zu viel.
 func TestChart_RBACGewaehrtNichtsUeberfluessiges(t *testing.T) {
 	needed := provisionGroups(t)
+	// Auch die Bind-Quellen zaehlen als Nutzung - sonst meldet dieser Waechter
+	// ein Recht als ueberfluessig, das der Bind braucht.
+	for g, d := range fromStatusGruppen(t) {
+		needed[g] = d
+	}
 
 	for group := range chartRBACGroups(t) {
 		_, used := needed[group]

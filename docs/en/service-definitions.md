@@ -444,6 +444,7 @@ kubectl get crd <plural>.<group> -o json | \
 | `mapping` | no | Shapes the result. **Replaces, does not extend.** |
 | `projectSecret` | no | Additionally write the credentials as a spec-conformant secret into the target namespace. |
 | `extraLabels` | no | Extra labels, **only** on the projected secret. |
+| `fromStatus` | no | **Values from the status of other objects.** Requires `mapping`. See below. |
 
 **Without `mapping` everything ends up in the binding.** Every key of the
 operator's secret is passed through — configuration files included. With the
@@ -454,6 +455,66 @@ through all original keys makes the result unpredictable and defeats the purpose
 
 `type` and `provider` are set **after** the mapping. A mapping entry named
 `type` therefore cannot silently override the value from the definition.
+
+### `fromStatus` — when the address is not in the secret
+
+The operator writes into its secret what is valid **inside** the cluster.
+CloudNativePG puts the bare service name there, `osb-…-rw`. A Cloud Foundry
+application runs isolated from that and never reaches the address — the whole
+lifecycle is green and the binding is worthless anyway.
+
+The address that counts is then in **another object's status**: the external
+address of a `LoadBalancer` Service that the same template creates as a second
+document.
+
+```yaml
+bind:
+  credentialsFromSecret: "{{ .safeName }}-app"
+  fromStatus:
+    - name: externalHost
+      apiVersion: v1
+      kind: Service
+      objectName: "{{ .safeName }}-external"   # empty = the provisioned CR
+      jsonPath: 'status.loadBalancer.ingress.0.ip'
+  mapping:
+    - name: username
+      from: username
+    - name: host
+      value: "{{ .fromStatus.externalHost }}"
+    - name: uri
+      value: "postgres://{{ .credentials.username }}:{{ .credentials.password }}@{{ .fromStatus.externalHost }}:5432/app"
+```
+
+**The broker reads the address, it does not produce it.** Creating a
+`LoadBalancer` Service is the template's business, and whether it gets an
+address is the operator's — the broker only answers a question somebody just
+asked ([ADR 0011](adr/0011-broker-operator-boundary.md)).
+
+**`jsonPath` applies to the whole object**, not only to `status` — the same
+gjson notation as [`readiness.statusJSONPath`](#specreadiness), so nobody has to
+learn two dialects. `spec.ports.0.nodePort` is just as readable as a status
+field.
+
+**`fromStatus` without `mapping` is a start-up error.** The values read would
+have no way into the credentials, and a definition that looks like it does
+something is worse than one that is missing.
+
+**A missing value and a wrong path look alike** — both times gjson finds
+nothing. The broker tells them apart by the deepest path that does exist:
+
+| Situation | Message | What to do |
+|---|---|---|
+| Object missing | names kind, name and namespace | check the template |
+| Structure there, leaf missing | "… is not assigned yet — bind again later" | **wait** |
+| Even the second segment missing | names the path and what the status really holds | check the definition |
+
+The difference is not a nicety: one means wait, the other means change the
+definition. A LoadBalancer address is not assigned the moment the Service comes
+into being.
+
+**What is read needs a right.** If the kind is not in `rbac.operatorCRDs`, it is
+not the provision that fails but the **bind** — and only when a customer calls
+it. A guard in the chart holds the two against each other.
 
 ### Mapping entries
 

@@ -243,14 +243,14 @@ func TestShapeCredentials_OhneMappingBleibtAllesWieBisher(t *testing.T) {
 	// Rueckwaertskompatibilitaet (6.3), Punkt fuer Punkt: alle Keys, kein
 	// type, keine Umbenennung.
 	b := &Bind{}
-	got, err := shapeCredentials(b, map[string][]byte{"user": []byte("app"), "password": []byte("s3cr3t")})
+	got, err := shapeCredentials(b, map[string][]byte{"user": []byte("app"), "password": []byte("s3cr3t")}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, map[string]interface{}{"user": "app", "password": "s3cr3t"}, got)
 }
 
 func TestShapeCredentials_CredentialKeysFiltertWeiterhin(t *testing.T) {
 	b := &Bind{CredentialKeys: []string{"user"}}
-	got, err := shapeCredentials(b, map[string][]byte{"user": []byte("app"), "ca.crt": []byte("...")})
+	got, err := shapeCredentials(b, map[string][]byte{"user": []byte("app"), "ca.crt": []byte("...")}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, map[string]interface{}{"user": "app"}, got)
 }
@@ -268,7 +268,7 @@ func TestShapeCredentials_MappingBenenntUmUndSetztZusammen(t *testing.T) {
 	got, err := shapeCredentials(b, map[string][]byte{
 		"user": []byte("app"), "pass": []byte("s3cr3t"), "host": []byte("db-rw"),
 		"ca.crt": []byte("nicht gewollt"),
-	})
+	}, nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, "app", got["username"])
@@ -288,7 +288,7 @@ func TestShapeCredentials_FehlenderQuellschluesselIstEinFehler(t *testing.T) {
 	// Still auslassen waere schlimmer: ein halb gefuelltes Binding faellt
 	// erst in der App auf, und dann sieht es wie ein App-Fehler aus.
 	b := &Bind{Mapping: []CredentialMapping{{Name: "username", From: "gibt-es-nicht"}}}
-	_, err := shapeCredentials(b, map[string][]byte{"user": []byte("app")})
+	_, err := shapeCredentials(b, map[string][]byte{"user": []byte("app")}, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "gibt-es-nicht")
 }
@@ -297,7 +297,7 @@ func TestShapeCredentials_FehlenderKeyImTemplateIstEinFehler(t *testing.T) {
 	b := &Bind{Mapping: []CredentialMapping{
 		{Name: "uri", Value: "postgres://{{ .credentials.fehlt }}/db"},
 	}}
-	_, err := shapeCredentials(b, map[string][]byte{"user": []byte("app")})
+	_, err := shapeCredentials(b, map[string][]byte{"user": []byte("app")}, nil)
 	require.Error(t, err)
 }
 
@@ -306,7 +306,7 @@ func TestShapeCredentials_DefinitionHatDasLetzteWortBeimTyp(t *testing.T) {
 	// Typ nicht ueberschreiben - sonst haengt die Spec-Konformitaet daran,
 	// was der Operator zufaellig mitliefert.
 	b := &Bind{Type: "postgresql"}
-	got, err := shapeCredentials(b, map[string][]byte{"type": []byte("etwas-anderes")})
+	got, err := shapeCredentials(b, map[string][]byte{"type": []byte("etwas-anderes")}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "postgresql", got["type"])
 }
@@ -315,7 +315,7 @@ func TestShapeCredentials_OhneTypBleibtDasFeldWeg(t *testing.T) {
 	// Nicht jede Definition ist spec-konform, und ein leeres type-Feld waere
 	// schlechter als keines.
 	b := &Bind{}
-	got, err := shapeCredentials(b, map[string][]byte{"user": []byte("app")})
+	got, err := shapeCredentials(b, map[string][]byte{"user": []byte("app")}, nil)
 	require.NoError(t, err)
 	assert.NotContains(t, got, "type")
 }

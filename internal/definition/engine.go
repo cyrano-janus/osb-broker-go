@@ -406,7 +406,11 @@ func (e *Engine) BindCredentials(ctx context.Context, sd *ServiceDefinition, nam
 	if err != nil {
 		return nil, "", err
 	}
-	creds, err := shapeCredentials(&sd.Spec.Bind, data)
+	ausStatus, err := e.aufloesenStatusQuellen(ctx, sd, namespace, instanceID)
+	if err != nil {
+		return nil, "", err
+	}
+	creds, err := shapeCredentials(&sd.Spec.Bind, data, ausStatus)
 	if err != nil {
 		return nil, "", err
 	}

@@ -85,7 +85,7 @@ func (e *Engine) provisionedServiceSecret(ctx context.Context, sd *ServiceDefini
 //
 // type und provider kommen in beiden Faellen hinzu, weil die Spezifikation
 // type auf jedem Binding verlangt.
-func shapeCredentials(b *Bind, secretData map[string][]byte) (map[string]interface{}, error) {
+func shapeCredentials(b *Bind, secretData map[string][]byte, ausStatus map[string]string) (map[string]interface{}, error) {
 	raw := make(map[string]interface{}, len(secretData))
 	for k, v := range secretData {
 		raw[k] = string(v)
@@ -96,7 +96,7 @@ func shapeCredentials(b *Bind, secretData map[string][]byte) (map[string]interfa
 		out = ExtractCredentials(secretData, b.CredentialKeys)
 	} else {
 		var err error
-		if out, err = applyMapping(b.Mapping, raw); err != nil {
+		if out, err = applyMapping(b.Mapping, raw, ausStatus); err != nil {
 			return nil, err
 		}
 	}
@@ -113,9 +113,17 @@ func shapeCredentials(b *Bind, secretData map[string][]byte) (map[string]interfa
 }
 
 // applyMapping wertet die Mapping-Eintraege aus.
-func applyMapping(mapping []CredentialMapping, raw map[string]interface{}) (map[string]interface{}, error) {
+func applyMapping(mapping []CredentialMapping, raw map[string]interface{},
+	ausStatus map[string]string) (map[string]interface{}, error) {
+
 	out := make(map[string]interface{}, len(mapping))
-	data := map[string]interface{}{"credentials": raw}
+	// fromStatus ist immer gesetzt, auch wenn leer: ein Template, das darauf
+	// zugreift, soll einen leeren Wert bekommen und keinen Laufzeitfehler
+	// ueber eine fehlende Map.
+	if ausStatus == nil {
+		ausStatus = map[string]string{}
+	}
+	data := map[string]interface{}{"credentials": raw, "fromStatus": ausStatus}
 
 	for _, m := range mapping {
 		if m.From != "" {

@@ -308,6 +308,11 @@ type Bind struct {
 	// Secret in den Ziel-Namespace, fuer Konsumenten ausserhalb von Cloud
 	// Foundry.
 	ProjectSecret bool `json:"projectSecret,omitempty"`
+
+	// FromStatus holt Werte aus dem Status anderer Objekte und stellt sie dem
+	// Mapping als `.fromStatus.<Name>` bereit - etwa die externe Adresse eines
+	// Service, weil die Adresse im Operator-Secret nur clusterintern gilt.
+	FromStatus []StatusQuelle `json:"fromStatus,omitempty"`
 }
 
 // CredentialMapping beschreibt einen Zielschluessel: entweder uebernommen aus
@@ -384,6 +389,9 @@ func (sd *ServiceDefinition) Validate() error {
 	}
 	if sd.Spec.Readiness.StatusJSONPath == "" {
 		return fmt.Errorf("spec.readiness.statusJSONPath is required")
+	}
+	if err := sd.Spec.Bind.validateFromStatus(); err != nil {
+		return err
 	}
 	return sd.Spec.Bind.validate()
 }

@@ -366,6 +366,34 @@
         "projectSecret": {
           "type": "boolean",
           "description": "Additionally write the credentials as a specification-conformant secret into the target namespace, for consumers outside Cloud Foundry. Requires type."
+        },
+        "fromStatus": {
+          "type": "array",
+          "description": "Read values from the status of other objects and expose them to the mapping as .fromStatus.<name>. Needed because the operator's secret carries what is valid INSIDE the cluster - CloudNativePG writes the bare service name - while a Cloud Foundry application runs isolated from it and never reaches that address. The address that counts is then in another object's status, typically the external address of a LoadBalancer Service. Requires mapping: without it the values would have no way into the credentials, and that is refused at load time.",
+          "items": {
+            "type": "object",
+            "required": ["name", "apiVersion", "kind", "jsonPath"],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Key under .fromStatus in the mapping.",
+                "examples": ["externalHost"]
+              },
+              "apiVersion": { "type": "string", "examples": ["v1"] },
+              "kind": { "type": "string", "examples": ["Service"] },
+              "objectName": {
+                "type": "string",
+                "description": "Go template over .instanceID and .safeName. Empty means the provisioned CR itself.",
+                "examples": ["{{ .safeName }}-external"]
+              },
+              "jsonPath": {
+                "type": "string",
+                "description": "gjson path over the WHOLE object - the same notation as readiness.statusJSONPath, so nobody has to learn two dialects. A missing value and a wrong path look alike; the broker tells them apart by the deepest path that does exist, because one means wait and the other means fix the definition.",
+                "examples": ["status.loadBalancer.ingress.0.ip"]
+              }
+            }
+          }
         }
       }
     },

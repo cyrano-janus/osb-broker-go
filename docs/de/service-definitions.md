@@ -452,6 +452,7 @@ kubectl get crd <plural>.<gruppe> -o json | \
 | `mapping` | nein | Formt das Ergebnis. **Ersetzt, erweitert nicht.** |
 | `projectSecret` | nein | Credentials zusätzlich als spec-konformes Secret in den Ziel-Namespace schreiben. |
 | `extraLabels` | nein | Zusätzliche Labels, **nur** auf dem projizierten Secret. |
+| `fromStatus` | nein | **Werte aus dem Status anderer Objekte.** Braucht `mapping`. Siehe unten. |
 
 **Ohne `mapping` landet alles im Binding.** Jeder Schlüssel des
 Operator-Secrets wird durchgereicht — auch Konfigurationsdateien. Beim
@@ -464,6 +465,68 @@ unvorhersehbar und den Zweck zunichte.
 `type` und `provider` werden **nach** dem Mapping gesetzt. Ein Mapping-Eintrag
 namens `type` kann den Wert aus der Definition also nicht stillschweigend
 überschreiben.
+
+### `fromStatus` — wenn die Adresse nicht im Secret steht
+
+Der Operator schreibt in sein Secret, was **innerhalb** des Clusters gilt.
+CloudNativePG trägt dort den blanken Servicenamen ein, `osb-…-rw`. Eine
+Cloud-Foundry-Anwendung läuft davon abgeschottet und erreicht diese Adresse
+nie — der ganze Lebenszyklus ist grün, und das Binding ist trotzdem wertlos.
+
+Die Adresse, die zählt, steht dann im **Status eines anderen Objekts**: der
+externen Adresse eines Service vom Typ `LoadBalancer`, den dieselbe Vorlage als
+zweites Dokument anlegt.
+
+```yaml
+bind:
+  credentialsFromSecret: "{{ .safeName }}-app"
+  fromStatus:
+    - name: externerHost
+      apiVersion: v1
+      kind: Service
+      objectName: "{{ .safeName }}-extern"    # leer = das provisionierte CR
+      jsonPath: 'status.loadBalancer.ingress.0.ip'
+  mapping:
+    - name: username
+      from: username
+    - name: host
+      value: "{{ .fromStatus.externerHost }}"
+    - name: uri
+      value: "postgres://{{ .credentials.username }}:{{ .credentials.password }}@{{ .fromStatus.externerHost }}:5432/app"
+```
+
+**Der Broker liest die Adresse, er stellt sie nicht her.** Einen Service vom Typ
+`LoadBalancer` anzulegen ist Sache der Vorlage, und dass er eine Adresse bekommt,
+Sache des Betreibers — der Broker beantwortet nur eine Frage, die gerade jemand
+gestellt hat ([ADR 0011](adr/0011-broker-operator-boundary.md)).
+
+**`jsonPath` gilt für das ganze Objekt**, nicht nur für `status` — dieselbe
+gjson-Schreibweise wie bei [`readiness.statusJSONPath`](#specreadiness), damit
+niemand zwei Dialekte lernen muss. `spec.ports.0.nodePort` ist damit genauso
+lesbar wie ein Status-Feld.
+
+**`fromStatus` ohne `mapping` ist ein Startfehler.** Die gelesenen Werte hätten
+keinen Weg in die Credentials, und eine Definition, die aussieht, als täte sie
+etwas, ist schlimmer als eine, die fehlt.
+
+**Ein fehlender Wert und ein falscher Pfad sehen gleich aus** — beide Male
+findet gjson nichts. Der Broker unterscheidet sie am tiefsten Pfad, den es
+wirklich gibt:
+
+| Lage | Meldung | Was zu tun ist |
+|---|---|---|
+| Objekt fehlt | nennt Art, Name und Namespace | Vorlage prüfen |
+| Struktur da, Blatt fehlt | „… ist noch nicht vergeben — später erneut binden" | **warten** |
+| Schon der zweite Abschnitt fehlt | nennt den Pfad und was der Status wirklich enthält | Definition prüfen |
+
+Der Unterschied ist keine Feinheit: einmal soll der Betreiber warten, einmal
+seine Definition anfassen. Eine LoadBalancer-Adresse wird nicht in dem Moment
+vergeben, in dem der Service entsteht.
+
+**Was gelesen wird, braucht ein Recht.** Steht die Art nicht in
+`rbac.operatorCRDs`, scheitert nicht das Provision, sondern der **Bind** — und
+zwar erst, wenn ein Kunde ihn aufruft. Ein Wächter im Chart hält beides
+gegeneinander.
 
 ### Mapping-Einträge
 
