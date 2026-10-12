@@ -1,12 +1,20 @@
 module github.com/cyrano-janus/osb-broker-go
 
-go 1.26.0
+// Nicht die Sprachversion, sondern die Mindest-Toolchain. Unterhalb von 1.26.9
+// traegt die Standardbibliothek 15 Schwachstellen, die govulncheck als
+// AUFRUFBAR meldet - HTTP/2-Serverfunde, crypto/tls, crypto/x509,
+// html/template. Diese eine Zeile deckt alle drei Bauwege ab: die CI liest sie
+// ueber `go-version-file: go.mod`, der lokale Bau und der Container-Build
+// laden die Toolchain ueber GOTOOLCHAIN=auto nach. Ein Pin im Dockerfile
+// allein wuerde die CI nicht erreichen.
+go 1.26.9
 
 require (
 	github.com/gin-gonic/gin v1.9.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
 	github.com/tidwall/gjson v1.19.0
+	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.36.4
 	k8s.io/apimachinery v0.36.4
 	k8s.io/client-go v0.36.4
@@ -58,17 +66,16 @@ require (
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/arch v0.3.0 // indirect
-	golang.org/x/crypto v0.53.0 // indirect
-	golang.org/x/net v0.56.0 // indirect
+	golang.org/x/crypto v0.57.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
-	golang.org/x/term v0.44.0 // indirect
-	golang.org/x/text v0.39.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/term v0.46.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/apiextensions-apiserver v0.36.4 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260317180543-43fb72c5454a // indirect
