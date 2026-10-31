@@ -1,13 +1,22 @@
 module github.com/cyrano-janus/osb-broker-go
 
-// Nicht die Sprachversion, sondern die Mindest-Toolchain. Unterhalb von 1.26.9
-// traegt die Standardbibliothek 15 Schwachstellen, die govulncheck als
-// AUFRUFBAR meldet - HTTP/2-Serverfunde, crypto/tls, crypto/x509,
-// html/template. Diese eine Zeile deckt alle drei Bauwege ab: die CI liest sie
-// ueber `go-version-file: go.mod`, der lokale Bau und der Container-Build
-// laden die Toolchain ueber GOTOOLCHAIN=auto nach. Ein Pin im Dockerfile
-// allein wuerde die CI nicht erreichen.
-go 1.26.9
+// Nicht die Sprachversion, sondern die Mindest-Toolchain. Sie deckt alle drei
+// Bauwege ab: die CI liest sie ueber `go-version-file: go.mod`, der lokale Bau
+// und der Container-Build laden die Toolchain ueber GOTOOLCHAIN=auto nach. Ein
+// Pin im Dockerfile allein wuerde die CI nicht erreichen.
+//
+// Warum sie zweimal gehoben wurde:
+//   auf 1.26.9   15 aufrufbare Funde der Standardbibliothek - HTTP/2-Server,
+//                crypto/tls, crypto/x509, html/template
+//   auf 1.26.10  GO-2026-6809 / CVE-2026-111943, "Distrust compromised
+//                intermediate certificates in crypto/x509". Auch das meldet
+//                govulncheck als AUFRUFBAR, ueber einen kurzen Weg:
+//                server.Serve -> http.Server.Serve -> x509.Certificate.Verify
+//
+// Die zweite Hebung ist der Grund, warum hier eine Patch-Version steht und
+// nicht `go 1.26`: Letzteres liesse GOTOOLCHAIN=auto bei einer 1.26.9
+// stehenbleiben, und die traegt den Fund.
+go 1.26.10
 
 require (
 	github.com/gin-gonic/gin v1.9.1
@@ -66,12 +75,12 @@ require (
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/arch v0.3.0 // indirect
-	golang.org/x/crypto v0.57.0 // indirect
-	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/crypto v0.58.0 // indirect
+	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
-	golang.org/x/sys v0.48.0 // indirect
-	golang.org/x/term v0.46.0 // indirect
-	golang.org/x/text v0.42.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/term v0.47.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
