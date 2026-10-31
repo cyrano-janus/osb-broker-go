@@ -25,6 +25,19 @@ Ein Cluster wird erst gebraucht, wenn gegen echte Operatoren geprüft werden sol
 | kind, kubectl, helm | nur für den Durchlauf gegen echte Operatoren |
 | `cf` CLI | nur für den Durchlauf über Cloud Foundry |
 
+Die `go`-Zeile in `go.mod` nennt die **Mindest-Toolchain**, nicht die
+Sprachversion. Eine ältere Go-Installation reicht trotzdem, solange
+`GOTOOLCHAIN` auf `auto` steht — dem Standardwert —, denn dann holt Go die
+passende Toolchain selbst.
+
+Das Dockerfile setzt `auto` ausdrücklich. Das offizielle `golang`-Image gibt
+`GOTOOLCHAIN=local` vor und lädt damit nichts nach; ohne die Zeile bricht der
+Container-Build ab, sobald das Image hinter der `go`-Zeile zurückbleibt:
+
+```
+go: go.mod requires go >= 1.26.10 (running go 1.26.9; GOTOOLCHAIN=local)
+```
+
 ## Die Schleife
 
 ```bash

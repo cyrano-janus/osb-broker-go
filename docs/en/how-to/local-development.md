@@ -25,6 +25,19 @@ A cluster is only needed when you want to test against real operators.
 | kind, kubectl, helm | only for the run against real operators |
 | `cf` CLI | only for the run through Cloud Foundry |
 
+The `go` line in `go.mod` states the **minimum toolchain**, not the language
+version. An older Go installation still works as long as `GOTOOLCHAIN` is set
+to `auto` — its default — because Go then fetches the matching toolchain
+itself.
+
+The Dockerfile sets `auto` explicitly. The official `golang` image prescribes
+`GOTOOLCHAIN=local` and therefore fetches nothing; without that line the
+container build fails as soon as the image trails the `go` line:
+
+```
+go: go.mod requires go >= 1.26.10 (running go 1.26.9; GOTOOLCHAIN=local)
+```
+
 ## The loop
 
 ```bash
