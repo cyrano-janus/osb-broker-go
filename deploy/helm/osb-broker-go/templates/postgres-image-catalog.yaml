@@ -1,0 +1,31 @@
+{{- /*
+Der Image-Katalog, auf den die Definition cnpg-postgresql verweist. Die
+Definition nennt nur die Major; welches Image dahintersteht, steht hier -
+und damit beim Betreiber des Brokers, nicht in der Definition und nicht in
+einem fremden Repositorium. Eine geaenderte Nebenversion rollt CloudNativePG
+selbst auf alle Cluster dieser Major aus.
+
+Clusterweit (ClusterImageCatalog, nicht ImageCatalog), weil die Instanzen
+nicht im Release-Namespace liegen, sondern in config.instanceNamespaceTemplate.
+*/ -}}
+{{- $braucht := false }}
+{{- range $name, $content := .Values.definitions.files }}
+  {{- if contains "kind: ClusterImageCatalog" $content }}{{ $braucht = true }}{{ end }}
+{{- end }}
+{{- if and $braucht (not .Values.postgresImageCatalog.create) (not .Values.postgresImageCatalog.existing) }}
+{{- fail "eine Definition verweist auf einen ClusterImageCatalog, aber postgresImageCatalog.create ist false - entweder create: true, oder existing: true, wenn die Plattform den Katalog selbst stellt" }}
+{{- end }}
+{{- if .Values.postgresImageCatalog.create }}
+apiVersion: postgresql.cnpg.io/v1
+kind: ClusterImageCatalog
+metadata:
+  name: {{ .Values.postgresImageCatalog.name }}
+  labels:
+    {{- include "osb-broker-go.labels" . | nindent 4 }}
+spec:
+  images:
+  {{- range .Values.postgresImageCatalog.images }}
+    - major: {{ .major }}
+      image: {{ .image | quote }}
+  {{- end }}
+{{- end }}

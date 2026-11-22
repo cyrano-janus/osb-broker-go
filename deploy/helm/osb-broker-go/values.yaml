@@ -116,6 +116,34 @@ definitions:
   #     apiVersion: broker.osb.io/v1alpha1
   #     ...
 
+# Der ClusterImageCatalog `postgresql`, auf den die Definition cnpg-postgresql
+# mit `imageCatalogRef` verweist. Sie nennt nur die Major; das Image je Major
+# steht hier, damit der Betreiber Nebenversionen hebt, ohne die Definition
+# anzufassen - CloudNativePG rollt einen geaenderten Eintrag selbst aus.
+#
+# `create: false` ist die Vorgabe, weil das Chart ohne Definitionen kommt und
+# ein Cluster ohne CloudNativePG die Ressourcenart nicht kennt. Wer
+# cnpg-postgresql ausliefert, setzt create: true - oder existing: true, wenn
+# die Plattform den Katalog selbst stellt. Beides nicht gesetzt und eine
+# Definition, die ihn braucht, ist ein Renderfehler, kein Timeout beim ersten
+# Provision.
+#
+# Immer MIT Nebenversion: ein Tag wie 18-system-trixie liesse den Image-Cache
+# des Knotens entscheiden, welche Nebenversion ein Pod bekommt. Die Majors
+# muessen dieselben sein wie das oneOf von majorVersion in der Definition;
+# ein Test im Repo haelt beide zusammen. Stand der Tags: ghcr.io, 2026-11-22.
+postgresImageCatalog:
+  create: false
+  existing: false
+  name: postgresql
+  images:
+    - major: 17
+      image: ghcr.io/cloudnative-pg/postgresql:17.12-system-trixie
+    - major: 18
+      image: ghcr.io/cloudnative-pg/postgresql:18.7-system-trixie
+    - major: 19
+      image: ghcr.io/cloudnative-pg/postgresql:19.0-system-trixie
+
 # RBAC: eigene State-CRDs und Credentials-Secrets im Release-Namespace +
 # optionaler clusterweiter Zugriff auf Operator-CRs (z. B. postgresql.cnpg.io).
 rbac:

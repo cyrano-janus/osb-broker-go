@@ -41,6 +41,10 @@ tls:
 
 # Der Workflow reicht die CNPG-Definition per --set-file nach, damit L2b
 # denselben Lifecycle prüft wie das bestehende HTTP-Gate.
+# Die cnpg-postgresql-Definition verweist auf den Katalog; das Chart liefert ihn.
+postgresImageCatalog:
+  create: true
+
 definitions:
   create: true
 

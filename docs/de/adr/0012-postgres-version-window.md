@@ -33,9 +33,9 @@ den Operator.
 
 **Die Nebenversion pflegt der Betreiber, über den Katalog des Operators.**
 Die Definition nennt nur die Major; das Image dahinter steht in einem
-`ClusterImageCatalog` namens `postgresql`, den die Plattform pflegt. Ein
-geänderter Eintrag rollt alle Cluster dieser Major nach, ohne Zutun des
-Besitzers und ohne Umweg über den Broker.
+`ClusterImageCatalog` namens `postgresql`, den das Helm-Chart des Brokers
+mitliefert. Ein geänderter Eintrag rollt alle Cluster dieser Major nach,
+ohne Zutun des Besitzers und ohne Umweg über den Broker-Prozess.
 
 **Das Fenster wandert mit maintenanceInfo.** Öffnet die Definition eine neue
 Major, steigt der Stand des Plans; bestehende Instanzen sehen ein Angebot,
@@ -50,14 +50,17 @@ oder als festes Image mit Major. Eine, die es nicht tut, baut nicht.
 
 - **Ein Angebot statt dreier, zwei Pläne statt sechs.** Die Version ist eine
   Stellschraube im Plan, kein Plan je Version.
-- **Die Plattform hat eine Pflicht mehr.** Ohne den Katalog `postgresql`
-  scheitert jedes Provision am Readiness-Timeout. Das ist eine
-  Installationsvoraussetzung des Brokers und steht in der Definition.
+- **Die Lieferung bleibt in sich vollständig.** Der Katalog kommt aus dem
+  Chart, nicht aus einem fremden Repositorium; die Plattform reicht Werte
+  durch, wie bei den Definitionen auch. Wer den Katalog selbst stellt, sagt
+  es mit `existing` — ohne eines von beiden verweigert das Chart das
+  Rendern, statt dass das erste Provision am Readiness-Timeout scheitert.
 - **Nebenversionen kommen ungefragt, Majors nie.** Das ist eine bewusste
   Asymmetrie: ein Sicherheitsstand ist keine Entscheidung des Besitzers, ein
   Major-Wechsel mit Stillstand ist eine.
 - **Der Betreiber des Brokers hat eine jährliche Aufgabe:** Katalogeintrag,
-  `oneOf`, Vorgabe und Stand in einem Commit. Wie, steht in
+  `oneOf`, Vorgabe und Stand in einem Commit; ein Test hält Katalog und
+  `oneOf` auf derselben Liste. Wie, steht in
   [postgres-major-versions.md](../postgres-major-versions.md).
 - **`cnpg-pgvector` bleibt außen vor,** solange die Erweiterung die Major
   vorschreibt und es kein Image für die neueste gibt.

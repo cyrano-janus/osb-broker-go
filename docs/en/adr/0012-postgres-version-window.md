@@ -30,11 +30,11 @@ parameter `majorVersion` with a `oneOf` over the newest major and the two
 before it; the default is the second newest. Moving is an ordinary
 `cf update-service -c` and leads to an in-place upgrade by the operator.
 
-**The operator of the platform maintains the minor, through the operator's
-catalogue.** The definition names only the major; the image behind it lives
-in a `ClusterImageCatalog` named `postgresql` maintained by the platform. A
-changed entry rolls every cluster on that major, without the owner and
-without a detour through the broker.
+**The operator maintains the minor, through the operator's catalogue.** The
+definition names only the major; the image behind it lives in a
+`ClusterImageCatalog` named `postgresql` that the broker's Helm chart ships.
+A changed entry rolls every cluster on that major, without the owner and
+without a detour through the broker process.
 
 **The window moves with maintenanceInfo.** When the definition opens a new
 major, the plan's state rises; existing instances see an offer, not an
@@ -49,14 +49,17 @@ as a pinned image with a major. One that does not, does not build.
 
 - **One offering instead of three, two plans instead of six.** The version
   is a knob in the plan, not a plan per version.
-- **The platform has one more duty.** Without the catalogue `postgresql`
-  every provision fails at the readiness timeout. That is an installation
-  prerequisite of the broker and is stated in the definition.
+- **The delivery stays self-contained.** The catalogue comes from the
+  chart, not from another repository; the platform passes values through,
+  as it does for the definitions. Whoever provides the catalogue themselves
+  says so with `existing` — without either, the chart refuses to render
+  instead of the first provision failing at the readiness timeout.
 - **Minors arrive unasked, majors never.** That is a deliberate asymmetry: a
   security release is not the owner's decision, a major upgrade with downtime
   is.
 - **The broker's operator has a yearly task:** catalogue entry, `oneOf`,
-  default and state in one commit. How, is in
+  default and state in one commit; a test keeps catalogue and `oneOf` on the
+  same list. How, is in
   [postgres-major-versions.md](../postgres-major-versions.md).
 - **`cnpg-pgvector` stays outside** as long as the extension dictates the
   major and there is no image for the newest one.

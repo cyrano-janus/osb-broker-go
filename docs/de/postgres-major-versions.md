@@ -29,15 +29,18 @@ parameter "majorVersion" in plan "small" must be one of [17, 18, 19], got "16"
 ## Wer entscheidet was
 
 Die Definition nennt nur die **Major**. Welches Image dahintersteht, sagt ein
-`ClusterImageCatalog` namens `postgresql`, den der Betreiber der Plattform
-pflegt — auf der Entwicklungsplattform liegt er in
-`cfk8s-platform/services/cloudnative-pg/image-catalog.yaml`, die Tags stehen
-in deren `versions.env`.
+`ClusterImageCatalog` namens `postgresql`, den das Helm-Chart des Brokers
+mitliefert (`postgresImageCatalog` in `values.yaml`, dort stehen die Tags).
+Der Betreiber hebt eine Nebenversion als Chart-Wert; die
+Entwicklungsplattform reicht ihre Werte aus `versions.env` durch. Wer den
+Katalog selbst stellt, sagt das mit `postgresImageCatalog.existing: true` —
+ohne eines von beiden verweigert das Chart das Rendern, sobald die
+Definition dabei ist.
 
 | Sache | Entscheidet | Mechanismus | Wirkung auf laufende Instanzen |
 |---|---|---|---|
 | Major einer Instanz | ihr Besitzer | Parameter `majorVersion` | Upgrade an Ort und Stelle, rund eine Minute Stillstand |
-| Nebenversion je Major | Betreiber der Plattform | Katalogeintrag ändern | rollierender Neustart aller Cluster dieser Major |
+| Nebenversion je Major | Betreiber des Brokers | Chart-Wert `postgresImageCatalog.images` ändern | rollierender Neustart aller Cluster dieser Major |
 | Fenster und Vorgabe | Betreiber des Brokers | `oneOf` und `params` in der Definition, `maintenanceInfo` steigt | `upgrade available`, der Besitzer löst aus |
 | Operator-Version | Betreiber der Plattform | `CNPG_VERSION` | Neustart jedes Instanz-Pods, gemessen: unter einer Minute |
 
@@ -51,16 +54,19 @@ PostgreSQL erscheint einmal im Jahr als neue Major und wird fünf Jahre
 gepflegt. Das Fenster folgt dem so:
 
 1. **Eine neue Major N erscheint.** Sobald ghcr.io ein `-system-trixie`-Image
-   dafür trägt, bekommt der Katalog einen Eintrag `N`.
+   dafür trägt, bekommt der Katalog in `values.yaml` einen Eintrag `N`.
 2. **Die Definition öffnet N und schließt N-3.** `oneOf` wird `[N-2, N-1, N]`,
    die Vorgabe wird N-1, `maintenanceInfo.version` steigt um eine Minor.
    Beides in einem Commit, denn getrennt wäre der Katalog einen Moment lang
    größer oder kleiner als das Fenster.
 3. **Bestehende Instanzen auf N-3 laufen weiter.** Nichts zieht sie nach.
    Der Katalogeintrag N-3 bleibt stehen, solange eine Instanz ihn nutzt —
-   ohne ihn bekäme sie keine Nebenversion mehr, und das wäre eine stille
-   Strafe. Gestrichen wird er, wenn der Bestand (`osb_instances` nach Plan)
-   keine mehr zählt.
+   ohne ihn bekäme sie keine Nebenversion mehr, und der Cluster stünde auf
+   `Ready=False`, obwohl die Datenbank weiter antwortet (gemessen mit dem
+   ganzen Katalog: die Verbindungen laufen, das Ready fehlt). Das wäre eine
+   stille Strafe. Gestrichen wird er, wenn der Bestand (`osb_instances` nach Plan)
+   keine mehr zählt. Ein Test hält `oneOf` und Katalog auf derselben Liste;
+   wer N öffnet, streicht N-3 im selben Commit, sonst baut es nicht.
 4. **Instanzen auf der alten Vorgabe sehen `upgrade available`.** Wer die
    Major nie gesetzt hat, folgt mit `cf upgrade-service` der neuen Vorgabe —
    das ist ein Major-Wechsel mit Stillstand, und die `description` des

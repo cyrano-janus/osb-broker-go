@@ -28,15 +28,18 @@ parameter "majorVersion" in plan "small" must be one of [17, 18, 19], got "16"
 ## Who decides what
 
 The definition names only the **major**. Which image stands behind it is
-said by a `ClusterImageCatalog` named `postgresql`, maintained by the
-operator of the platform — on the development platform it lives in
-`cfk8s-platform/services/cloudnative-pg/image-catalog.yaml`, the tags are
-in its `versions.env`.
+said by a `ClusterImageCatalog` named `postgresql` that the broker's Helm
+chart ships (`postgresImageCatalog` in `values.yaml`, where the tags live).
+The operator raises a minor as a chart value; the development platform
+passes its values through from `versions.env`. Whoever provides the
+catalogue themselves says so with `postgresImageCatalog.existing: true` —
+without either, the chart refuses to render as soon as the definition is
+included.
 
 | Matter | Decided by | Mechanism | Effect on running instances |
 |---|---|---|---|
 | Major of an instance | its owner | parameter `majorVersion` | in-place upgrade, about a minute of downtime |
-| Minor per major | platform operator | change the catalogue entry | rolling restart of every cluster on that major |
+| Minor per major | broker operator | change the chart value `postgresImageCatalog.images` | rolling restart of every cluster on that major |
 | Window and default | broker operator | `oneOf` and `params` in the definition, `maintenanceInfo` rises | `upgrade available`, the owner triggers |
 | Operator version | platform operator | `CNPG_VERSION` | restart of every instance pod, measured: under a minute |
 
@@ -50,15 +53,20 @@ PostgreSQL ships one new major a year and maintains each for five years.
 The window follows it like this:
 
 1. **A new major N appears.** As soon as ghcr.io carries a `-system-trixie`
-   image for it, the catalogue gets an entry `N`.
+   image for it, the catalogue in `values.yaml` gets an entry `N`.
 2. **The definition opens N and closes N-3.** `oneOf` becomes `[N-2, N-1, N]`,
    the default becomes N-1, `maintenanceInfo.version` rises by a minor. Both
    in one commit, because separately the catalogue would for a moment be
    larger or smaller than the window.
 3. **Existing instances on N-3 keep running.** Nothing pulls them along. The
    catalogue entry N-3 stays as long as an instance uses it — without it the
-   instance would get no more minors, and that would be a silent penalty. It
-   is removed once the inventory (`osb_instances` by plan) counts none.
+   instance would get no more minors, and the cluster would stand at
+   `Ready=False` although the database keeps answering (measured with the
+   whole catalogue gone: connections work, Ready is missing). That would be
+   a silent penalty. It
+   is removed once the inventory (`osb_instances` by plan) counts none. A
+   test keeps `oneOf` and the catalogue on the same list; whoever opens N
+   removes N-3 in the same commit, or it does not build.
 4. **Instances on the old default see `upgrade available`.** Whoever never
    set the major follows the new default with `cf upgrade-service` — that is
    a major upgrade with downtime, and the `description` of the state says

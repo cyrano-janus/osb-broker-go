@@ -45,6 +45,10 @@ config:
 # Gesichert: internal/chart/sync_test.go vergleicht zeichengleich gegen
 # definitions/. Eine Kopie, die driftet, ist eine Auslieferung, die sich
 # anders verhaelt als das Repo - und das faellt sonst erst beim Kunden auf.
+# Die cnpg-postgresql-Definition verweist auf den Katalog; das Chart liefert ihn.
+postgresImageCatalog:
+  create: true
+
 definitions:
   create: true
   files:
@@ -308,9 +312,9 @@ definitions:
           apiVersion: postgresql.cnpg.io/v1
           kind: Cluster
           # Das Image steht NICHT hier, sondern in einem ClusterImageCatalog namens
-          # `postgresql`, den der Betreiber der Plattform pflegt (auf cfk8s:
-          # services/cloudnative-pg/image-catalog.yaml). Die Definition nennt nur
-          # die Major.
+          # `postgresql`. Das Helm-Chart liefert ihn mit (postgresImageCatalog in
+          # values.yaml, dort stehen die Tags); wer den Broker anders ausrollt,
+          # legt ihn selbst an. Die Definition nennt nur die Major.
           #
           # Warum so herum: Nebenversionen sind Sicherheitsstaende und Sache des
           # Betreibers. Stuende hier ein Image mit Nebenversion, muesste bei jedem
@@ -327,9 +331,9 @@ definitions:
           # und nicht aus dem Katalog.
           #
           # Fehlt der Katalog, scheitert jedes Provision am Readiness-Timeout und
-          # der Cluster traegt die Bedingung ImageCatalogRef mit dem Grund - ein
-          # Betreiber, der den Broker auf eine neue Plattform bringt, legt den
-          # Katalog VOR der ersten Instanz an.
+          # der Cluster traegt die Bedingung ImageCatalogRef mit dem Grund. Das
+          # Chart verweigert deshalb das Rendern, wenn diese Definition dabei ist
+          # und weder postgresImageCatalog.create noch .existing gesetzt sind.
           template: |
             apiVersion: postgresql.cnpg.io/v1
             kind: Cluster
