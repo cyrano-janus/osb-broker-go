@@ -22,6 +22,15 @@ Katalog die PostgreSQL-Version, die pgvector-Version und dass die Erweiterung
 bereits aktiviert ist — ein Entwickler soll das nicht in der Doku eines
 fremden Repositoriums suchen müssen.
 
+**Die Major-Version wählt der Besitzer.** `cnpg-postgresql` führt drei
+PostgreSQL-Majors gleichzeitig (17, 18, 19), als Parameter `majorVersion` mit
+Vorgabe 18; der Wechsel ist ein `cf update-service` und ein Upgrade an Ort
+und Stelle, gemessen bei rund einer Minute Stillstand. Die Nebenversion
+pflegt der Betreiber über den Image-Katalog des Operators, ohne den
+Besitzer zu fragen. Wie das Fenster wandert, steht in
+[postgres-major-versions.md](docs/de/postgres-major-versions.md), die
+Entscheidung in [ADR 0012](docs/de/adr/0012-postgres-version-window.md).
+
 Die Arbeit geht deshalb in die Tiefe: ein Plan **erzwingt** seine Größen
 (`parameterLimits`, auch als OSB-Plan-Schema im Katalog), ein Produktionsplan
 verliert seine Daten nicht auf einen Tastendruck (`retainOnDeprovision`), und
@@ -127,6 +136,7 @@ Ausführlich in
 | wofür der Broker gebaut wird | [target-platforms.md](docs/de/target-platforms.md) |
 | wie die Schichten zusammenhängen | [architecture.md](docs/de/architecture.md) |
 | wie man einen Service beschreibt | [service-definitions.md](docs/de/service-definitions.md) |
+| welche PostgreSQL-Versionen es gibt und wie das Fenster wandert | [postgres-major-versions.md](docs/de/postgres-major-versions.md) |
 | wie man einen neuen Operator anbindet | [how-to/add-a-service.md](docs/de/how-to/add-a-service.md) |
 | wie man lokal entwickelt und testet | [how-to/local-development.md](docs/de/how-to/local-development.md) |
 | warum etwas nicht funktioniert | [how-to/debugging.md](docs/de/how-to/debugging.md) |

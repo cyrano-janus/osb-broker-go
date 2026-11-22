@@ -225,7 +225,7 @@ Punkt wiegt für einen Betreiber schwerer als ein vierter Dienst im Marketplace.
 | **Planwechsel** | gebaut, für keine Definition zugesagt. Die Zusage steht je Plan und gilt dem Plan, den eine Instanz *verlässt* — darin liegt die Richtung. Was fehlt, ist ein Übergang, der gegen einen laufenden Operator belegt ist |
 | **Sicherung und Wiederherstellung** | offen. CloudNativePG kann es (`Backup`, `ScheduledBackup`, Barman) — der Broker bietet es weder als Planmerkmal noch als Service-Key an |
 | **Point-in-Time-Recovery beim Provision** | offen; eine Instanz entsteht immer leer |
-| **Upgrades bestehender Instanzen** | ✅ `maintenanceInfo` je Plan: der Katalog nennt den Stand, die Instanz trägt den angewendeten, `cf upgrade-service` löst aus. Der Besitzer entscheidet, der Broker ändert nichts ungefragt |
+| **Upgrades bestehender Instanzen** | ✅ `maintenanceInfo` je Plan: der Katalog nennt den Stand, die Instanz trägt den angewendeten, `cf upgrade-service` löst aus. Der Besitzer entscheidet, der Broker ändert nichts ungefragt. Für PostgreSQL ist der Major-Wechsel gemessen — [postgres-major-versions.md](postgres-major-versions.md) |
 | **Verhalten unter Last, echte Mandantentrennung** | ungeprüft — siehe Verifikationsstand |
 
 **Was der Broker bewusst nicht misst: die Gesundheit der Dienste.** Ein Broker,

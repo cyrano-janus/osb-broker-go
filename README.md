@@ -22,6 +22,15 @@ the PostgreSQL version, the pgvector version and the fact that the extension is
 already enabled — right there in the catalogue, so a developer does not have to
 look it up in someone else's repository.
 
+**The owner picks the major version.** `cnpg-postgresql` carries three
+PostgreSQL majors at once (17, 18, 19), as a parameter `majorVersion` with
+default 18; moving is a `cf update-service` and an in-place upgrade, measured
+at about a minute of downtime. The minor is maintained by the platform
+operator through the operator's image catalogue, without asking the owner.
+How the window moves is in
+[postgres-major-versions.md](docs/en/postgres-major-versions.md), the decision
+in [ADR 0012](docs/en/adr/0012-postgres-version-window.md).
+
 The effort therefore goes into depth: a plan **enforces** its sizes
 (`parameterLimits`, published as the plan's OSB schema too), a production plan
 does not lose its data to a keystroke (`retainOnDeprovision`), and the
@@ -126,6 +135,7 @@ In detail in
 | what the broker is built for | [target-platforms.md](docs/en/target-platforms.md) |
 | how the layers fit together | [architecture.md](docs/en/architecture.md) |
 | how a service is described | [service-definitions.md](docs/en/service-definitions.md) |
+| which PostgreSQL versions exist and how the window moves | [postgres-major-versions.md](docs/en/postgres-major-versions.md) |
 | how to integrate a new operator | [how-to/add-a-service.md](docs/en/how-to/add-a-service.md) |
 | how to develop and test locally | [how-to/local-development.md](docs/en/how-to/local-development.md) |
 | why something is not working | [how-to/debugging.md](docs/en/how-to/debugging.md) |

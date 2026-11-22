@@ -221,7 +221,7 @@ weighs more for an operator than a fourth service in the marketplace.
 | **Plan change** | built, promised for no definition. The promise sits on each plan and applies to the plan an instance *leaves* — that is where the direction is. What is missing is a transition proven against a running operator |
 | **Backup and restore** | open. CloudNativePG can do it (`Backup`, `ScheduledBackup`, Barman) — the broker offers it neither as a plan attribute nor as a service key |
 | **Point-in-time recovery on provision** | open; an instance is always created empty |
-| **Upgrades of existing instances** | ✅ a per-plan `maintenanceInfo`: the catalogue names the state, the instance carries the applied one, `cf upgrade-service` triggers it. The owner decides; the broker changes nothing unasked |
+| **Upgrades of existing instances** | ✅ a per-plan `maintenanceInfo`: the catalogue names the state, the instance carries the applied one, `cf upgrade-service` triggers it. The owner decides; the broker changes nothing unasked. For PostgreSQL the major upgrade is measured — [postgres-major-versions.md](postgres-major-versions.md) |
 | **Behaviour under load, real multi-tenancy** | unverified — see the state of verification |
 
 **What the broker deliberately does not measure: the health of the services.**

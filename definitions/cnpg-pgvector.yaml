@@ -81,6 +81,14 @@ spec:
     # 1.33 (ImageVolume). Das Basisimage ist deshalb ausdruecklich gesetzt und
     # nicht dem Operator ueberlassen: eine Definition, die stillschweigend auf
     # einer aelteren Nebenversion landet, faellt erst beim Provision auf.
+    #
+    # Anders als cnpg-postgresql bietet dieses Angebot KEINE Wahl der Major
+    # und haengt nicht am ClusterImageCatalog: 17 scheidet wegen
+    # extension_control_path aus, und fuer 19 gibt es auf ghcr.io noch kein
+    # pgvector-Image (gemessen am 2026-11-22: 0.8.x-18-trixie ist das
+    # hoechste). Sobald eines erscheint, wandert auch dieses Angebot auf den
+    # Katalog und den Parameter majorVersion - bis dahin sagt der Katalogtext
+    # "an PostgreSQL 18 gebunden", und das ist die Wahrheit.
     template: |
       apiVersion: postgresql.cnpg.io/v1
       kind: Cluster

@@ -132,6 +132,14 @@ definitions:
           # 1.33 (ImageVolume). Das Basisimage ist deshalb ausdruecklich gesetzt und
           # nicht dem Operator ueberlassen: eine Definition, die stillschweigend auf
           # einer aelteren Nebenversion landet, faellt erst beim Provision auf.
+          #
+          # Anders als cnpg-postgresql bietet dieses Angebot KEINE Wahl der Major
+          # und haengt nicht am ClusterImageCatalog: 17 scheidet wegen
+          # extension_control_path aus, und fuer 19 gibt es auf ghcr.io noch kein
+          # pgvector-Image (gemessen am 2026-11-22: 0.8.x-18-trixie ist das
+          # hoechste). Sobald eines erscheint, wandert auch dieses Angebot auf den
+          # Katalog und den Parameter majorVersion - bis dahin sagt der Katalogtext
+          # "an PostgreSQL 18 gebunden", und das ist die Wahrheit.
           template: |
             apiVersion: postgresql.cnpg.io/v1
             kind: Cluster
@@ -183,7 +191,7 @@ definitions:
         offering:
           id: f48a9e21-cnpg-0000-0000-000000000001
           name: cnpg-postgresql
-          description: "CloudNativePG PostgreSQL clusters"
+          description: "CloudNativePG PostgreSQL clusters - major version 17, 18 or 19, chosen per instance"
           bindable: true
           tags:
             - postgresql
@@ -197,7 +205,13 @@ definitions:
             longDescription: >-
               Ein PostgreSQL-Cluster, betrieben von CloudNativePG. Der Operator
               uebernimmt Failover, Backups und Wartung; der Broker liefert die
-              Zugangsdaten als Binding.
+              Zugangsdaten als Binding. Die Major-Version waehlt der Besitzer der
+              Instanz: 17, 18 oder 19 ueber den Parameter majorVersion, Vorgabe
+              ist 18. Der Wechsel auf eine hoehere Major ist ein Update der
+              Instanz (cf update-service -c '{"majorVersion":"19"}'); waehrend des
+              Wechsels steht die Datenbank, die Daten bleiben an Ort und Stelle.
+              Nebenversionen pflegt der Betreiber rollierend, ohne Zutun des
+              Besitzers.
             providerDisplayName: "CloudNativePG"
             documentationUrl: "https://cloudnative-pg.io/documentation/"
             supportUrl: "https://github.com/cloudnative-pg/cloudnative-pg/issues"
@@ -208,37 +222,83 @@ definitions:
                 displayName: "Small"
                 bullets:
                   - "1 Instanz, kein Failover"
+                  - "PostgreSQL 18, wahlweise 17 oder 19 (majorVersion)"
                   - "1Gi Speicher, bis 5Gi einstellbar"
                   - "Loeschen entfernt die Daten"
-              description: "Single instance, 1Gi storage"
+              description: "Single instance, 1Gi storage, PostgreSQL 17/18/19"
               params:
                 storageSize: 1Gi
                 instances: 1
+                # Die Vorgabe ist die ZWEITneueste Major, nicht die neueste. Eine
+                # Major-Version ist in den ersten Monaten nach Erscheinen die mit
+                # den wenigsten Erweiterungen und Treibern, die sie schon stuetzen;
+                # wer sie will, sagt es. Als Zeichenkette, weil oneOf Zeichenketten
+                # vergleicht - ein JSON-Wert 19 wird vor dem Vergleich auf dieselbe
+                # Form gebracht.
+                majorVersion: "18"
               # Was der Benutzer setzen darf:
-              #   cf create-service ... -c '{"storageSize":"5Gi"}'
+              #   cf create-service ... -c '{"storageSize":"5Gi","majorVersion":"19"}'
               # Jeder Schluessel, der hier nicht steht, ist 400. Ein gesetzter Wert
               # ueberschreibt den gleichnamigen Planwert; alles Uebrige bleibt.
-              allowedParameters: [storageSize]
+              allowedParameters: [storageSize, majorVersion]
               # Erlaubt heisst nicht unbegrenzt. Ohne diese Grenze liesse sich der
               # Plan "small" mit 10Ti provisionieren, und der Betreiber saehe es an
               # der Rechnung. Steht auch als Plan-Schema im Katalog.
+              #
+              # Das Versionsfenster: die neueste Major und die zwei davor. Drei
+              # Jahresversionen geben dem Besitzer rund zwei Jahre je Stand, bevor
+              # er wechseln muss. Die Liste ist dieselbe in jedem Plan und bei
+              # cnpg-pgvector enger - dort schreibt die Erweiterung die Major vor.
+              # Wie die Liste wandert, steht in docs/de/versionsfenster.md.
               parameterLimits:
                 storageSize: {max: 5Gi}
+                majorVersion: {oneOf: ["17", "18", "19"]}
+              # Der Stand des PLANS, nicht der Datenbank. Er steigt, wenn sich am
+              # Gerenderten etwas aendert - die Vorgabe-Major, der Katalogverweis -,
+              # und nur dann. Eine Instanz unter aelterem Stand zeigt in `cf
+              # services` ein "upgrade available"; `cf upgrade-service` rendert sie
+              # mit IHREN gespeicherten Parametern neu. Wer die Major ausdruecklich
+              # gesetzt hat, behaelt sie dabei; wer die Vorgabe nahm, folgt ihr -
+              # und das kann ein Major-Wechsel mit Stillstand sein, deshalb sagt
+              # die description, was der Stand bedeutet.
+              #
+              # 1.0.0: Image aus dem ClusterImageCatalog statt Operator-Vorgabe,
+              # Major als Parameter, Vorgabe 18.
+              maintenanceInfo:
+                version: "1.0.0"
+                description: "Image aus dem Katalog des Betreibers, Vorgabe PostgreSQL 18; Major waehlbar ueber majorVersion. Instanzen ohne gesetzte majorVersion folgen der Vorgabe - ein Major-Wechsel haelt die Datenbank rund eine Minute an."
             - id: plan-large-0000-0000-000000000002
               name: large
               metadata:
                 displayName: "Large"
                 bullets:
                   - "3 Instanzen mit Failover"
+                  - "PostgreSQL 18, wahlweise 17 oder 19 (majorVersion)"
                   - "10Gi Speicher, bis 50Gi einstellbar"
                   - "Loeschen laesst die Daten stehen"
-              description: "HA, 3 instances, 10Gi storage. Deleting the service keeps the data."
+              description: "HA, 3 instances, 10Gi storage, PostgreSQL 17/18/19. Deleting the service keeps the data."
               params:
                 storageSize: 10Gi
                 instances: 3
-              allowedParameters: [storageSize]
+                majorVersion: "18"
+              allowedParameters: [storageSize, majorVersion]
               parameterLimits:
                 storageSize: {max: 50Gi}
+                majorVersion: {oneOf: ["17", "18", "19"]}
+              # Der Stand des PLANS, nicht der Datenbank. Er steigt, wenn sich am
+              # Gerenderten etwas aendert - die Vorgabe-Major, der Katalogverweis -,
+              # und nur dann. Eine Instanz unter aelterem Stand zeigt in `cf
+              # services` ein "upgrade available"; `cf upgrade-service` rendert sie
+              # mit IHREN gespeicherten Parametern neu. Wer die Major ausdruecklich
+              # gesetzt hat, behaelt sie dabei; wer die Vorgabe nahm, folgt ihr -
+              # und das kann ein Major-Wechsel mit Stillstand sein, deshalb sagt
+              # die description, was der Stand bedeutet.
+              #
+              # 1.0.0: Image aus dem ClusterImageCatalog statt Operator-Vorgabe,
+              # Major als Parameter, Vorgabe 18.
+              maintenanceInfo:
+                version: "1.0.0"
+                description: "Image aus dem Katalog des Betreibers, Vorgabe PostgreSQL 18; Major waehlbar ueber majorVersion. Instanzen ohne gesetzte majorVersion folgen der Vorgabe - ein Major-Wechsel haelt die Datenbank rund eine Minute an."
               # Ein Produktionsplan verliert seine Daten nicht auf einen
               # Tastendruck. Der Broker gibt die Instanz auf, der Cluster bleibt
               # stehen und traegt osb.io/retained-instance.
@@ -247,6 +307,29 @@ definitions:
         provision:
           apiVersion: postgresql.cnpg.io/v1
           kind: Cluster
+          # Das Image steht NICHT hier, sondern in einem ClusterImageCatalog namens
+          # `postgresql`, den der Betreiber der Plattform pflegt (auf cfk8s:
+          # services/cloudnative-pg/image-catalog.yaml). Die Definition nennt nur
+          # die Major.
+          #
+          # Warum so herum: Nebenversionen sind Sicherheitsstaende und Sache des
+          # Betreibers. Stuende hier ein Image mit Nebenversion, muesste bei jedem
+          # Patch die Definition geaendert, der Broker neu ausgerollt und jede
+          # Instanz einzeln ueber maintenanceInfo nachgezogen werden. Aendert der
+          # Betreiber stattdessen den Katalogeintrag, rollt CloudNativePG alle
+          # Cluster dieser Major selbst nach, Replikas zuerst, dann Switchover.
+          # Stuende hier ein Image OHNE Nebenversion (18-system-trixie), entschiede
+          # der Image-Cache des Knotens, welche Nebenversion ein Pod bekommt.
+          #
+          # Die Major dagegen ist Sache des Besitzers: aendert sich `major`, fuehrt
+          # der Operator ein Upgrade an Ort und Stelle durch (pg_upgrade --link),
+          # und waehrenddessen steht der Cluster. Deshalb kommt sie als Parameter
+          # und nicht aus dem Katalog.
+          #
+          # Fehlt der Katalog, scheitert jedes Provision am Readiness-Timeout und
+          # der Cluster traegt die Bedingung ImageCatalogRef mit dem Grund - ein
+          # Betreiber, der den Broker auf eine neue Plattform bringt, legt den
+          # Katalog VOR der ersten Instanz an.
           template: |
             apiVersion: postgresql.cnpg.io/v1
             kind: Cluster
@@ -256,6 +339,11 @@ definitions:
                 app.kubernetes.io/managed-by: osb-broker-go
                 osb.io/instance-id: {{ .instanceID }}
             spec:
+              imageCatalogRef:
+                apiGroup: postgresql.cnpg.io
+                kind: ClusterImageCatalog
+                name: postgresql
+                major: {{ .plan.majorVersion }}
               instances: {{ .plan.instances }}
               storage:
                 size: {{ .plan.storageSize }}
